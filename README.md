@@ -12,12 +12,12 @@ We decided to use HTML/CSS/JavaScript for our front end. Our hosting service is 
 
 How to get it running (starting with a copy of this repo’s code):
 1.  Create a Github repo with the code
-	Take these files, and upload them onto a fresh git hub repo.
+	-Take these files, and upload them onto a fresh git hub repo.
 2.  Create an ERD
-	There is a schema file that you can use to create the supabase tables set up.
+	-There is a schema file that you can use to create the supabase tables set up.
 Open a new project on supabase
 Go to the query tool, and paste in the schema query (found on github → /database/schema). Run the query.
-	If you want to view the ERD on Lucid chart, do the following.
+	-If you want to view the ERD on Lucid chart, do the following.
 Open a lucid document
 Select file → import → ERD → PostgreSQL
 Copy the presented query, and run it in a new query back on the supabase project.
@@ -25,11 +25,11 @@ Copy the result as a CSV. Return to Lucid chart. Click next, paste all.
 Run it, and now you have a field of imported tables.
 Place all the loaded tables onto the document, and relationships will form automatically.
 3. In the Github repo, you need to connect your supabase.
-Open the config.js on Github’
-Go to the supabase project overview → copy, towards the top.
-Copy ‘Project URL’ → paste it into the congif.js supabase url.
-Copy ‘Publishable key’ → paste it into the config.js supabase anon key
-Save those changes
+-Open the config.js on Github’
+-Go to the supabase project overview → copy, towards the top.
+-Copy ‘Project URL’ → paste it into the congif.js supabase url.
+-Copy ‘Publishable key’ → paste it into the config.js supabase anon key
+-Save those changes
 4. Publish your repo on Github as a page, and voilà!
 
 
