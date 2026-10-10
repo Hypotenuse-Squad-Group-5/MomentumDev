@@ -14,5 +14,6 @@ How to get it running:
 4.  In the Github repo, 
 
 ERD:
-[Momentum_ERD_FInal.pdf](https://github.com/user-attachments/files/33290205/Momentum_ERD_FInal.pdf)
+<img width="1652" height="1277" alt="Momentum_ERD_FInal_page-0001" src="https://github.com/user-attachments/assets/324e5491-9231-4aa4-bef9-58fdee511903" />
+
 
