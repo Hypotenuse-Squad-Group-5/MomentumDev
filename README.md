@@ -34,13 +34,13 @@ Save those changes
 
 
 Verifying the vertical slice:
-Open the live site link and enter any email and any text as a password. The log in step is not live right now.
-From the home page, click the “Post an Activity” button
-Fill in the required information including “Title,” “Activity Type,” “Date,” start and end time and address.
-Select “Public” under activity visibility
-Verify the information, then click “Post activity”. Doing this will log the activity in the Supabase “activities” table (request to backend, which grabs data and responds back into frontend).
-Open the link in a private web browser such as Chrome Incognito and log in. Again, the email and password are meaningless. Do not try to create a real account or use a real username or password.
-Click on “Activities” and the activity you created should appear on the list! This occurs because the website pulls all the activities from the activities table in Supabase and displays them on screen.
+1. Open the live site link and enter any email and any text as a password. The log in step is not live right now.
+2. From the home page, click the “Post an Activity” button
+3. Fill in the required information including “Title,” “Activity Type,” “Date,” start and end time and address.
+4. Select “Public” under activity visibility
+5. Verify the information, then click “Post activity”. Doing this will log the activity in the Supabase “activities” table (request to backend, which grabs data and responds back into frontend).
+6. Open the link in a private web browser such as Chrome Incognito and log in. Again, the email and password are meaningless. Do not try to create a real account or use a real username or password.
+7. Click on “Activities” and the activity you created should appear on the list! This occurs because the website pulls all the activities from the activities table in Supabase and displays them on screen.
 
 
 
