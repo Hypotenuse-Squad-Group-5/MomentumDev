@@ -12,6 +12,6 @@
    NEVER paste the service_role / secret key here. It bypasses all security.
    ===================================================================== */
 window.MOMENTUM_CONFIG = {
-  SUPABASE_URL: "",       // e.g. "https://abcdefghijkl.supabase.co"
-  SUPABASE_ANON_KEY: "",  // starts with "eyJ..." or "sb_publishable_..."
+  SUPABASE_URL: "https://gwqbuaeufzimqvtdvpdj.supabase.co",       // e.g. "https://abcdefghijkl.supabase.co"
+  SUPABASE_ANON_KEY: "sb_publishable_dkqoynEhd7wC7vFoQVhTYA_Vfu6vyjI",  // starts with "eyJ..." or "sb_publishable_..."
 };
