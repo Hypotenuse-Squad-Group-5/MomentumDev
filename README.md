@@ -8,7 +8,7 @@ ERD:
 <img width="1652" height="1277" alt="Momentum_ERD_FInal_page-0001" src="https://github.com/user-attachments/assets/324e5491-9231-4aa4-bef9-58fdee511903" />
 
 Tech Stack:
-We decided to use HTML/CSS/JavaScript for our front end with Express, Node, and PostgreSQL. As our back end database service we're using Supabase. We decided to go this route for several reasons. The main reason is because these languages and services are the one's we're most familiar with so it will make editing easier. Beyond that, we want to avoid having to pay for AI services and it's very easy to use up free tokens quickly. 
+We decided to use HTML/CSS/JavaScript for our front end. Our hosting service is GitHub and as our back end database service we're using Supabase. We decided to go this route for several reasons. The main reason is because these languages and services are the ones we're most familiar with so it will make editing easier. Beyond that, we want to avoid having to pay for AI services and it's very easy to use up free tokens quickly, but we did use Claude to help put it all together with the resources we gave it. 
 
 How to get it running (starting with a copy of this repo’s code):
 1.  Create a Github repo with the code
