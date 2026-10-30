@@ -401,7 +401,11 @@
   // =====================================================================
   // Habits, lessons, streaks, points
   // =====================================================================
-  const habits = () => state.habits.filter((h) => h.active);
+  // Active habits in the user's chosen order (sortOrder), oldest first as a tiebreaker.
+  const byOrder = (a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || new Date(a.createdAt) - new Date(b.createdAt);
+  const habits = () => state.habits.filter((h) => h.active).sort(byOrder);
+  const archivedHabits = () => state.habits.filter((h) => !h.active).sort((a, b) => a.title.localeCompare(b.title));
+  const nextSortOrder = () => state.habits.reduce((m, h) => Math.max(m, h.sortOrder ?? 0), 0) + 1;
   const isHabitDone = (habitId, d = today()) => state.checkins.some((c) => c.habitId === habitId && c.date === d);
   function toggleHabitLocal(habitId) {
     const d = today();
@@ -433,19 +437,48 @@
     return r;
   }
   function addHabit(title, extra = {}) {
-    const h = { id: uid(), title: title.trim(), goalText: null, lessonNumber: null, active: true, createdAt: nowIso(), ...extra };
+    const h = { id: uid(), title: title.trim(), goalText: null, lessonNumber: null, active: true, createdAt: nowIso(), sortOrder: nextSortOrder(), ...extra };
     state.habits.push(h); save();
     if (live) {
-      sb.from("habits").insert({ id: h.id, profile_id: ME, title: h.title, goal_text: h.goalText, source_lesson_id: h.lessonNumber })
+      sb.from("habits").insert({ id: h.id, profile_id: ME, title: h.title, goal_text: h.goalText, source_lesson_id: h.lessonNumber, sort_order: h.sortOrder })
         .then(({ error }) => { if (error) { state.habits = state.habits.filter((x) => x.id !== h.id); syncFailed("Couldn't save habit: " + error.message); } });
     }
     return h;
   }
+  // Archive = hide the habit but keep its check-ins and points (streak history stays true).
   function removeHabit(habitId) {
     const h = state.habits.find((x) => x.id === habitId); if (!h) return;
     h.active = false; save();
     if (live) sb.from("habits").update({ is_active: false }).eq("id", habitId)
       .then(({ error }) => { if (error) { h.active = true; syncFailed("Couldn't archive habit: " + error.message); } });
+  }
+  // Restore from the Archived list → bottom of the list. Undo right after archiving → back in its old spot.
+  function restoreHabit(habitId, { keepPlace = false } = {}) {
+    const h = state.habits.find((x) => x.id === habitId); if (!h) return;
+    const before = h.sortOrder;
+    h.active = true; if (!keepPlace) h.sortOrder = nextSortOrder(); save();
+    if (live) sb.from("habits").update({ is_active: true, sort_order: h.sortOrder }).eq("id", habitId)
+      .then(({ error }) => { if (error) { h.active = false; h.sortOrder = before; syncFailed("Couldn't restore habit: " + error.message); } });
+  }
+  function editHabit(habitId, title) {
+    const h = state.habits.find((x) => x.id === habitId); if (!h) return { ok: false, message: "Habit not found." };
+    const t = title.trim();
+    if (!t) return { ok: false, message: "Give the habit a name." };
+    if (t.length > 80) return { ok: false, message: "Keep it under 80 characters." };
+    const before = h.title;
+    h.title = t; save();
+    if (live) sb.from("habits").update({ title: t }).eq("id", habitId)
+      .then(({ error }) => { if (error) { h.title = before; syncFailed("Couldn't rename habit: " + error.message); } });
+    return { ok: true };
+  }
+  // ids = active habit ids in their new order (top to bottom)
+  function reorderHabits(ids) {
+    const changed = [];
+    ids.forEach((id, i) => { const h = state.habits.find((x) => x.id === id); if (h && h.sortOrder !== i + 1) { h.sortOrder = i + 1; changed.push(h); } });
+    if (!changed.length) return;
+    save();
+    if (live) Promise.all(changed.map((h) => sb.from("habits").update({ sort_order: h.sortOrder }).eq("id", h.id)))
+      .then((results) => { const bad = results.find((r) => r.error); if (bad) loadHabitData().then(() => syncFailed("Couldn't save the new order: " + bad.error.message)); });
   }
 
   const LESSON_COUNT = 5;
@@ -626,13 +659,13 @@
   }
   async function loadHabitData() {
     const [h, c, p] = await Promise.all([
-      sb.from("habits").select("id,title,goal_text,source_lesson_id,is_active,created_at").order("created_at"),
+      sb.from("habits").select("id,title,goal_text,source_lesson_id,is_active,created_at,sort_order").order("sort_order"),
       sb.from("habit_checkins").select("habit_id,check_date"),
       sb.from("point_events").select("id,kind,points,habit_id,occurred_on,created_at").in("kind", DB_POINT_KINDS),
     ]);
     const err = h.error || c.error || p.error;
     if (err || !h.data || !c.data || !p.data) { if (err) console.error(err); return false; }
-    state.habits = h.data.map((r) => ({ id: r.id, title: r.title, goalText: r.goal_text, lessonNumber: r.source_lesson_id, active: r.is_active, createdAt: r.created_at }));
+    state.habits = h.data.map((r) => ({ id: r.id, title: r.title, goalText: r.goal_text, lessonNumber: r.source_lesson_id, active: r.is_active, createdAt: r.created_at, sortOrder: r.sort_order }));
     state.checkins = c.data.map((r) => ({ habitId: r.habit_id, date: r.check_date }));
     state.points = state.points.filter((x) => !DB_POINT_KINDS.includes(x.kind))
       .concat(p.data.map((r) => ({ id: r.id, kind: r.kind, points: r.points, ref: r.habit_id, date: r.occurred_on, at: r.created_at })));
@@ -710,7 +743,7 @@
     profile, fullName, isFriend, friends, friendshipWith, incomingRequests, sentRequests, acceptFriend, declineFriend,
     removeFriend, sendFriendRequest, sharedActivityId,
     // growth
-    habits, isHabitDone, toggleHabit, addHabit, removeHabit, isLessonDone, isLessonUnlocked, currentLesson,
+    habits, archivedHabits, isHabitDone, toggleHabit, addHabit, removeHabit, archiveHabit: removeHabit, restoreHabit, editHabit, reorderHabits, isLessonDone, isLessonUnlocked, currentLesson,
     completeLesson, lessonGoal, streak, lastDays, stats, pointHistory,
     // social
     createPost, setPostVisibility, encouraged, toggleEncourage, feed, historyFor,
