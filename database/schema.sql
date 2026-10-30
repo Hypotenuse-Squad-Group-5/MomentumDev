@@ -286,9 +286,11 @@ create table lesson_stats (
 create table lesson_completions (
   profile_id    uuid not null references profiles (id) on delete cascade,
   lesson_id     smallint not null references lessons (id) on delete cascade,
+  user_goal_response text, --Add a text column to store what the user typed into the lesson goal prompt
   completed_at  timestamptz not null default now(),
   primary key (profile_id, lesson_id)
 );
+
 
 -- A daily habit. Habits created from a lesson keep the lesson link + the 30-word goal.
 create table habits (
