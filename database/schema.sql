@@ -286,6 +286,8 @@ create table lesson_stats (
 create table lesson_completions (
   profile_id    uuid not null references profiles (id) on delete cascade,
   lesson_id     smallint not null references lessons (id) on delete cascade,
+  user_goal_response text, --adding user goal and habit user response in the lessons so they can be saved in our database and backend when refreshed--
+  habit_title text,
   completed_at  timestamptz not null default now(),
   primary key (profile_id, lesson_id)
 );
