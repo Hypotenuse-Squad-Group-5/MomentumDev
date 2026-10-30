@@ -138,8 +138,7 @@
         remindersByEmail: false, checkinTime: "21:30", pauseBeforeOpen: false, weeklySummary: true,
       },
     };
-  }
-
+  }   
   // =====================================================================
   // State, persistence, live updates
   // =====================================================================
@@ -568,6 +567,40 @@
   function signOut() { state.signedIn = false; save(); }
   function reset() { state = seed(); actCache = null; persist(); emit(); }
 
+
+// =====================================================================
+// Developer Analytics & Progress Tracking (Internal Use Only)
+// =====================================================================
+  async function getDeveloperLessonProgress() {
+    if (!live) {
+      console.log("App is currently running in local offline mode. Switch to live mode to query Supabase.");
+      return;
+    }
+
+    const { data, error } = await sb
+      .from('lesson_completions')
+      .select(`
+        profile_id,
+        lesson_id,
+        completed_at,
+        user_goal_response,
+        habit_title,
+        profiles (
+          username,
+          first_name,
+          last_name
+        )
+      `)
+      .order('completed_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching developer lesson progress:', error);
+      return [];
+    }
+
+    console.table(data);
+    return data;
+  }
   window.Store = {
     ME, POINTS, LESSON_COUNT, CANCELS_PER_MONTH,
     get state() { return state; }, get live() { return live; }, get loadError() { return loadError; },
@@ -591,5 +624,10 @@
     otherMember, memberStatus, shareActivityPeople,
     // settings
     setSetting, updateProfile, signIn, signOut, reset,
+   //dev tool, Only the developers (us) can see the user progress on the lessons to achieve OKR but it must be called here (it will query Supabase and print out a clean, structured table, but only admin users can do this
+    getDeveloperLessonProgress,
   };
+
+
+   
 })();
