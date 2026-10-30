@@ -1,6 +1,12 @@
 /* Login. No real accounts yet: both buttons sign you in as the demo user (Chase).
    Once signed in, opening the site skips straight to Home. */
 (function () {
+   //Wait until the DOM and global Store.js are fully loaded 
+  window.addEventListener("DOMContentLoaded",()=>{
+     if (typeof Store === "undefined") {
+      console.error("Store is not loaded yet!");
+      return;
+    }
   if (Store.state.signedIn && !location.search.includes("stay")) { location.replace("home.html"); return; }
   let signup = false;
   function render() {
