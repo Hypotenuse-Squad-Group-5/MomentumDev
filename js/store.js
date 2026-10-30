@@ -547,10 +547,45 @@
   function updateProfile(fields) { Object.assign(state.profiles[ME], fields); save(); }
   function signIn() { state.signedIn = true; save(); }
   function signOut() { state.signedIn = false; save(); }
-  function reset() { state = seed(); actCache = null; persist(); emit(); }
+  function reset() { state = seed(); actCache = null; persist(); loadActivities().then(emit); }
+  // The opposite of reset: keep only your own account, clear every demo row.
+  // Use it to preview empty states. (Activities in Supabase are unaffected.)
+  function clearDemo() {
+    const full = seed();
+    const me = { ...full.profiles[ME], bio: "", interests: [] };
+    state = { ...full, empty: true, signedIn: true, profiles: { [ME]: me }, friendships: [], activities: [], addresses: {},
+      rsvps: [], guests: [], reports: [], posts: [], encouragements: [], conversations: [], lessonsDone: [], habits: [], checkins: [], points: [] };
+    actCache = null; persist(); loadActivities().then(emit);
+  }
+
+  // =====================================================================
+  // Accounts (Supabase Auth). Used by the sign-in / sign-up page.
+  // Signup fields travel as "user metadata"; the database trigger from
+  // migration 001 turns them into profiles + profile_private rows.
+  // =====================================================================
+  const siteBase = () => location.origin + location.pathname.replace(/[^/]*$/, ""); // where the email link lands
+  const auth = {
+    async session() {
+      if (!live) return null;
+      const { data } = await sb.auth.getSession();
+      return data.session;
+    },
+    signUp(email, password, profile) {
+      return sb.auth.signUp({ email, password, options: { data: profile, emailRedirectTo: siteBase() } });
+    },
+    signIn(email, password) {
+      return sb.auth.signInWithPassword({ email, password });
+    },
+    resendConfirmation(email) {
+      return sb.auth.resend({ type: "signup", email, options: { emailRedirectTo: siteBase() } });
+    },
+    async signOut() {
+      if (live) await sb.auth.signOut();
+    },
+  };
 
   window.Store = {
-    ME, POINTS, LESSON_COUNT, CANCELS_PER_MONTH,
+    ME, POINTS, LESSON_COUNT, CANCELS_PER_MONTH, auth,
     get state() { return state; }, get live() { return live; }, get loadError() { return loadError; },
     subscribe: (fn) => { listeners.add(fn); return () => listeners.delete(fn); },
     today, dayKey, addDays,
@@ -571,6 +606,6 @@
     conversations, conversation, unread, unreadCount, isRequestToMe, markRead, openDirect, send, respondRequest,
     otherMember, memberStatus, shareActivityPeople,
     // settings
-    setSetting, updateProfile, signIn, signOut, reset,
+    setSetting, updateProfile, signIn, signOut, reset, clearDemo,
   };
 })();

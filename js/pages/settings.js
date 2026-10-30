@@ -41,8 +41,9 @@ UI.mount("settings", function render() {
       <div class="stack">
         <a class="btn btn-block" href="index.html" id="sign-out">Sign out</a>
         <button class="btn btn-block" id="reset">Reset demo data</button>
+        <button class="btn btn-block" id="clear">Start empty (remove all demo data)</button>
       </div>
-      <p class="hint mt mb0">Reset puts back the demo habits, friends, messages, and RSVPs in this browser. It doesn't touch Supabase.</p>
+      <p class="hint mt mb0">Both only affect this browser. "Start empty" keeps just your account so you can see every page's empty state. "Reset" brings the demo content back.${Store.live ? " Activities come from Supabase, so they stay unless you delete them there." : ""}</p>
     </section>`
     : `
     <form class="panel" id="profile-form">
@@ -66,10 +67,13 @@ UI.mount("settings", function render() {
   </div>`;
 
   document.querySelectorAll("[data-k]").forEach((el) => (el.onchange = () => { Store.setSetting(el.dataset.k, el.type === "checkbox" ? el.checked : el.value); UI.toast("Saved"); }));
-  const so = document.getElementById("sign-out"); if (so) so.onclick = () => Store.signOut();
+  const so = document.getElementById("sign-out"); if (so) so.onclick = async (e) => { e.preventDefault(); await Store.auth.signOut(); Store.signOut(); location.href = "index.html"; };
   const rs = document.getElementById("reset");
   if (rs) rs.onclick = () => UI.modal(`<h2>Reset demo data?</h2><p>This clears everything you've done in this browser and restores the demo content.</p><div class="modal-actions"><button class="btn" data-close>Cancel</button><button class="btn btn-danger" id="do-reset">Reset</button></div>`,
     { onMount: (m, close) => (m.querySelector("#do-reset").onclick = () => { Store.reset(); Store.signIn(); close(); UI.toast("Demo data reset"); }) });
+  const cl = document.getElementById("clear");
+  if (cl) cl.onclick = () => UI.modal(`<h2>Remove all demo data?</h2><p>This clears every demo habit, friend, message, post, RSVP${Store.live ? "" : ", and activity"} in this browser, leaving only your account. You can bring it all back with "Reset demo data".</p><div class="modal-actions"><button class="btn" data-close>Cancel</button><button class="btn btn-danger" id="do-clear">Remove demo data</button></div>`,
+    { onMount: (m, close) => (m.querySelector("#do-clear").onclick = () => { Store.clearDemo(); close(); UI.toast("Demo data removed"); }) });
   const pf = document.getElementById("profile-form");
   if (pf) pf.onsubmit = (e) => {
     e.preventDefault();
