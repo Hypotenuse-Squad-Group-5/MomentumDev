@@ -39,7 +39,7 @@ UI.mount("lessons", function render() {
   if (!form) return;
   const goal = form.querySelector("#goal"), wc = form.querySelector("#wc");
   goal.oninput = () => { const w = UI.words(goal.value); wc.textContent = w; wc.style.color = w >= 30 ? "var(--primary)" : ""; };
-  form.onsubmit = (e) => {
+  form.onsubmit = async (e) => {
     e.preventDefault();
     const fields = { goal: form.querySelector('[data-f="goal"]'), habit: form.querySelector('[data-f="habit"]') };
     Object.values(fields).forEach((f) => { f.classList.remove("invalid"); f.querySelector(".err").hidden = true; });
@@ -48,7 +48,7 @@ UI.mount("lessons", function render() {
     if (w < 30) bad("goal", "Write at least 30 words to finish this lesson. You're at " + w + ".");
     if (!h) bad("habit", "Give your daily habit a short name.");
     if (w < 30 || !h) return;
-    const r = Store.completeLesson(n, goal.value, h);
+    const r = await Store.completeLesson(n, goal.value, h);
     if (!r.ok) return UI.alertModal("Couldn't finish", esc(r.message), { error: true });
     UI.flash("Lesson " + n + " complete. New habit added to Home.", r.points);
     location.href = "lessons.html";
