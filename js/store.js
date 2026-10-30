@@ -13,7 +13,7 @@
      cancelled rsvp -15
    ===================================================================== */
 (function () {
-  const KEY = "momentum.v1";
+  let KEY = "momentum.v1"; // demo mode key; signed-in users get "momentum.v1.user.<profile id>"
   const POINTS = { habit: 10, lesson: 25, rsvp: 15, attended: 25, post: 5, rsvp_cancelled: -15 };
   const CANCELS_PER_MONTH = 2;
   const BUFFER_MIN = 30;
@@ -26,7 +26,7 @@
     riley: "aaaaaaaa-0000-4000-8000-000000000007", sam: "aaaaaaaa-0000-4000-8000-000000000008",
   };
   const A = (n) => "bbbbbbbb-0000-4000-8000-0000000000" + String(n).padStart(2, "0");
-  const ME = P.chase;
+  let ME = P.chase; // demo user; replaced by the signed-in user's profile id in Store.init()
 
   // ---------- small helpers ----------
   const uid = () => (crypto.randomUUID ? crypto.randomUUID() : "id-" + Date.now() + "-" + Math.random().toString(16).slice(2));
@@ -154,7 +154,6 @@
   function save() { persist(); emit(); }
   // Another tab changed something: reload and re-render (keeps every open page in sync)
   window.addEventListener("storage", (e) => { if (e.key === KEY) { load(); emit(); } });
-  load();
 
   // =====================================================================
   // Supabase (the vertical slice: activities only, for now)
@@ -163,8 +162,13 @@
   const live = !!(cfg.SUPABASE_URL && cfg.SUPABASE_ANON_KEY && window.supabase);
   const sb = live ? window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY) : null;
   let actCache = null, typeCache = null, loadError = null;
+  const remoteProfiles = {}; // public profile cards of other users, learned from the activities they host
+  if (!live) load();         // demo mode loads right away; signed-in mode loads in init()
 
   function fromRow(row) {
+    if (row.host && row.host_id !== ME) {
+      remoteProfiles[row.host_id] = { id: row.host_id, first: row.host.first_name, last: "", city: row.host.city, state: row.host.state, memberSince: row.host.created_at, bio: "", interests: [], attendeeDisplay: "first_name" };
+    }
     return {
       id: row.id, hostId: row.host_id, hostName: row.host ? row.host.first_name : null,
       type: row.type ? row.type.name : "", title: row.title, activityName: row.activity_name,
@@ -180,7 +184,7 @@
     loadError = null;
     if (live) {
       const { data, error } = await sb.from("activities")
-        .select("*, host:profiles!activities_host_id_fkey(first_name,last_name), type:activity_types(name)")
+        .select("*, host:profiles!activities_host_id_fkey(first_name,city,state,created_at), type:activity_types(name)")
         .order("starts_at");
       if (error) { loadError = error.message; console.error(error); actCache = []; }
       else actCache = data.map(fromRow);
@@ -255,7 +259,7 @@
   // =====================================================================
   // People + friends
   // =====================================================================
-  function profile(id) { return state.profiles[id] || { id, first: "Someone", last: "", city: "" }; }
+  function profile(id) { return state.profiles[id] || remoteProfiles[id] || { id, first: "Someone", last: "", city: "" }; }
   function fullName(id) { const p = profile(id); return (p.first + " " + (p.last || "")).trim(); }
   function friendshipWith(id) { return state.friendships.find((f) => (f.requesterId === ME && f.addresseeId === id) || (f.addresseeId === ME && f.requesterId === id)); }
   function isFriend(id) { const f = friendshipWith(id); return !!f && f.status === "accepted"; }
@@ -544,18 +548,72 @@
   // Settings + profile
   // =====================================================================
   function setSetting(k, v) { state.settings[k] = v; if (k === "attendeeDisplay") state.profiles[ME].attendeeDisplay = v; save(); }
-  function updateProfile(fields) { Object.assign(state.profiles[ME], fields); save(); }
-  function signIn() { state.signedIn = true; save(); }
-  function signOut() { state.signedIn = false; save(); }
+  // Signed in: saves to Supabase (public fields → profiles, private → profile_private).
+  async function updateProfile(fields) {
+    if (live) {
+      const pub = await sb.from("profiles").update({ first_name: fields.first, city: fields.city, state: fields.state, bio: fields.bio || null }).eq("id", ME);
+      if (pub.error) return { ok: false, message: pub.error.message };
+      const priv = await sb.from("profile_private").update({ last_name: fields.last, phone: fields.phone, home_address: fields.address, zip_code: fields.zip, sex: fields.sex, birthdate: fields.birthday }).eq("profile_id", ME);
+      if (priv.error) return { ok: false, message: priv.error.message };
+    }
+    Object.assign(state.profiles[ME], fields); save();
+    return { ok: true };
+  }
+  function signIn() { if (state) { state.signedIn = true; save(); } }
+  function signOut() { if (state) { state.signedIn = false; save(); } }
   function reset() { state = seed(); actCache = null; persist(); loadActivities().then(emit); }
   // The opposite of reset: keep only your own account, clear every demo row.
   // Use it to preview empty states. (Activities in Supabase are unaffected.)
   function clearDemo() {
     const full = seed();
-    const me = { ...full.profiles[ME], bio: "", interests: [] };
+    const me = live ? state.profiles[ME] : { ...full.profiles[ME], bio: "", interests: [] };
     state = { ...full, empty: true, signedIn: true, profiles: { [ME]: me }, friendships: [], activities: [], addresses: {},
       rsvps: [], guests: [], reports: [], posts: [], encouragements: [], conversations: [], lessonsDone: [], habits: [], checkins: [], points: [] };
     actCache = null; persist(); loadActivities().then(emit);
+  }
+
+  // =====================================================================
+  // Signed-in user. Every page calls Store.init() first (via UI.mount).
+  // Returns true (ready), false (not signed in), or "noprofile".
+  // =====================================================================
+  const PROVO = { lat: 40.2338, lng: -111.6585 }; // map/distance fallback until we geocode addresses
+  function emptyStateFor(me) {
+    return { ...seed(), empty: true, signedIn: true, meId: me.id, profiles: { [me.id]: me }, friendships: [], activities: [], addresses: {},
+      rsvps: [], guests: [], reports: [], posts: [], encouragements: [], conversations: [], lessonsDone: [], habits: [], checkins: [], points: [] };
+  }
+  function profileFromRows(p, pp) {
+    pp = pp || {};
+    return {
+      id: p.id, username: p.username, first: p.first_name, last: pp.last_name || "", city: p.city, state: p.state, bio: p.bio || "",
+      memberSince: p.created_at, email: pp.email || "", phone: pp.phone || "", address: pp.home_address || "", zip: pp.zip_code || "",
+      sex: pp.sex || "", birthday: pp.birthdate || "",
+      lat: pp.latitude != null ? Number(pp.latitude) : PROVO.lat, lng: pp.longitude != null ? Number(pp.longitude) : PROVO.lng,
+    };
+  }
+  let ready = null;
+  function init() {
+    if (!live) return Promise.resolve(true);
+    if (ready) return ready;
+    ready = (async () => {
+      const { data } = await sb.auth.getSession();
+      const session = data.session;
+      if (!session) return false;
+      const { data: p, error } = await sb.from("profiles").select("id,username,first_name,city,state,bio,created_at").eq("auth_user_id", session.user.id).maybeSingle();
+      if (error || !p) { loadError = error ? error.message : "No profile found for this account."; return "noprofile"; }
+      const { data: pp } = await sb.from("profile_private").select("*").eq("profile_id", p.id).maybeSingle();
+      ME = p.id;
+      KEY = "momentum.v1.user." + p.id; // this user's own browser data
+      let saved = null;
+      try { saved = JSON.parse(localStorage.getItem(KEY)); } catch (e) { /* ignore */ }
+      const me = profileFromRows(p, pp);
+      state = saved && saved.version === 1 ? saved : emptyStateFor({ ...me, interests: [], attendeeDisplay: "first_name" });
+      const old = state.profiles[ME] || {};
+      state.profiles[ME] = { ...old, ...me, interests: old.interests || [], attendeeDisplay: state.settings.attendeeDisplay };
+      state.meId = ME; state.signedIn = true;
+      persist();
+      return true;
+    })();
+    return ready;
   }
 
   // =====================================================================
@@ -580,12 +638,16 @@
       return sb.auth.resend({ type: "signup", email, options: { emailRedirectTo: siteBase() } });
     },
     async signOut() {
-      if (live) await sb.auth.signOut();
+      if (!live) return;
+      let failed = false;
+      try { failed = !!(await sb.auth.signOut()).error; } catch (e) { failed = true; }
+      // Offline or server error: still sign out on this device by clearing the saved session.
+      if (failed) { try { localStorage.removeItem(sb.auth.storageKey); } catch (e) { /* ignore */ } }
     },
   };
 
   window.Store = {
-    ME, POINTS, LESSON_COUNT, CANCELS_PER_MONTH, auth,
+    get ME() { return ME; }, POINTS, LESSON_COUNT, CANCELS_PER_MONTH, auth, init,
     get state() { return state; }, get live() { return live; }, get loadError() { return loadError; },
     subscribe: (fn) => { listeners.add(fn); return () => listeners.delete(fn); },
     today, dayKey, addDays,

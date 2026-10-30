@@ -24,7 +24,8 @@
         <section class="panel${own ? "" : " mt"}">
           <div class="profile-head">${UI.avatar(id, "lg")}
             <div class="grow"><h1 class="mb0">${esc(own || friend ? Store.fullName(id) : p.first)}</h1>
-              <p class="muted small mb0">${esc(p.city || "")}${metA ? " · Met at " + esc(metA.title) : ""}</p></div></div>
+              <p class="muted small mb0">${esc([p.city, p.state].filter(Boolean).join(", "))}${metA ? " · Met at " + esc(metA.title) : ""}</p>
+              ${p.memberSince ? `<p class="muted small mb0">Member since ${new Date(p.memberSince).toLocaleDateString(undefined, { month: "long", year: "numeric" })}</p>` : ""}</div></div>
           ${own || friend ? `${p.bio ? `<p class="mt">${esc(p.bio)}</p>` : ""}<div class="chips">${(p.interests || []).map((i) => `<span class="tag">${esc(i)}</span>`).join("")}</div>` : `<p class="muted small mt">You'll see more once you're friends.</p>`}
           <div class="profile-stats">
             <div><b>${attended}</b><span>Activities</span></div>
@@ -54,13 +55,16 @@
         </form>` : ""}
 
         <p class="label mt-lg">${own ? "Your posts and activities" : "Posts and activities"}</p>
-        <div class="stack">${history.map((h) => (h.kind === "post" ? Social.postCard(h.post, { own }) : Social.activityCard(h.activity))).join("") || '<p class="muted small">Nothing here yet.</p>'}</div>
+        <div class="stack">${history.map((h) => (h.kind === "post" ? Social.postCard(h.post, { own }) : Social.activityCard(h.activity))).join("") || (own
+          ? `<div class="panel center"><p><b>Nothing here yet.</b></p><p class="muted small">Your posts and the activities you commit to will show up here.</p><button class="btn btn-primary" id="empty-compose">${icon("camera", "sm")}Share your first post</button></div>`
+          : '<p class="muted small">Nothing here yet.</p>')}</div>
       </div>`;
 
     Social.bind();
     const $ = (s) => document.getElementById(s);
     if ($("msg")) $("msg").onclick = () => UI.Messages.openChat(id);
     if ($("add")) $("add").onclick = () => { Store.sendFriendRequest(id); UI.toast("Friend request sent"); };
+    if ($("empty-compose")) $("empty-compose").onclick = () => { compose.open = true; render(); $("caption").focus(); };
     if ($("open-compose")) $("open-compose").onclick = () => { compose.open = true; render(); $("caption").focus(); };
     const form = $("composer");
     if (!form) return;
