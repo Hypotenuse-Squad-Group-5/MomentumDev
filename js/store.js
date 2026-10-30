@@ -14,6 +14,7 @@
    ===================================================================== */
 (function () {
   let KEY = "momentum.v1"; // demo mode key; signed-in users get "momentum.v1.user.<profile id>"
+  // Defaults for demo mode. When signed in, these are replaced by the point_values table (migration 002).
   const POINTS = { habit: 10, lesson: 25, rsvp: 15, attended: 25, post: 5, rsvp_cancelled: -15 };
   const CANCELS_PER_MONTH = 2;
   const BUFFER_MIN = 30;
@@ -402,7 +403,7 @@
   // =====================================================================
   const habits = () => state.habits.filter((h) => h.active);
   const isHabitDone = (habitId, d = today()) => state.checkins.some((c) => c.habitId === habitId && c.date === d);
-  function toggleHabit(habitId) {
+  function toggleHabitLocal(habitId) {
     const d = today();
     if (isHabitDone(habitId, d)) {
       state.checkins = state.checkins.filter((c) => !(c.habitId === habitId && c.date === d));
@@ -415,11 +416,37 @@
     save();
     return { done: true, points: pts, streakUp: streak().current > streakBefore };
   }
+  // Signed in: the screen updates instantly, then the change is saved to Supabase.
+  // If the save fails, the change is undone and the reason is shown.
+  function syncFailed(message) { save(); if (window.UI) window.UI.toast(message); }
+  function toggleHabit(habitId) {
+    const r = toggleHabitLocal(habitId);
+    if (live) {
+      const write = r.done
+        ? sb.from("habit_checkins").insert({ habit_id: habitId }) // the database fills in today's date
+        : sb.from("habit_checkins").delete().eq("habit_id", habitId).eq("check_date", today());
+      write.then(({ error }) => {
+        if (error) { toggleHabitLocal(habitId); syncFailed("Couldn't save: " + error.message); }
+        else loadHabitData().then(save); // pick up the points the database awarded
+      });
+    }
+    return r;
+  }
   function addHabit(title, extra = {}) {
     const h = { id: uid(), title: title.trim(), goalText: null, lessonNumber: null, active: true, createdAt: nowIso(), ...extra };
-    state.habits.push(h); save(); return h;
+    state.habits.push(h); save();
+    if (live) {
+      sb.from("habits").insert({ id: h.id, profile_id: ME, title: h.title, goal_text: h.goalText, source_lesson_id: h.lessonNumber })
+        .then(({ error }) => { if (error) { state.habits = state.habits.filter((x) => x.id !== h.id); syncFailed("Couldn't save habit: " + error.message); } });
+    }
+    return h;
   }
-  function removeHabit(habitId) { const h = state.habits.find((x) => x.id === habitId); if (h) { h.active = false; save(); } }
+  function removeHabit(habitId) {
+    const h = state.habits.find((x) => x.id === habitId); if (!h) return;
+    h.active = false; save();
+    if (live) sb.from("habits").update({ is_active: false }).eq("id", habitId)
+      .then(({ error }) => { if (error) { h.active = true; syncFailed("Couldn't archive habit: " + error.message); } });
+  }
 
   const LESSON_COUNT = 5;
   const isLessonDone = (n) => state.lessonsDone.some((l) => l.n === n);
@@ -432,7 +459,7 @@
     if (words < 30) return { ok: false, message: "Write at least 30 words to finish this lesson." };
     if (!habitTitle.trim()) return { ok: false, message: "Give your daily habit a short name." };
     state.lessonsDone.push({ n, at: nowIso(), goal: goalText.trim() });
-    state.habits.push({ id: uid(), title: habitTitle.trim(), goalText: goalText.trim(), lessonNumber: n, active: true, createdAt: nowIso() });
+    addHabit(habitTitle, { goalText: goalText.trim(), lessonNumber: n }); // habit is saved to the database when signed in
     const pts = addPoints("lesson", "lesson-" + n);
     save();
     return { ok: true, points: pts };
@@ -590,6 +617,28 @@
       lat: pp.latitude != null ? Number(pp.latitude) : PROVO.lat, lng: pp.longitude != null ? Number(pp.longitude) : PROVO.lng,
     };
   }
+  // Habits, check-ins, and habit points come from the database (migration 002).
+  // Other point kinds (lessons, RSVPs, posts) stay in this browser until their stories.
+  const DB_POINT_KINDS = ["habit"];
+  async function loadPointValues() {
+    const { data, error } = await sb.from("point_values").select("kind,points");
+    if (!error && data) data.forEach((r) => (POINTS[r.kind] = r.points));
+  }
+  async function loadHabitData() {
+    const [h, c, p] = await Promise.all([
+      sb.from("habits").select("id,title,goal_text,source_lesson_id,is_active,created_at").order("created_at"),
+      sb.from("habit_checkins").select("habit_id,check_date"),
+      sb.from("point_events").select("id,kind,points,habit_id,occurred_on,created_at").in("kind", DB_POINT_KINDS),
+    ]);
+    const err = h.error || c.error || p.error;
+    if (err || !h.data || !c.data || !p.data) { if (err) console.error(err); return false; }
+    state.habits = h.data.map((r) => ({ id: r.id, title: r.title, goalText: r.goal_text, lessonNumber: r.source_lesson_id, active: r.is_active, createdAt: r.created_at }));
+    state.checkins = c.data.map((r) => ({ habitId: r.habit_id, date: r.check_date }));
+    state.points = state.points.filter((x) => !DB_POINT_KINDS.includes(x.kind))
+      .concat(p.data.map((r) => ({ id: r.id, kind: r.kind, points: r.points, ref: r.habit_id, date: r.occurred_on, at: r.created_at })));
+    return true;
+  }
+
   let ready = null;
   function init() {
     if (!live) return Promise.resolve(true);
@@ -610,6 +659,7 @@
       const old = state.profiles[ME] || {};
       state.profiles[ME] = { ...old, ...me, interests: old.interests || [], attendeeDisplay: state.settings.attendeeDisplay };
       state.meId = ME; state.signedIn = true;
+      await Promise.all([loadPointValues(), loadHabitData()]);
       persist();
       return true;
     })();
