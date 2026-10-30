@@ -20,6 +20,11 @@
 
   const field = (id, label, input, hint = "") =>
     `<div class="field" data-f="${id}"><label for="${id}">${label}</label>${input}${hint ? `<div class="hint">${hint}</div>` : ""}<div class="err" hidden></div></div>`;
+  const EYE = '<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>';
+  // Password box with a "hold to show" eye: visible only while pressed, hidden the moment you let go.
+  const pw = (id, autocomplete) =>
+    `<div style="position:relative"><input id="${id}" type="password" autocomplete="${autocomplete}" style="padding-right:48px">` +
+    `<button type="button" class="icon-btn" data-peek="${id}" aria-label="Hold to show password" title="Hold to show" style="position:absolute;right:2px;top:1px;touch-action:none">${EYE}</button></div>`;
   const text = (id, type = "text", attrs = "") => `<input id="${id}" type="${type}" value="${esc(saved[id] || "")}" ${attrs}>`;
 
   function formHtml() {
@@ -37,7 +42,8 @@
         <div class="alert" id="form-msg" hidden></div>
         ${signup ? `<div class="grid-2">${field("first_name", "First name", text("first_name", "text", 'autocomplete="given-name" maxlength="40"'))}${field("last_name", "Last name", text("last_name", "text", 'autocomplete="family-name" maxlength="60"'), "Private")}</div>` : ""}
         ${field("email", "Email", text("email", "email", 'autocomplete="email"'), signup ? "Private. Used to sign in." : "")}
-        ${field("password", "Password", `<input id="password" type="password" autocomplete="${signup ? "new-password" : "current-password"}">`)}
+        ${field("password", "Password", pw("password", signup ? "new-password" : "current-password"))}
+        ${signup ? field("password_confirm", "Confirm password", pw("password_confirm", "new-password")) : ""}
         ${signup ? `
           ${field("phone", "Phone", text("phone", "tel", 'autocomplete="tel" placeholder="(801) 555-0123"'), "Private")}
           ${field("home_address", "Home address", text("home_address", "text", 'autocomplete="street-address"'), "Private. Never shown to anyone.")}
@@ -71,12 +77,14 @@
 
   const $ = (id) => document.getElementById(id);
   function showMsg(text, kind = "") { const m = $("form-msg"); m.className = "alert" + (kind ? " " + kind : "") + " mt"; m.textContent = text; m.hidden = false; }
+  function clearField(id) { const f = document.querySelector(`[data-f="${id}"]`); if (!f) return; f.classList.remove("invalid"); f.querySelector(".err").hidden = true; }
   function fieldError(id, msg) { const f = document.querySelector(`[data-f="${id}"]`); if (!f) return; f.classList.add("invalid"); const e = f.querySelector(".err"); e.textContent = msg; e.hidden = false; }
 
   // Same rules the database enforces, checked here first so people get clear messages.
   function validateSignup(v) {
     const errs = {};
-    ["first_name", "last_name", "email", "password", "phone", "home_address", "city", "state", "zip_code", "birthdate", "sex"].forEach((k) => { if (!v[k]) errs[k] = "Required."; });
+    ["first_name", "last_name", "email", "password", "password_confirm", "phone", "home_address", "city", "state", "zip_code", "birthdate", "sex"].forEach((k) => { if (!v[k]) errs[k] = "Required."; });
+    if (v.password && v.password_confirm && v.password !== v.password_confirm) errs.password_confirm = "Passwords don't match.";
     if (v.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.email)) errs.email = "Enter a valid email.";
     if (v.phone) { const d = v.phone.replace(/\D/g, ""); if (d.length < 10 || d.length > 15) errs.phone = "Enter a full phone number."; }
     if (v.home_address && v.home_address.length < 5) errs.home_address = "Enter your full street address.";
@@ -111,7 +119,26 @@
     }
     $("switch").onclick = (e) => { e.preventDefault(); mode = mode === "signup" ? "signin" : "signup"; render(); };
     const form = $("auth");
-    form.querySelectorAll("input, select").forEach((el) => (el.oninput = () => { if (el.id !== "password") saved[el.id] = el.value; }));
+    const isPw = (id) => id === "password" || id === "password_confirm";
+    form.querySelectorAll("input, select").forEach((el) => (el.oninput = () => { if (!isPw(el.id)) saved[el.id] = el.value; if (isPw(el.id)) checkMatch(); }));
+    // Flag a mismatch as soon as the confirm box has something in it
+    function checkMatch() {
+      const c = $("password_confirm"); if (!c) return;
+      if (c.value && c.value !== $("password").value) fieldError("password_confirm", "Passwords don't match.");
+      else clearField("password_confirm");
+    }
+    form.querySelectorAll("[data-peek]").forEach((btn) => {
+      const input = $(btn.dataset.peek);
+      const show = (e) => { if (e) e.preventDefault(); input.type = "text"; };
+      const hide = () => { input.type = "password"; };
+      btn.addEventListener("pointerdown", show);
+      ["pointerup", "pointerleave", "pointercancel"].forEach((ev) => btn.addEventListener(ev, hide));
+      btn.addEventListener("keydown", (e) => { if ((e.key === " " || e.key === "Enter") && !e.repeat) show(e); });
+      btn.addEventListener("keyup", hide);
+      btn.addEventListener("blur", hide);
+      btn.addEventListener("contextmenu", (e) => e.preventDefault()); // long-press on phones
+    });
+    window.addEventListener("blur", () => form.querySelectorAll("[data-peek]").forEach((b) => ($(b.dataset.peek).type = "password")));
     form.onsubmit = async (e) => {
       e.preventDefault();
       form.querySelectorAll(".invalid").forEach((f) => { f.classList.remove("invalid"); f.querySelector(".err").hidden = true; });
@@ -119,7 +146,7 @@
 
       if (!Store.live) { Store.signIn(); location.href = "home.html"; return; } // demo mode
 
-      const v = {}; form.querySelectorAll("input, select").forEach((el) => (v[el.id] = el.id === "password" ? el.value : el.value.trim()));
+      const v = {}; form.querySelectorAll("input, select").forEach((el) => (v[el.id] = isPw(el.id) ? el.value : el.value.trim()));
       const btn = $("submit"); const label = btn.textContent;
       const busy = (on) => { btn.disabled = on; btn.textContent = on ? "One moment…" : label; };
 
