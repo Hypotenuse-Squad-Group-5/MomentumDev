@@ -36,4 +36,5 @@
     document.getElementById("auth").onsubmit = (e) => { e.preventDefault(); Store.signIn(); location.href = "home.html"; };
   }
   render();
+  });
 })();
