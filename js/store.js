@@ -427,6 +427,24 @@
     const words = goalText.trim().split(/\s+/).filter(Boolean).length;
     if (words < 30) return { ok: false, message: "Write at least 30 words to finish this lesson." };
     if (!habitTitle.trim()) return { ok: false, message: "Give your daily habit a short name." };
+   //If live Supabase mode is enabled and we've confrimed whose logged in, save content in the lesson directly to the database!
+  if (live) {
+    const { data: { user } } = await sb.auth.getUser();
+    if (user) {
+      const { error } = await sb.from('lesson_completions').upsert({
+        profile_id: ME,
+        lesson_id: n,
+        user_goal_response: goalText.trim(),
+        completed_at: nowIso()
+      }, { onConflict: 'profile_id, lesson_id' });
+
+      if (error) {
+        console.error('Error saving lesson to Supabase:', error);
+        return { ok: false, message: error.message };
+      }
+    }
+  }
+   //So offline/local mode still works...
     state.lessonsDone.push({ n, at: nowIso(), goal: goalText.trim() });
     state.habits.push({ id: uid(), title: habitTitle.trim(), goalText: goalText.trim(), lessonNumber: n, active: true, createdAt: nowIso() });
     const pts = addPoints("lesson", "lesson-" + n);
