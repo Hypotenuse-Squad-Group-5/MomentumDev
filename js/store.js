@@ -13,7 +13,8 @@
      cancelled rsvp -15
    ===================================================================== */
 (function () {
-  const KEY = "momentum.v1";
+  let KEY = "momentum.v1"; // demo mode key; signed-in users get "momentum.v1.user.<profile id>"
+  // Defaults for demo mode. When signed in, these are replaced by the point_values table (migration 002).
   const POINTS = { habit: 10, lesson: 25, rsvp: 15, attended: 25, post: 5, rsvp_cancelled: -15 };
   const CANCELS_PER_MONTH = 2;
   const BUFFER_MIN = 30;
@@ -26,7 +27,7 @@
     riley: "aaaaaaaa-0000-4000-8000-000000000007", sam: "aaaaaaaa-0000-4000-8000-000000000008",
   };
   const A = (n) => "bbbbbbbb-0000-4000-8000-0000000000" + String(n).padStart(2, "0");
-  const ME = P.chase;
+  let ME = P.chase; // demo user; replaced by the signed-in user's profile id in Store.init()
 
   // ---------- small helpers ----------
   const uid = () => (crypto.randomUUID ? crypto.randomUUID() : "id-" + Date.now() + "-" + Math.random().toString(16).slice(2));
@@ -154,7 +155,6 @@
   function save() { persist(); emit(); }
   // Another tab changed something: reload and re-render (keeps every open page in sync)
   window.addEventListener("storage", (e) => { if (e.key === KEY) { load(); emit(); } });
-  load();
 
   // =====================================================================
   // Supabase (the vertical slice: activities only, for now)
@@ -163,8 +163,13 @@
   const live = !!(cfg.SUPABASE_URL && cfg.SUPABASE_ANON_KEY && window.supabase);
   const sb = live ? window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY) : null;
   let actCache = null, typeCache = null, loadError = null;
+  const remoteProfiles = {}; // public profile cards of other users, learned from the activities they host
+  if (!live) load();         // demo mode loads right away; signed-in mode loads in init()
 
   function fromRow(row) {
+    if (row.host && row.host_id !== ME) {
+      remoteProfiles[row.host_id] = { id: row.host_id, first: row.host.first_name, last: "", city: row.host.city, state: row.host.state, memberSince: row.host.created_at, bio: "", interests: [], attendeeDisplay: "first_name" };
+    }
     return {
       id: row.id, hostId: row.host_id, hostName: row.host ? row.host.first_name : null,
       type: row.type ? row.type.name : "", title: row.title, activityName: row.activity_name,
@@ -180,7 +185,7 @@
     loadError = null;
     if (live) {
       const { data, error } = await sb.from("activities")
-        .select("*, host:profiles!activities_host_id_fkey(first_name,last_name), type:activity_types(name)")
+        .select("*, host:profiles!activities_host_id_fkey(first_name,city,state,created_at), type:activity_types(name)")
         .order("starts_at");
       if (error) { loadError = error.message; console.error(error); actCache = []; }
       else actCache = data.map(fromRow);
@@ -255,7 +260,7 @@
   // =====================================================================
   // People + friends
   // =====================================================================
-  function profile(id) { return state.profiles[id] || { id, first: "Someone", last: "", city: "" }; }
+  function profile(id) { return state.profiles[id] || remoteProfiles[id] || { id, first: "Someone", last: "", city: "" }; }
   function fullName(id) { const p = profile(id); return (p.first + " " + (p.last || "")).trim(); }
   function friendshipWith(id) { return state.friendships.find((f) => (f.requesterId === ME && f.addresseeId === id) || (f.addresseeId === ME && f.requesterId === id)); }
   function isFriend(id) { const f = friendshipWith(id); return !!f && f.status === "accepted"; }
@@ -396,9 +401,13 @@
   // =====================================================================
   // Habits, lessons, streaks, points
   // =====================================================================
-  const habits = () => state.habits.filter((h) => h.active);
+  // Active habits in the user's chosen order (sortOrder), oldest first as a tiebreaker.
+  const byOrder = (a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || new Date(a.createdAt) - new Date(b.createdAt);
+  const habits = () => state.habits.filter((h) => h.active).sort(byOrder);
+  const archivedHabits = () => state.habits.filter((h) => !h.active).sort((a, b) => a.title.localeCompare(b.title));
+  const nextSortOrder = () => state.habits.reduce((m, h) => Math.max(m, h.sortOrder ?? 0), 0) + 1;
   const isHabitDone = (habitId, d = today()) => state.checkins.some((c) => c.habitId === habitId && c.date === d);
-  function toggleHabit(habitId) {
+  function toggleHabitLocal(habitId) {
     const d = today();
     if (isHabitDone(habitId, d)) {
       state.checkins = state.checkins.filter((c) => !(c.habitId === habitId && c.date === d));
@@ -411,11 +420,66 @@
     save();
     return { done: true, points: pts, streakUp: streak().current > streakBefore };
   }
-  function addHabit(title, extra = {}) {
-    const h = { id: uid(), title: title.trim(), goalText: null, lessonNumber: null, active: true, createdAt: nowIso(), ...extra };
-    state.habits.push(h); save(); return h;
+  // Signed in: the screen updates instantly, then the change is saved to Supabase.
+  // If the save fails, the change is undone and the reason is shown.
+  function syncFailed(message) { save(); if (window.UI) window.UI.toast(message); }
+  function toggleHabit(habitId) {
+    const r = toggleHabitLocal(habitId);
+    if (live) {
+      const write = r.done
+        ? sb.from("habit_checkins").insert({ habit_id: habitId }) // the database fills in today's date
+        : sb.from("habit_checkins").delete().eq("habit_id", habitId).eq("check_date", today());
+      write.then(({ error }) => {
+        if (error) { toggleHabitLocal(habitId); syncFailed("Couldn't save: " + error.message); }
+        else loadHabitData().then(save); // pick up the points the database awarded
+      });
+    }
+    return r;
   }
-  function removeHabit(habitId) { const h = state.habits.find((x) => x.id === habitId); if (h) { h.active = false; save(); } }
+  function addHabit(title, extra = {}) {
+    const h = { id: uid(), title: title.trim(), goalText: null, lessonNumber: null, active: true, createdAt: nowIso(), sortOrder: nextSortOrder(), ...extra };
+    state.habits.push(h); save();
+    if (live) {
+      sb.from("habits").insert({ id: h.id, profile_id: ME, title: h.title, goal_text: h.goalText, source_lesson_id: h.lessonNumber, sort_order: h.sortOrder })
+        .then(({ error }) => { if (error) { state.habits = state.habits.filter((x) => x.id !== h.id); syncFailed("Couldn't save habit: " + error.message); } });
+    }
+    return h;
+  }
+  // Archive = hide the habit but keep its check-ins and points (streak history stays true).
+  function removeHabit(habitId) {
+    const h = state.habits.find((x) => x.id === habitId); if (!h) return;
+    h.active = false; save();
+    if (live) sb.from("habits").update({ is_active: false }).eq("id", habitId)
+      .then(({ error }) => { if (error) { h.active = true; syncFailed("Couldn't archive habit: " + error.message); } });
+  }
+  // Restore from the Archived list → bottom of the list. Undo right after archiving → back in its old spot.
+  function restoreHabit(habitId, { keepPlace = false } = {}) {
+    const h = state.habits.find((x) => x.id === habitId); if (!h) return;
+    const before = h.sortOrder;
+    h.active = true; if (!keepPlace) h.sortOrder = nextSortOrder(); save();
+    if (live) sb.from("habits").update({ is_active: true, sort_order: h.sortOrder }).eq("id", habitId)
+      .then(({ error }) => { if (error) { h.active = false; h.sortOrder = before; syncFailed("Couldn't restore habit: " + error.message); } });
+  }
+  function editHabit(habitId, title) {
+    const h = state.habits.find((x) => x.id === habitId); if (!h) return { ok: false, message: "Habit not found." };
+    const t = title.trim();
+    if (!t) return { ok: false, message: "Give the habit a name." };
+    if (t.length > 80) return { ok: false, message: "Keep it under 80 characters." };
+    const before = h.title;
+    h.title = t; save();
+    if (live) sb.from("habits").update({ title: t }).eq("id", habitId)
+      .then(({ error }) => { if (error) { h.title = before; syncFailed("Couldn't rename habit: " + error.message); } });
+    return { ok: true };
+  }
+  // ids = active habit ids in their new order (top to bottom)
+  function reorderHabits(ids) {
+    const changed = [];
+    ids.forEach((id, i) => { const h = state.habits.find((x) => x.id === id); if (h && h.sortOrder !== i + 1) { h.sortOrder = i + 1; changed.push(h); } });
+    if (!changed.length) return;
+    save();
+    if (live) Promise.all(changed.map((h) => sb.from("habits").update({ sort_order: h.sortOrder }).eq("id", h.id)))
+      .then((results) => { const bad = results.find((r) => r.error); if (bad) loadHabitData().then(() => syncFailed("Couldn't save the new order: " + bad.error.message)); });
+  }
 
   const LESSON_COUNT = 5;
   const isLessonDone = (n) => state.lessonsDone.some((l) => l.n === n);
@@ -428,7 +492,7 @@
     if (words < 30) return { ok: false, message: "Write at least 30 words to finish this lesson." };
     if (!habitTitle.trim()) return { ok: false, message: "Give your daily habit a short name." };
     state.lessonsDone.push({ n, at: nowIso(), goal: goalText.trim() });
-    state.habits.push({ id: uid(), title: habitTitle.trim(), goalText: goalText.trim(), lessonNumber: n, active: true, createdAt: nowIso() });
+    addHabit(habitTitle, { goalText: goalText.trim(), lessonNumber: n }); // habit is saved to the database when signed in
     const pts = addPoints("lesson", "lesson-" + n);
     save();
     return { ok: true, points: pts };
@@ -544,13 +608,129 @@
   // Settings + profile
   // =====================================================================
   function setSetting(k, v) { state.settings[k] = v; if (k === "attendeeDisplay") state.profiles[ME].attendeeDisplay = v; save(); }
-  function updateProfile(fields) { Object.assign(state.profiles[ME], fields); save(); }
-  function signIn() { state.signedIn = true; save(); }
-  function signOut() { state.signedIn = false; save(); }
-  function reset() { state = seed(); actCache = null; persist(); emit(); }
+  // Signed in: saves to Supabase (public fields → profiles, private → profile_private).
+  async function updateProfile(fields) {
+    if (live) {
+      const pub = await sb.from("profiles").update({ first_name: fields.first, city: fields.city, state: fields.state, bio: fields.bio || null }).eq("id", ME);
+      if (pub.error) return { ok: false, message: pub.error.message };
+      const priv = await sb.from("profile_private").update({ last_name: fields.last, phone: fields.phone, home_address: fields.address, zip_code: fields.zip, sex: fields.sex, birthdate: fields.birthday }).eq("profile_id", ME);
+      if (priv.error) return { ok: false, message: priv.error.message };
+    }
+    Object.assign(state.profiles[ME], fields); save();
+    return { ok: true };
+  }
+  function signIn() { if (state) { state.signedIn = true; save(); } }
+  function signOut() { if (state) { state.signedIn = false; save(); } }
+  function reset() { state = seed(); actCache = null; persist(); loadActivities().then(emit); }
+  // The opposite of reset: keep only your own account, clear every demo row.
+  // Use it to preview empty states. (Activities in Supabase are unaffected.)
+  function clearDemo() {
+    const full = seed();
+    const me = live ? state.profiles[ME] : { ...full.profiles[ME], bio: "", interests: [] };
+    state = { ...full, empty: true, signedIn: true, profiles: { [ME]: me }, friendships: [], activities: [], addresses: {},
+      rsvps: [], guests: [], reports: [], posts: [], encouragements: [], conversations: [], lessonsDone: [], habits: [], checkins: [], points: [] };
+    actCache = null; persist(); loadActivities().then(emit);
+  }
+
+  // =====================================================================
+  // Signed-in user. Every page calls Store.init() first (via UI.mount).
+  // Returns true (ready), false (not signed in), or "noprofile".
+  // =====================================================================
+  const PROVO = { lat: 40.2338, lng: -111.6585 }; // map/distance fallback until we geocode addresses
+  function emptyStateFor(me) {
+    return { ...seed(), empty: true, signedIn: true, meId: me.id, profiles: { [me.id]: me }, friendships: [], activities: [], addresses: {},
+      rsvps: [], guests: [], reports: [], posts: [], encouragements: [], conversations: [], lessonsDone: [], habits: [], checkins: [], points: [] };
+  }
+  function profileFromRows(p, pp) {
+    pp = pp || {};
+    return {
+      id: p.id, username: p.username, first: p.first_name, last: pp.last_name || "", city: p.city, state: p.state, bio: p.bio || "",
+      memberSince: p.created_at, email: pp.email || "", phone: pp.phone || "", address: pp.home_address || "", zip: pp.zip_code || "",
+      sex: pp.sex || "", birthday: pp.birthdate || "",
+      lat: pp.latitude != null ? Number(pp.latitude) : PROVO.lat, lng: pp.longitude != null ? Number(pp.longitude) : PROVO.lng,
+    };
+  }
+  // Habits, check-ins, and habit points come from the database (migration 002).
+  // Other point kinds (lessons, RSVPs, posts) stay in this browser until their stories.
+  const DB_POINT_KINDS = ["habit"];
+  async function loadPointValues() {
+    const { data, error } = await sb.from("point_values").select("kind,points");
+    if (!error && data) data.forEach((r) => (POINTS[r.kind] = r.points));
+  }
+  async function loadHabitData() {
+    const [h, c, p] = await Promise.all([
+      sb.from("habits").select("id,title,goal_text,source_lesson_id,is_active,created_at,sort_order").order("sort_order"),
+      sb.from("habit_checkins").select("habit_id,check_date"),
+      sb.from("point_events").select("id,kind,points,habit_id,occurred_on,created_at").in("kind", DB_POINT_KINDS),
+    ]);
+    const err = h.error || c.error || p.error;
+    if (err || !h.data || !c.data || !p.data) { if (err) console.error(err); return false; }
+    state.habits = h.data.map((r) => ({ id: r.id, title: r.title, goalText: r.goal_text, lessonNumber: r.source_lesson_id, active: r.is_active, createdAt: r.created_at, sortOrder: r.sort_order }));
+    state.checkins = c.data.map((r) => ({ habitId: r.habit_id, date: r.check_date }));
+    state.points = state.points.filter((x) => !DB_POINT_KINDS.includes(x.kind))
+      .concat(p.data.map((r) => ({ id: r.id, kind: r.kind, points: r.points, ref: r.habit_id, date: r.occurred_on, at: r.created_at })));
+    return true;
+  }
+
+  let ready = null;
+  function init() {
+    if (!live) return Promise.resolve(true);
+    if (ready) return ready;
+    ready = (async () => {
+      const { data } = await sb.auth.getSession();
+      const session = data.session;
+      if (!session) return false;
+      const { data: p, error } = await sb.from("profiles").select("id,username,first_name,city,state,bio,created_at").eq("auth_user_id", session.user.id).maybeSingle();
+      if (error || !p) { loadError = error ? error.message : "No profile found for this account."; return "noprofile"; }
+      const { data: pp } = await sb.from("profile_private").select("*").eq("profile_id", p.id).maybeSingle();
+      ME = p.id;
+      KEY = "momentum.v1.user." + p.id; // this user's own browser data
+      let saved = null;
+      try { saved = JSON.parse(localStorage.getItem(KEY)); } catch (e) { /* ignore */ }
+      const me = profileFromRows(p, pp);
+      state = saved && saved.version === 1 ? saved : emptyStateFor({ ...me, interests: [], attendeeDisplay: "first_name" });
+      const old = state.profiles[ME] || {};
+      state.profiles[ME] = { ...old, ...me, interests: old.interests || [], attendeeDisplay: state.settings.attendeeDisplay };
+      state.meId = ME; state.signedIn = true;
+      await Promise.all([loadPointValues(), loadHabitData()]);
+      persist();
+      return true;
+    })();
+    return ready;
+  }
+
+  // =====================================================================
+  // Accounts (Supabase Auth). Used by the sign-in / sign-up page.
+  // Signup fields travel as "user metadata"; the database trigger from
+  // migration 001 turns them into profiles + profile_private rows.
+  // =====================================================================
+  const siteBase = () => location.origin + location.pathname.replace(/[^/]*$/, ""); // where the email link lands
+  const auth = {
+    async session() {
+      if (!live) return null;
+      const { data } = await sb.auth.getSession();
+      return data.session;
+    },
+    signUp(email, password, profile) {
+      return sb.auth.signUp({ email, password, options: { data: profile, emailRedirectTo: siteBase() } });
+    },
+    signIn(email, password) {
+      return sb.auth.signInWithPassword({ email, password });
+    },
+    resendConfirmation(email) {
+      return sb.auth.resend({ type: "signup", email, options: { emailRedirectTo: siteBase() } });
+    },
+    async signOut() {
+      if (!live) return;
+      let failed = false;
+      try { failed = !!(await sb.auth.signOut()).error; } catch (e) { failed = true; }
+      // Offline or server error: still sign out on this device by clearing the saved session.
+      if (failed) { try { localStorage.removeItem(sb.auth.storageKey); } catch (e) { /* ignore */ } }
+    },
+  };
 
   window.Store = {
-    ME, POINTS, LESSON_COUNT, CANCELS_PER_MONTH,
+    get ME() { return ME; }, POINTS, LESSON_COUNT, CANCELS_PER_MONTH, auth, init,
     get state() { return state; }, get live() { return live; }, get loadError() { return loadError; },
     subscribe: (fn) => { listeners.add(fn); return () => listeners.delete(fn); },
     today, dayKey, addDays,
@@ -563,7 +743,7 @@
     profile, fullName, isFriend, friends, friendshipWith, incomingRequests, sentRequests, acceptFriend, declineFriend,
     removeFriend, sendFriendRequest, sharedActivityId,
     // growth
-    habits, isHabitDone, toggleHabit, addHabit, removeHabit, isLessonDone, isLessonUnlocked, currentLesson,
+    habits, archivedHabits, isHabitDone, toggleHabit, addHabit, removeHabit, archiveHabit: removeHabit, restoreHabit, editHabit, reorderHabits, isLessonDone, isLessonUnlocked, currentLesson,
     completeLesson, lessonGoal, streak, lastDays, stats, pointHistory,
     // social
     createPost, setPostVisibility, encouraged, toggleEncourage, feed, historyFor,
@@ -571,6 +751,6 @@
     conversations, conversation, unread, unreadCount, isRequestToMe, markRead, openDirect, send, respondRequest,
     otherMember, memberStatus, shareActivityPeople,
     // settings
-    setSetting, updateProfile, signIn, signOut, reset,
+    setSetting, updateProfile, signIn, signOut, reset, clearDemo,
   };
 })();

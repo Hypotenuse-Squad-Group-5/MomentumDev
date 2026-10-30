@@ -209,7 +209,7 @@
       p.innerHTML = '<div class="msg-head"><h2 class="grow mb0">Messages</h2><button class="btn btn-sm" data-new>' + icon("plus", "sm") + 'New chat</button><button class="icon-btn" data-hide aria-label="Close messages">' + icon("x") + "</button></div>" +
         '<div class="msg-body"><input type="search" placeholder="Search conversations" value="' + esc(query) + '" data-q aria-label="Search conversations">' +
         (reqs.length ? '<p class="label mt">Message requests (' + reqs.length + ")</p>" + reqs.map(item).join("") : "") +
-        '<p class="label mt">Conversations</p>' + (rest.length ? rest.map(item).join("") : '<p class="muted small">No conversations match.</p>') +
+        '<p class="label mt">Conversations</p>' + (rest.length ? rest.map(item).join("") : query ? '<p class="muted small">No conversations match.</p>' : '<div class="center mt"><p><b>No messages yet.</b></p><p class="muted small">Message a host from any activity page, or start a chat with someone you met.</p></div>') +
         '<p class="hint mt">Group chats exist only for activities (max 20). 1-on-1 chats archive after 6 months, groups after 3.</p></div>';
       p.querySelector("[data-hide]").onclick = hide;
       p.querySelector("[data-new]").onclick = () => show("new");
@@ -247,7 +247,7 @@
       const list = peopleQuery ? everyone.filter(match) : shared;
       p.innerHTML = '<div class="msg-head"><button class="icon-btn" data-back aria-label="Back">' + icon("left") + '</button><h2 class="grow mb0">New chat</h2><button class="icon-btn" data-hide aria-label="Close messages">' + icon("x") + "</button></div>" +
         '<div class="msg-body"><input type="search" placeholder="Search people by name" value="' + esc(peopleQuery) + '" data-pq aria-label="Search people">' +
-        '<p class="label mt">' + (peopleQuery ? "Search results" : "People you've shared activities with") + "</p>" + (list.length ? list.map(row).join("") : '<p class="muted small">No one found.</p>') + "</div>";
+        '<p class="label mt">' + (peopleQuery ? "Search results" : "People you've shared activities with") + "</p>" + (list.length ? list.map(row).join("") : '<p class="muted small">' + (peopleQuery ? "No one found." : "People you go to activities with show up here. You can also search by name.") + "</p>") + "</div>";
       p.querySelector("[data-back]").onclick = () => show("list");
       p.querySelector("[data-hide]").onclick = hide;
       const q = p.querySelector("[data-pq]"); q.oninput = () => { peopleQuery = q.value; render(); const n = panel().querySelector("[data-pq]"); n.focus(); n.setSelectionRange(n.value.length, n.value.length); };
@@ -261,9 +261,17 @@
   // then renders. With live:true the page re-renders whenever data changes
   // (here or in another tab), so streaks/points/habits stay in sync everywhere.
   async function mount(pageKey, render, opts = {}) {
-    if (opts.shell !== false) buildShell(pageKey);
     const main = document.getElementById("main");
     main.innerHTML = '<p class="muted">Loading…</p>';
+    // Auth guard: no session → sign-in page. Nothing below runs for signed-out visitors.
+    const signedIn = await Store.init();
+    if (signedIn === false) { location.replace("index.html"); return; }
+    if (signedIn === "noprofile") {
+      main.innerHTML = '<div class="panel" style="max-width:480px;margin:40px auto"><h2>We couldn\'t load your profile</h2><p class="muted">' + esc(Store.loadError || "") + '</p><button class="btn btn-primary" id="np-out">Sign out</button></div>';
+      document.getElementById("np-out").onclick = async () => { await Store.auth.signOut(); location.replace("index.html"); };
+      return;
+    }
+    if (opts.shell !== false) buildShell(pageKey);
     await Store.loadActivities();
     render();
     showFlash();

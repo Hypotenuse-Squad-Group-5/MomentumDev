@@ -21,7 +21,19 @@
 -- =====================================================================
 
 -- ---------- 0. Clean slate (re-runnable) ----------
+-- Also removes objects added by later migrations, so "schema.sql, then each
+-- migration in order" always rebuilds a clean database.
+drop trigger if exists on_auth_user_created on auth.users;
+drop function if exists public.momentum_handle_new_user() cascade;
+drop function if exists public.current_profile_id() cascade;
+drop function if exists public.momentum_check_adult() cascade;
+drop function if exists public.momentum_lock_profile_identity() cascade;
+drop function if exists public.momentum_habit_checkin_points() cascade;
+drop function if exists public.momentum_touch_point_values() cascade;
+drop function if exists public.momentum_today() cascade;
 drop table if exists
+  point_values,
+  profile_private,
   notifications, point_events, habit_checkins, habits, lesson_completions,
   lesson_stats, lessons, messages, conversation_members, conversations,
   encouragements, post_photos, posts, activity_reports, rsvp_guests, rsvps,
