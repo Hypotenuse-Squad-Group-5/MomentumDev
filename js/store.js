@@ -420,7 +420,8 @@
   const isLessonDone = (n) => state.lessonsDone.some((l) => l.n === n);
   const isLessonUnlocked = (n) => n === 1 || isLessonDone(n - 1);
   function currentLesson() { for (let n = 1; n <= LESSON_COUNT; n++) if (!isLessonDone(n)) return n; return null; }
-  function completeLesson(n, goalText, habitTitle) {
+  
+   async function completeLesson(n, goalText, habitTitle) {
     if (!isLessonUnlocked(n)) return { ok: false, message: "Finish the previous lesson first." };
     if (isLessonDone(n)) return { ok: false, message: "You've already finished this lesson." };
     const words = goalText.trim().split(/\s+/).filter(Boolean).length;
@@ -577,6 +578,7 @@
       return;
     }
 
+   try{
     const { data, error } = await sb
       .from('lesson_completions')
       .select(`
@@ -600,6 +602,10 @@
 
     console.table(data);
     return data;
+  } catch (err) {
+     console.error('Unexpected error:', err);
+   return;
+}
   }
   window.Store = {
     ME, POINTS, LESSON_COUNT, CANCELS_PER_MONTH,
