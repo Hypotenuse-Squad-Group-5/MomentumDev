@@ -427,7 +427,7 @@
     const words = goalText.trim().split(/\s+/).filter(Boolean).length;
     if (words < 30) return { ok: false, message: "Write at least 30 words to finish this lesson." };
     if (!habitTitle.trim()) return { ok: false, message: "Give your daily habit a short name." };
-   //If live Supabase mode is enabled and we've confrimed whose logged in, save content in the lesson directly to the database!
+   //If live Supabase mode is enabled and we've confrimed whose logged in, save content in the lesson directly to the database (including the user inputs for the lessons)!
   if (live) {
     const { data: { user } } = await sb.auth.getUser();
     if (user) {
@@ -435,6 +435,7 @@
         profile_id: ME,
         lesson_id: n,
         user_goal_response: goalText.trim(),
+        habit_title: habitTitle.trim(), 
         completed_at: nowIso()
       }, { onConflict: 'profile_id, lesson_id' });
 
