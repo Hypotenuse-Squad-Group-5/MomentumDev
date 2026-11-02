@@ -12,9 +12,14 @@
     const pending = !own && !friend && Store.friendshipWith(id);
     if (compose.visibility === null) compose.visibility = Store.state.settings.postVisibility;
 
-    // Non-friends only see a first name and public hosted activities
+    // Non-friends see public hosted activities and public posts
     let history = Store.historyFor(id);
-    if (!own && !friend) history = history.filter((h) => h.kind === "activity" && h.hosting && h.activity.visibility === "public");
+    if (!own && !friend) {
+      history = history.filter((h) =>
+        (h.kind === "activity" && h.hosting && h.activity.visibility === "public") ||
+        (h.kind === "post" && h.post.visibility === "public")
+      );
+    }
     const attended = own ? Store.stats().attended : Store.state.rsvps.filter((r) => r.profileId === id && r.status === "committed").length;
     const linkable = Store.myCommitments().concat(Store.hosting());
 
@@ -41,17 +46,22 @@
         ${own && compose.open ? `
         <form class="panel mt" id="composer" novalidate>
           <div class="row-between"><h2 class="mb0">Share a post</h2><button type="button" class="icon-btn" id="close-compose" aria-label="Close">${icon("x")}</button></div>
-          <p class="small muted">Photos and text only. Your first post each day earns ${Store.POINTS.post} points.</p>
-          <div class="field"><span class="flabel">Photos (1 to 5)</span>
-            <div class="photo-picker">${Array.from({ length: 5 }, (_, i) => `<button type="button" class="photo${i < compose.photos ? " filled" : ""}" data-photo="${i}" aria-label="${i < compose.photos ? "Remove photo" : "Add photo"}">${icon(i < compose.photos ? "image" : "plus")}</button>`).join("")}</div>
-            <p class="hint">Tap a square to add a placeholder photo. Real uploads come in a later slice.</p></div>
+          <p class="small muted">Text posts save to your profile and Supabase database. Your first post each day earns ${Store.POINTS.post} points.</p>
+          <div class="field"><span class="flabel">Photos</span>
+            <div class="photo-picker">${Array.from({ length: 5 }, (_, i) => `<button type="button" class="photo" disabled aria-label="Photo placeholder">${icon("image")}</button>`).join("")}</div>
+            <p class="hint">Photos coming soon. Posts are text-only for now.</p></div>
           <div class="field"><label for="caption">Caption</label><textarea id="caption" maxlength="500" placeholder="What did you do?">${esc(compose.caption)}</textarea><div class="hint"><span id="cc">${compose.caption.length}</span> / 500</div></div>
           <div class="grid-2">
             <div class="field"><label for="link">Link an activity <span class="opt">(optional)</span></label><select id="link"><option value="">None</option>${linkable.map((a) => `<option value="${a.id}"${a.id === compose.activityId ? " selected" : ""}>${esc(a.title)}</option>`).join("")}</select></div>
-            <div class="field"><label for="vis">Who can see this?</label>${UI.visSelect(compose.visibility, 'id="vis"')}</div>
+            <div class="field"><label for="vis">Who can see this?</label>
+              <select id="vis" disabled>
+                <option value="public" selected>Public (All posts are currently public)</option>
+              </select>
+              <p class="hint">All posts made are currently public right now.</p>
+            </div>
           </div>
           ${compose.error ? `<div class="alert">${icon("alert", "sm")}<span>${esc(compose.error)}</span></div>` : ""}
-          <button class="btn btn-primary btn-block mt">Post</button>
+          <button class="btn btn-primary btn-block mt" id="post-submit-btn">Post</button>
         </form>` : ""}
 
         <p class="label mt-lg">${own ? "Your posts and activities" : "Posts and activities"}</p>
@@ -73,10 +83,17 @@
     $("link").onchange = (e) => (compose.activityId = e.target.value);
     $("vis").onchange = (e) => (compose.visibility = e.target.value);
     form.querySelectorAll("[data-photo]").forEach((b) => (b.onclick = () => { const i = Number(b.dataset.photo); compose.photos = i < compose.photos ? i : i + 1; render(); }));
-    form.onsubmit = (e) => {
+    form.onsubmit = async (e) => {
       e.preventDefault();
-      const r = Store.createPost({ caption: compose.caption, photos: compose.photos, activityId: compose.activityId, visibility: compose.visibility });
-      if (!r.ok) { compose.error = r.message; render(); return; }
+      const submitBtn = $("post-submit-btn");
+      if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = "Posting..."; }
+      const r = await Store.createPost({ caption: compose.caption, photos: 0, activityId: compose.activityId, visibility: "public" });
+      if (!r.ok) {
+        compose.error = r.message;
+        if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = "Post"; }
+        render();
+        return;
+      }
       Object.assign(compose, { open: false, photos: 0, caption: "", activityId: "", error: "" });
       render();
       UI.toast(r.points ? "Posted" : "Posted (post points already earned today)", r.points);

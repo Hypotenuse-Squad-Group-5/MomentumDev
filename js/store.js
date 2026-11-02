@@ -162,7 +162,7 @@
   const cfg = window.MOMENTUM_CONFIG || {};
   const live = !!(cfg.SUPABASE_URL && cfg.SUPABASE_ANON_KEY && window.supabase);
   const sb = live ? window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY) : null;
-  let actCache = null, typeCache = null, loadError = null;
+  let actCache = null, postCache = null, typeCache = null, loadError = null;
   const remoteProfiles = {}; // public profile cards of other users, learned from the activities they host
   if (!live) load();         // demo mode loads right away; signed-in mode loads in init()
 
@@ -193,6 +193,67 @@
       actCache = state.activities.map((a) => ({ ...a, source: "local" }));
     }
     return actCache;
+  }
+
+  function fromPostRow(row) {
+    if (row.author && row.author_id !== ME) {
+      remoteProfiles[row.author_id] = remoteProfiles[row.author_id] || {
+        id: row.author_id,
+        first: row.author.first_name,
+        last: "",
+        city: row.author.city || "",
+        state: row.author.state || "",
+        memberSince: row.author.created_at,
+        bio: "",
+        interests: [],
+        attendeeDisplay: "first_name",
+      };
+    }
+    return {
+      id: row.id,
+      authorId: row.author_id,
+      caption: row.caption,
+      photos: 0,
+      activityId: row.activity_id || null,
+      visibility: row.visibility || "public",
+      createdAt: row.created_at,
+      source: "supabase",
+    };
+  }
+
+  async function loadPosts(force) {
+    if (postCache && !force) return postCache;
+    if (live) {
+      let { data, error } = await sb.from("posts")
+        .select("id, author_id, caption, activity_id, visibility, created_at, author:profiles!posts_author_id_fkey(first_name,city,state,created_at)")
+        .order("created_at", { ascending: false });
+      if (error) {
+        const alt = await sb.from("posts")
+          .select("id, author_id, caption, activity_id, visibility, created_at, author:profiles(first_name,city,state,created_at)")
+          .order("created_at", { ascending: false });
+        if (!alt.error) {
+          data = alt.data;
+          error = null;
+        } else {
+          const bare = await sb.from("posts")
+            .select("id, author_id, caption, activity_id, visibility, created_at")
+            .order("created_at", { ascending: false });
+          if (!bare.error) {
+            data = bare.data;
+            error = null;
+          }
+        }
+      }
+      if (error) {
+        console.error("Failed to load posts from Supabase:", error.message || error);
+        postCache = (state.posts || []).map((p) => ({ ...p, source: "local" }));
+      } else {
+        postCache = (data || []).map(fromPostRow);
+      }
+    } else {
+      postCache = (state.posts || []).map((p) => ({ ...p, source: "local" }));
+    }
+    return postCache;
   }
 
   async function loadTypes() {
@@ -526,7 +587,7 @@
       habitsChecked: state.checkins.length, goalsMetDays, lessonsDone: state.lessonsDone.length,
       attended: state.rsvps.filter((r) => r.profileId === ME && r.attended === true).length,
       upcoming: myCommitments().filter((a) => !isPast(a)).length,
-      posts: state.posts.filter((p) => p.authorId === ME).length,
+      posts: ((postCache !== null ? postCache : state.posts) || []).filter((p) => p.authorId === ME).length,
     };
   }
   function pointHistory(limit = 12) { return [...state.points].sort((a, b) => new Date(b.at) - new Date(a.at)).slice(0, limit); }
@@ -534,35 +595,86 @@
   // =====================================================================
   // Posts + feed
   // =====================================================================
-  function createPost({ caption, photos, activityId, visibility }) {
-    if (!photos || photos < 1) return { ok: false, message: "Add at least one photo." };
-    if (photos > 5) return { ok: false, message: "Posts can have up to 5 photos." };
-    if (!caption.trim()) return { ok: false, message: "Add a caption." };
-    if (caption.length > 500) return { ok: false, message: "Captions can be up to 500 characters." };
-    const p = { id: uid(), authorId: ME, caption: caption.trim(), photos, activityId: activityId || null, visibility, createdAt: nowIso() };
-    state.posts.push(p);
+  async function createPost({ caption, photos, activityId, visibility }) {
+    if (!caption || !caption.trim()) return { ok: false, message: "Add a caption." };
+    if (caption.trim().length > 500) return { ok: false, message: "Captions can be up to 500 characters." };
+    let post;
+    if (live) {
+      let res = await sb.from("posts").insert({
+        author_id: ME,
+        caption: caption.trim(),
+        activity_id: activityId || null,
+        visibility: "public",
+      }).select("id, author_id, caption, activity_id, visibility, created_at, author:profiles!posts_author_id_fkey(first_name,city,state,created_at)").single();
+      if (res.error) {
+        res = await sb.from("posts").insert({
+          author_id: ME,
+          caption: caption.trim(),
+          activity_id: activityId || null,
+          visibility: "public",
+        }).select().single();
+      }
+      if (res.error) return { ok: false, message: res.error.message };
+      post = fromPostRow(res.data);
+    } else {
+      post = {
+        id: uid(),
+        authorId: ME,
+        caption: caption.trim(),
+        photos: 0,
+        activityId: activityId || null,
+        visibility: "public",
+        createdAt: nowIso(),
+        source: "local",
+      };
+    }
+    if (!state.posts) state.posts = [];
+    state.posts.unshift(post);
+    if (postCache && !postCache.some((p) => p.id === post.id)) postCache.unshift(post);
     const firstToday = !state.points.some((x) => x.kind === "post" && x.date === today());
-    const pts = firstToday ? addPoints("post", p.id) : 0;
+    const pts = firstToday ? addPoints("post", post.id) : 0;
     save();
-    return { ok: true, points: pts };
+    return { ok: true, points: pts, post };
   }
-  function setPostVisibility(id, v) { const p = state.posts.find((x) => x.id === id); if (p) { p.visibility = v; save(); } }
+
+  async function deletePost(id) {
+    if (live) {
+      const { error } = await sb.from("posts").delete().eq("id", id);
+      if (error) return { ok: false, message: error.message };
+    }
+    state.posts = (state.posts || []).filter((p) => p.id !== id);
+    if (postCache) postCache = postCache.filter((p) => p.id !== id);
+    save();
+    return { ok: true };
+  }
+
+  function setPostVisibility(id, v) {
+    const list = postCache !== null ? postCache : state.posts;
+    const p = (list || []).find((x) => x.id === id);
+    if (p) { p.visibility = v; save(); }
+  }
+
   function encouraged(postId) { return state.encouragements.some((e) => e.postId === postId && e.profileId === ME); }
   function toggleEncourage(postId) {
     if (encouraged(postId)) state.encouragements = state.encouragements.filter((e) => !(e.postId === postId && e.profileId === ME));
     else state.encouragements.push({ postId, profileId: ME, at: nowIso() });
     save();
   }
-  // 10 most recent posts + activities from friends. No reshuffle, newest first.
+
+  // 10 most recent posts + activities from friends and public posts. No reshuffle, newest first.
   function feed() {
     const fr = new Set(friends().map((f) => f.id));
+    fr.add(ME);
     const items = [];
-    state.posts.filter((p) => fr.has(p.authorId)).forEach((p) => items.push({ kind: "post", at: p.createdAt, post: p }));
-    (actCache || []).filter((a) => fr.has(a.hostId) && a.visibility !== "private").forEach((a) => items.push({ kind: "activity", at: a.createdAt, activity: a }));
+    const pList = postCache !== null ? postCache : (state.posts || []);
+    pList.filter((p) => p.visibility === "public" || fr.has(p.authorId)).forEach((p) => items.push({ kind: "post", at: p.createdAt, post: p }));
+    (actCache || []).filter((a) => a.visibility === "public" || fr.has(a.hostId)).forEach((a) => items.push({ kind: "activity", at: a.createdAt, activity: a }));
     return items.sort((a, b) => new Date(b.at) - new Date(a.at)).slice(0, 10);
   }
+
   function historyFor(profileId) {
-    const items = state.posts.filter((p) => p.authorId === profileId).map((p) => ({ kind: "post", at: p.createdAt, post: p }));
+    const pList = postCache !== null ? postCache : (state.posts || []);
+    const items = pList.filter((p) => p.authorId === profileId).map((p) => ({ kind: "post", at: p.createdAt, post: p }));
     const going = profileId === ME ? new Set(myCommitmentIds()) : new Set(state.rsvps.filter((r) => r.profileId === profileId && r.status === "committed").map((r) => r.activityId));
     (actCache || []).filter((a) => a.hostId === profileId || going.has(a.id)).forEach((a) => items.push({ kind: "activity", at: a.startsAt, activity: a, hosting: a.hostId === profileId }));
     return items.sort((a, b) => new Date(b.at) - new Date(a.at));
@@ -621,7 +733,7 @@
   }
   function signIn() { if (state) { state.signedIn = true; save(); } }
   function signOut() { if (state) { state.signedIn = false; save(); } }
-  function reset() { state = seed(); actCache = null; persist(); loadActivities().then(emit); }
+  function reset() { state = seed(); actCache = null; postCache = null; persist(); loadActivities().then(() => loadPosts().then(emit)); }
   // The opposite of reset: keep only your own account, clear every demo row.
   // Use it to preview empty states. (Activities in Supabase are unaffected.)
   function clearDemo() {
@@ -692,7 +804,7 @@
       const old = state.profiles[ME] || {};
       state.profiles[ME] = { ...old, ...me, interests: old.interests || [], attendeeDisplay: state.settings.attendeeDisplay };
       state.meId = ME; state.signedIn = true;
-      await Promise.all([loadPointValues(), loadHabitData()]);
+      await Promise.all([loadPointValues(), loadHabitData(), loadPosts()]);
       persist();
       return true;
     })();
@@ -746,7 +858,7 @@
     habits, archivedHabits, isHabitDone, toggleHabit, addHabit, removeHabit, archiveHabit: removeHabit, restoreHabit, editHabit, reorderHabits, isLessonDone, isLessonUnlocked, currentLesson,
     completeLesson, lessonGoal, streak, lastDays, stats, pointHistory,
     // social
-    createPost, setPostVisibility, encouraged, toggleEncourage, feed, historyFor,
+    loadPosts, createPost, deletePost, setPostVisibility, encouraged, toggleEncourage, feed, historyFor,
     // messages
     conversations, conversation, unread, unreadCount, isRequestToMe, markRead, openDirect, send, respondRequest,
     otherMember, memberStatus, shareActivityPeople,

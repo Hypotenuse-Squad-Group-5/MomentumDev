@@ -45,3 +45,20 @@ Verifying the vertical slice:
 
 
 
+
+
+Verifying Vertical Slice 3 (Text Profile Posts with Supabase):
+1. Run migration 004 in Supabase:
+   - In Supabase → SQL Editor → New query, paste the contents of `database/004_posts.sql` and click Run.
+2. Sign in to your account on the site.
+3. Navigate to **Profile** (click your avatar in the top-right header).
+4. Click the **"Share a post"** button.
+5. Notice that the privacy setting is explicitly locked to **"Public (All posts are currently public)"** and photo placeholders indicate **"Photos coming soon. Posts are text-only for now."**
+6. Enter text into the **Caption** field describing something you did (e.g., "Finished a 5-mile run at Rock Canyon today!").
+7. Click **"Post"**. The post is saved directly into the Supabase `posts` table and appears under "Your posts and activities" with a "Public" badge and a "Delete" option.
+8. Open the site in an Incognito / private browsing window (or on another device / account):
+   - Check the **Feed** on the Social page (`social.html`) or view the author's profile.
+   - The post will appear for everyone because it is stored in and retrieved from Supabase.
+9. Test Deletion:
+   - On the author's profile, click **"Delete"** on the post and confirm.
+   - The post will be deleted from Supabase and will no longer show up anywhere.
