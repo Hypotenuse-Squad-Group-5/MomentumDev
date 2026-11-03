@@ -62,3 +62,9 @@ Verifying Vertical Slice 3 (Text Profile Posts with Supabase):
 9. Test Deletion:
    - On the author's profile, click **"Delete"** on the post and confirm.
    - The post will be deleted from Supabase and will no longer show up anywhere.
+  
+
+Interests Section:
+-This a dynamic interests selection on the user settings page (settings.js), backed by Supabase tables
+-The interest options are managed by an array (INTERESTS) in settings.js, which renders selectable options for users to personalize their profile 
+-In Supabase, the interests table stores the master list of all interest categories and profile_interests is a joining table for individual users to select their interests from 
