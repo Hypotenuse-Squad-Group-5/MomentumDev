@@ -14,13 +14,13 @@
     </details>`;
 
     function quiz(a, i) {
-      return `<form class="panel lesson-exercise" data-exercise="${i}" data-kind="quiz"><p class="label">Knowledge check</p>
+      return `<form autocomplete="off" class="panel lesson-exercise" data-exercise="${i}" data-kind="quiz"><p class="label">Knowledge check</p>
         <fieldset><legend>${esc(a.question)}</legend><div class="lesson-options">${a.options.map((o, j) => `<label class="lesson-option"><input type="radio" name="answer-${i}" value="${j}" required><span>${esc(o)}</span></label>`).join("")}</div></fieldset>
         <button class="btn btn-primary btn-sm" type="submit">Check my answer</button><p class="lesson-feedback" role="status" aria-live="polite" hidden></p></form>`;
     }
     function planner(a, i) {
-      return `<form class="panel lesson-exercise" data-exercise="${i}" data-kind="planner"><h3>${esc(a.title)}</h3><p class="muted small">${esc(a.intro)}</p>
-        <div class="lesson-fields">${a.fields.map(f => `<div class="field"><label for="practice-${i}-${f.id}">${esc(f.label)}</label>${f.options ? `<select id="practice-${i}-${f.id}" name="${f.id}" required><option value="">Choose an option</option>${f.options.map(o => `<option>${esc(o)}</option>`).join("")}</select>` : `<input id="practice-${i}-${f.id}" name="${f.id}" type="${f.type}" maxlength="240" placeholder="${esc(f.placeholder)}" required>`}</div>`).join("")}</div>
+      return `<form autocomplete="off" class="panel lesson-exercise" data-exercise="${i}" data-kind="planner"><h3>${esc(a.title)}</h3><p class="muted small">${esc(a.intro)}</p>
+        <div class="lesson-fields">${a.fields.map(f => `<div class="field"><label for="practice-${i}-${f.id}">${esc(f.label)}</label>${f.options ? `<select id="practice-${i}-${f.id}" name="${f.id}" required><option value="">Choose an option</option>${f.options.map(o => `<option>${esc(o)}</option>`).join("")}</select>` : `<input autocomplete="off" id="practice-${i}-${f.id}" name="${f.id}" type="${f.type}" maxlength="240" placeholder="${esc(f.placeholder)}" required>`}</div>`).join("")}</div>
         ${a.kind === "needs" ? '<p class="lesson-suggestion callout small" aria-live="polite">Choose a need to explore possible alternatives.</p>' : ""}
         <button class="btn btn-primary btn-sm" type="submit">${a.kind === "hangout" ? "Build my invitation" : "Build my plan"}</button>
         <div class="lesson-plan" hidden><p class="label">Your draft</p><p class="lesson-plan-text" tabindex="-1"></p><p class="lesson-plan-note small"></p>
