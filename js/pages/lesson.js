@@ -17,8 +17,11 @@ UI.mount("lessons", function render() {
     <article class="lesson-body">
       <p class="label mt">Lesson ${n} of ${window.LESSONS.length} · ${l.minutes} min</p>
       <h1>${esc(l.title)}</h1>
+      <p class="lesson-intro muted">${esc(l.summary)}</p>
+      <p class="small"><a href="#practice-title">Jump to practice</a> · <a href="#lesson-sources">Research & sources</a></p>
       ${l.stats.length ? `<div class="stat-cards">${l.stats.map(([v, c]) => `<div class="stat-card"><b>${esc(v)}</b><span>${esc(c)}</span></div>`).join("")}</div>` : ""}
       ${l.html}
+      <div id="lesson-interactions"></div>
     </article>
 
     ${done ? `<section class="panel mt-lg"><p class="label">Lesson complete</p><h2>Your goal</h2><div class="goal-box">${esc(Store.lessonGoal(n))}</div>
@@ -35,11 +38,12 @@ UI.mount("lessons", function render() {
       </form>`}
   </div>`;
 
+  LessonInteractions.mount(l, document.getElementById("lesson-interactions"));
   const form = document.getElementById("goal-form");
   if (!form) return;
   const goal = form.querySelector("#goal"), wc = form.querySelector("#wc");
   goal.oninput = () => { const w = UI.words(goal.value); wc.textContent = w; wc.style.color = w >= 30 ? "var(--primary)" : ""; };
-  form.onsubmit = (e) => {
+  form.onsubmit = async (e) => {
     e.preventDefault();
     const fields = { goal: form.querySelector('[data-f="goal"]'), habit: form.querySelector('[data-f="habit"]') };
     Object.values(fields).forEach((f) => { f.classList.remove("invalid"); f.querySelector(".err").hidden = true; });
@@ -48,7 +52,12 @@ UI.mount("lessons", function render() {
     if (w < 30) bad("goal", "Write at least 30 words to finish this lesson. You're at " + w + ".");
     if (!h) bad("habit", "Give your daily habit a short name.");
     if (w < 30 || !h) return;
-    const r = Store.completeLesson(n, goal.value, h);
+    const button = form.querySelector('button[type="submit"], button');
+    button.disabled = true;
+    let r;
+    try { r = await Store.completeLesson(n, goal.value, h); }
+    catch (_) { r = { ok: false, message: "Your lesson could not be saved. Your reflection is still here; please try again." }; }
+    finally { button.disabled = false; }
     if (!r.ok) return UI.alertModal("Couldn't finish", esc(r.message), { error: true });
     UI.flash("Lesson " + n + " complete. New habit added to Home.", r.points);
     location.href = "lessons.html";

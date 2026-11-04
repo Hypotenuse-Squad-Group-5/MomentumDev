@@ -542,7 +542,7 @@
       .then((results) => { const bad = results.find((r) => r.error); if (bad) loadHabitData().then(() => syncFailed("Couldn't save the new order: " + bad.error.message)); });
   }
 
-  const LESSON_COUNT = 5;
+  const LESSON_COUNT = 6;
   const isLessonDone = (n) => state.lessonsDone.some((l) => l.n === n);
   const isLessonUnlocked = (n) => n === 1 || isLessonDone(n - 1);
   function currentLesson() { for (let n = 1; n <= LESSON_COUNT; n++) if (!isLessonDone(n)) return n; return null; }

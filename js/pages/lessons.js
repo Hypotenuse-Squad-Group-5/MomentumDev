@@ -6,7 +6,7 @@ UI.mount("lessons", function render() {
 
   document.getElementById("main").innerHTML = `
     <div style="max-width:720px">
-      <div class="page-head"><div><h1>Lessons</h1><p class="muted mb0">Short reads on how your phone works on your brain, and what to do about it.</p></div></div>
+      <div class="page-head"><div><h1>Lessons</h1><p class="muted mb0">Six practical lessons to build intentional phone habits and make more room for life offline.</p></div></div>
       <div class="panel tight"><div class="row-between small"><b>Your progress</b><span>${done} of ${window.LESSONS.length} complete · +${Store.POINTS.lesson} points each</span></div>
         <div class="capacity" style="height:10px"><i style="width:${(done / window.LESSONS.length) * 100}%"></i></div></div>
       <div class="lesson-path" id="path">
@@ -16,7 +16,7 @@ UI.mount("lessons", function render() {
           return `<a class="lesson-node ${st}" href="lesson.html?n=${l.n}" data-n="${l.n}" style="transform:translateX(${offsets[i % offsets.length]}px)" ${st === "locked" ? 'aria-disabled="true"' : ""}>
             ${st === "current" ? '<span class="start">START</span>' : ""}
             <span class="orb">${st === "done" ? icon("check", "lg") : st === "locked" ? icon("lock") : l.n}</span>
-            <span class="t">${l.n}. ${esc(l.title)}<br><span class="tiny muted">${st === "done" ? "Completed" : l.minutes + " min"}</span></span></a>`;
+            <span class="t">${l.n}. ${esc(l.title)}<br><span class="tiny muted">${st === "done" ? "Completed" : l.minutes + " min · Read & practice"}</span></span></a>`;
         }).join("")}
       </div>
     </div>`;
