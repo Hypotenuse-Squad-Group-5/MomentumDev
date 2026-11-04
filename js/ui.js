@@ -73,9 +73,14 @@
   function initials(id) { const p = Store.profile(id); return ((p.first || "?")[0] + ((p.last || "")[0] || "")).toUpperCase(); }
   function colorFor(id) { let h = 0; for (const c of String(id)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return "c" + ((h % 4) + 1); }
   function avatar(id, size = "", link = false) {
+    const p = Store.profile(id);
     const cls = "avatar " + size + " " + colorFor(id);
-    return link ? '<a class="' + cls + '" href="profile.html?id=' + id + '" title="' + esc(Store.fullName(id)) + '">' + initials(id) + "</a>"
-      : '<span class="' + cls + '" aria-hidden="true">' + initials(id) + "</span>";
+    const init = '<span class="avatar-initials" aria-hidden="true">' + initials(id) + '</span>';
+    const inner = p && p.avatarUrl
+      ? '<img class="avatar-img" src="' + esc(p.avatarUrl) + '" alt="' + esc(Store.fullName(id)) + '" onerror="this.style.display=\'none\';">' + init
+      : init;
+    return link ? '<a class="' + cls + '" href="profile.html?id=' + id + '" title="' + esc(Store.fullName(id)) + '">' + inner + '</a>'
+      : '<span class="' + cls + '" aria-hidden="true">' + inner + '</span>';
   }
   // Friends see your full name + profile. Non-friends see first name only (or nothing, if hidden).
   function displayName(id) {

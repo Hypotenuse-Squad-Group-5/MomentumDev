@@ -51,8 +51,18 @@ UI.mount("settings", function render() {
     </section>`
     : `
     <form class="panel" id="profile-form" novalidate>
-      <div class="profile-head">${UI.avatar(Store.ME, "lg")}<div><button type="button" class="btn btn-sm" disabled>${icon("camera", "sm")}Change photo (later slice)</button>
-        ${p.memberSince ? `<p class="small muted mt mb0">Member since ${new Date(p.memberSince).toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" })}. This can't be changed.</p>` : ""}</div></div>
+      <div class="profile-head">
+        ${UI.avatar(Store.ME, "lg")}
+        <div>
+          <input type="file" id="avatar-input" accept="image/jpeg,image/png,image/webp" style="display:none">
+          <div class="row" style="gap:8px;flex-wrap:wrap">
+            <button type="button" class="btn btn-sm btn-primary" id="btn-change-photo">${icon("camera", "sm")}Change photo</button>
+            ${p.avatarUrl ? `<button type="button" class="btn btn-sm" id="btn-remove-photo">Remove photo</button>` : ""}
+          </div>
+          <p class="small muted mt mb0" id="avatar-status">JPG, PNG, or WebP. Automatically resized to 300×300.</p>
+          ${p.memberSince ? `<p class="small muted mt mb0">Member since ${new Date(p.memberSince).toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" })}. This can't be changed.</p>` : ""}
+        </div>
+      </div>
       <div class="alert mt" id="pf-msg" hidden></div>
       <p class="label mt">Public: other members see these</p>
       <div class="field" data-f="first"><label for="first">First name</label><input id="first" type="text" maxlength="40" value="${esc(p.first)}"><div class="err" hidden></div></div>
@@ -85,6 +95,58 @@ UI.mount("settings", function render() {
   if (cl) cl.onclick = () => UI.modal(`<h2>Remove all demo data?</h2><p>This clears every demo habit, friend, message, post, RSVP${Store.live ? "" : ", and activity"} in this browser, leaving only your account. You can bring it all back with "Reset demo data".</p><div class="modal-actions"><button class="btn" data-close>Cancel</button><button class="btn btn-danger" id="do-clear">Remove demo data</button></div>`,
     { onMount: (m, close) => (m.querySelector("#do-clear").onclick = () => { Store.clearDemo(); close(); UI.toast("Demo data removed"); }) });
   interestPicker(INTERESTS, picked, esc, icon);
+
+  const fileInp = document.getElementById("avatar-input");
+  const changeBtn = document.getElementById("btn-change-photo");
+  const removeBtn = document.getElementById("btn-remove-photo");
+  const statusEl = document.getElementById("avatar-status");
+  if (changeBtn && fileInp) {
+    changeBtn.onclick = () => fileInp.click();
+    fileInp.onchange = async () => {
+      const file = fileInp.files && fileInp.files[0];
+      if (!file) return;
+      changeBtn.disabled = true;
+      changeBtn.textContent = "Processing…";
+      if (statusEl) statusEl.textContent = "Resizing and uploading to Supabase Storage…";
+      try {
+        const res = await Store.uploadAvatar(file);
+        if (!res.ok) {
+          UI.toast("Upload failed: " + res.message);
+          if (statusEl) statusEl.textContent = "Upload failed: " + res.message;
+        } else {
+          UI.toast("Profile picture updated");
+          render();
+        }
+      } catch (err) {
+        UI.toast("Upload error: " + (err.message || err));
+        if (statusEl) statusEl.textContent = "Upload error: " + (err.message || err);
+      } finally {
+        changeBtn.disabled = false;
+        changeBtn.innerHTML = `${icon("camera", "sm")}Change photo`;
+        fileInp.value = "";
+      }
+    };
+  }
+  if (removeBtn) {
+    removeBtn.onclick = async () => {
+      removeBtn.disabled = true;
+      removeBtn.textContent = "Removing…";
+      try {
+        const res = await Store.deleteAvatar();
+        if (!res.ok) {
+          UI.toast("Failed to remove: " + res.message);
+        } else {
+          UI.toast("Profile picture removed");
+          render();
+        }
+      } catch (err) {
+        UI.toast("Error: " + (err.message || err));
+      } finally {
+        removeBtn.disabled = false;
+      }
+    };
+  }
+
   const pf = document.getElementById("profile-form");
   if (pf) pf.onsubmit = async (e) => {
     e.preventDefault();
