@@ -168,7 +168,7 @@
 
   function fromRow(row) {
     if (row.host && row.host_id !== ME) {
-      remoteProfiles[row.host_id] = { id: row.host_id, first: row.host.first_name, last: "", city: row.host.city, state: row.host.state, memberSince: row.host.created_at, bio: "", interests: [], attendeeDisplay: "first_name" };
+      remoteProfiles[row.host_id] = { id: row.host_id, first: row.host.first_name, last: "", city: row.host.city, state: row.host.state, memberSince: row.host.created_at, avatarUrl: row.host.avatar_url || null, bio: "", interests: [], attendeeDisplay: "first_name" };
     }
     return {
       id: row.id, hostId: row.host_id, hostName: row.host ? row.host.first_name : null,
@@ -184,9 +184,18 @@
     if (actCache && !force) return actCache;
     loadError = null;
     if (live) {
-      const { data, error } = await sb.from("activities")
-        .select("*, host:profiles!activities_host_id_fkey(first_name,city,state,created_at), type:activity_types(name)")
+      let { data, error } = await sb.from("activities")
+        .select("*, host:profiles!activities_host_id_fkey(first_name,city,state,avatar_url,created_at), type:activity_types(name)")
         .order("starts_at");
+      if (error) {
+        const alt = await sb.from("activities")
+          .select("*, host:profiles!activities_host_id_fkey(first_name,city,state,created_at), type:activity_types(name)")
+          .order("starts_at");
+        if (!alt.error) {
+          data = alt.data;
+          error = null;
+        }
+      }
       if (error) { loadError = error.message; console.error(error); actCache = []; }
       else actCache = data.map(fromRow);
     } else {
@@ -204,10 +213,14 @@
         city: row.author.city || "",
         state: row.author.state || "",
         memberSince: row.author.created_at,
+        avatarUrl: row.author.avatar_url || null,
         bio: "",
         interests: [],
         attendeeDisplay: "first_name",
       };
+      if (row.author.avatar_url) {
+        remoteProfiles[row.author_id].avatarUrl = row.author.avatar_url;
+      }
     }
     return {
       id: row.id,
@@ -225,7 +238,7 @@
     if (postCache && !force) return postCache;
     if (live) {
       let { data, error } = await sb.from("posts")
-        .select("id, author_id, caption, activity_id, visibility, created_at, author:profiles!posts_author_id_fkey(first_name,city,state,created_at)")
+        .select("id, author_id, caption, activity_id, visibility, created_at, author:profiles!posts_author_id_fkey(first_name,city,state,avatar_url,created_at)")
         .order("created_at", { ascending: false });
       if (error) {
         const alt = await sb.from("posts")
@@ -321,7 +334,7 @@
   // =====================================================================
   // People + friends
   // =====================================================================
-  function profile(id) { return state.profiles[id] || remoteProfiles[id] || { id, first: "Someone", last: "", city: "" }; }
+  function profile(id) { return state.profiles[id] || remoteProfiles[id] || { id, first: "Someone", last: "", city: "", avatarUrl: null }; }
   function fullName(id) { const p = profile(id); return (p.first + " " + (p.last || "")).trim(); }
   function friendshipWith(id) { return state.friendships.find((f) => (f.requesterId === ME && f.addresseeId === id) || (f.addresseeId === ME && f.requesterId === id)); }
   function isFriend(id) { const f = friendshipWith(id); return !!f && f.status === "accepted"; }
@@ -748,6 +761,142 @@
     Object.assign(state.profiles[ME], fields); save();
     return { ok: true };
   }
+
+  // Client-side image resize & compression (Canvas) to ~300x300 JPEG (approx 40-80 KB)
+  function resizeImageToBlob(file, targetSize = 300, quality = 0.85) {
+    return new Promise((resolve, reject) => {
+      if (!file || !file.type.startsWith("image/")) {
+        return reject(new Error("Please select an image file (JPEG, PNG, or WebP)."));
+      }
+      const img = new Image();
+      const objUrl = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(objUrl);
+        try {
+          const canvas = document.createElement("canvas");
+          canvas.width = targetSize;
+          canvas.height = targetSize;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) return reject(new Error("Canvas context not available."));
+
+          const w = img.naturalWidth || img.width;
+          const h = img.naturalHeight || img.height;
+          const minSide = Math.min(w, h);
+          const sx = (w - minSide) / 2;
+          const sy = (h - minSide) / 2;
+
+          ctx.drawImage(img, sx, sy, minSide, minSide, 0, 0, targetSize, targetSize);
+          canvas.toBlob((blob) => {
+            if (blob) resolve(blob);
+            else reject(new Error("Image compression failed."));
+          }, "image/jpeg", quality);
+        } catch (e) {
+          reject(e);
+        }
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(objUrl);
+        reject(new Error("Could not load image file."));
+      };
+      img.src = objUrl;
+    });
+  }
+
+  async function uploadAvatar(file) {
+    try {
+      const blob = await resizeImageToBlob(file, 300, 0.85);
+      if (!live) {
+        return new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const dataUrl = reader.result;
+            if (state && state.profiles[ME]) {
+              state.profiles[ME].avatarUrl = dataUrl;
+              save();
+              emit();
+            }
+            resolve({ ok: true, url: dataUrl });
+          };
+          reader.readAsDataURL(blob);
+        });
+      }
+
+      const filePath = `${ME}/avatar.jpg`;
+      const { error: uploadError } = await sb.storage
+        .from("avatars")
+        .upload(filePath, blob, {
+          contentType: "image/jpeg",
+          upsert: true,
+        });
+
+      if (uploadError) {
+        console.error("Storage upload error:", uploadError);
+        return { ok: false, message: uploadError.message };
+      }
+
+      const { data: urlData } = sb.storage.from("avatars").getPublicUrl(filePath);
+      const publicUrl = urlData.publicUrl;
+      const urlWithVersion = `${publicUrl}?v=${Date.now()}`;
+
+      const { error: dbError } = await sb.from("profiles")
+        .update({ avatar_url: urlWithVersion })
+        .eq("id", ME);
+
+      if (dbError) {
+        console.error("Profile update error:", dbError);
+        return { ok: false, message: dbError.message };
+      }
+
+      if (state && state.profiles[ME]) {
+        state.profiles[ME].avatarUrl = urlWithVersion;
+        save();
+        emit();
+      }
+
+      return { ok: true, url: urlWithVersion };
+    } catch (err) {
+      console.error("uploadAvatar failed:", err);
+      return { ok: false, message: err.message || "Upload failed." };
+    }
+  }
+
+  async function deleteAvatar() {
+    try {
+      if (!live) {
+        if (state && state.profiles[ME]) {
+          state.profiles[ME].avatarUrl = null;
+          save();
+          emit();
+        }
+        return { ok: true };
+      }
+
+      const filePath = `${ME}/avatar.jpg`;
+      const { error: removeError } = await sb.storage.from("avatars").remove([filePath]);
+      if (removeError) {
+        console.warn("Storage remove warning:", removeError);
+      }
+
+      const { error: dbError } = await sb.from("profiles")
+        .update({ avatar_url: null })
+        .eq("id", ME);
+
+      if (dbError) {
+        return { ok: false, message: dbError.message };
+      }
+
+      if (state && state.profiles[ME]) {
+        state.profiles[ME].avatarUrl = null;
+        save();
+        emit();
+      }
+
+      return { ok: true };
+    } catch (err) {
+      console.error("deleteAvatar failed:", err);
+      return { ok: false, message: err.message || "Failed to remove photo." };
+    }
+  }
   function signIn() { if (state) { state.signedIn = true; save(); } }
   function signOut() { if (state) { state.signedIn = false; save(); } }
   function reset() { state = seed(); actCache = null; postCache = null; persist(); loadActivities().then(() => loadPosts().then(emit)); }
@@ -774,6 +923,7 @@
     pp = pp || {};
     return {
       id: p.id, username: p.username, first: p.first_name, last: pp.last_name || "", city: p.city, state: p.state, bio: p.bio || "",
+      avatarUrl: p.avatar_url || null,
       memberSince: p.created_at, email: pp.email || "", phone: pp.phone || "", address: pp.home_address || "", zip: pp.zip_code || "",
       sex: pp.sex || "", birthday: pp.birthdate || "",
       lat: pp.latitude != null ? Number(pp.latitude) : PROVO.lat, lng: pp.longitude != null ? Number(pp.longitude) : PROVO.lng,
@@ -836,7 +986,11 @@
       const { data } = await sb.auth.getSession();
       const session = data.session;
       if (!session) return false;
-      const { data: p, error } = await sb.from("profiles").select("id,username,first_name,city,state,bio,created_at").eq("auth_user_id", session.user.id).maybeSingle();
+      let { data: p, error } = await sb.from("profiles").select("id,username,first_name,city,state,bio,avatar_url,created_at").eq("auth_user_id", session.user.id).maybeSingle();
+      if (error) {
+        const alt = await sb.from("profiles").select("id,username,first_name,city,state,bio,created_at").eq("auth_user_id", session.user.id).maybeSingle();
+        if (!alt.error && alt.data) { p = alt.data; error = null; }
+      }
       if (error || !p) { loadError = error ? error.message : "No profile found for this account."; return "noprofile"; }
       const { data: pp } = await sb.from("profile_private").select("*").eq("profile_id", p.id).maybeSingle();
       ME = p.id;
@@ -907,6 +1061,6 @@
     conversations, conversation, unread, unreadCount, isRequestToMe, markRead, openDirect, send, respondRequest,
     otherMember, memberStatus, shareActivityPeople,
     // settings
-    setSetting, updateProfile, interestOptions, signIn, signOut, reset, clearDemo,
+    setSetting, updateProfile, uploadAvatar, deleteAvatar, interestOptions, signIn, signOut, reset, clearDemo,
   };
 })();
