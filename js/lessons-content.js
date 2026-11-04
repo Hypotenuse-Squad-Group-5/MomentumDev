@@ -3,7 +3,7 @@ window.LESSON_CONTENT_VERSION = 2;
 window.LESSONS = [
   {
     "n": 1,
-    "title": "Understanding habits & setting actionable goals",
+    "title": "Habits & Goals",
     "summary": "Turn a good intention into a small action you can repeat.",
     "minutes": 8,
     "stats": [],
@@ -77,7 +77,7 @@ window.LESSONS = [
   },
   {
     "n": 2,
-    "title": "How your phone is engineered to hook you & effects on mental health",
+    "title": "Your Phone’s Pull",
     "summary": "Recognize design hooks and choose a boundary that serves you.",
     "minutes": 8,
     "stats": [],
@@ -156,7 +156,7 @@ window.LESSONS = [
   },
   {
     "n": 3,
-    "title": "Beating the doomscroll & protecting sleep",
+    "title": "Scroll Less, Sleep Better",
     "summary": "Give your evening a stopping point and a gentler landing.",
     "minutes": 8,
     "stats": [],
@@ -233,7 +233,7 @@ window.LESSONS = [
   },
   {
     "n": 4,
-    "title": "Discovering your offline dopamine needs & noticing attention cues",
+    "title": "Find Your Offline",
     "summary": "Find what you are reaching for, then choose an offline alternative.",
     "minutes": 10,
     "stats": [],
@@ -321,7 +321,7 @@ window.LESSONS = [
   },
   {
     "n": 5,
-    "title": "Overcoming comparison, social anxiety & friction from change",
+    "title": "Build Real Connection",
     "summary": "Practice a fairer interpretation and a manageable step toward connection.",
     "minutes": 10,
     "stats": [],
@@ -411,7 +411,7 @@ window.LESSONS = [
   },
   {
     "n": 6,
-    "title": "Planning phone-free hangouts & keeping momentum",
+    "title": "Make Plans That Stick",
     "summary": "Make an invitation concrete and give yourself a plan for next time.",
     "minutes": 10,
     "stats": [],
