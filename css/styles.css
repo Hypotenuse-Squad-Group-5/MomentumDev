@@ -264,6 +264,22 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--p
 }
 .chip input { position: absolute; opacity: 0; pointer-events: none; }
 .chip:has(input:checked) { border-color: var(--primary); background: var(--primary); color: var(--primary-fg); }
+/* Interests picker (Settings → Profile) */
+.picker { position: relative; }
+.picker-tags { margin-bottom: 8px; }
+.picker-tags[hidden] { display: none; }
+.chip.picked { border-color: var(--primary); background: var(--primary); color: var(--primary-fg); cursor: default; padding-right: 4px; }
+.chip-x { display: inline-flex; border: 0; background: none; color: inherit; padding: 2px; border-radius: 999px; cursor: pointer; }
+.chip-x:hover, .chip-x:focus-visible { background: oklch(1 0 0 / 25%); }
+.picker-list {
+  position: absolute; z-index: 20; left: 0; right: 0; top: calc(100% + 4px);
+  max-height: 240px; overflow-y: auto; margin: 0; padding: 4px; list-style: none;
+  background: var(--bg); border: 1px solid var(--input); border-radius: var(--r-sm); box-shadow: var(--shadow);
+}
+.picker-list.up { top: auto; bottom: calc(100% + 4px); }
+.picker-list li { padding: 10px 12px; border-radius: 6px; cursor: pointer; min-height: 44px; display: flex; align-items: center; }
+.picker-list li:hover, .picker-list li.active { background: var(--primary-soft); }
+.picker-list li.none { color: var(--muted-fg); cursor: default; background: none; }
 .check { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
 .check input { width: 18px; height: 18px; margin-top: 2px; accent-color: var(--primary); flex-shrink: 0; }
 .switch {
