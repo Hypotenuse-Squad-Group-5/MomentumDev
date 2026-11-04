@@ -27,13 +27,13 @@ UI.mount("lessons", function render() {
     ${done ? `<section class="panel mt-lg"><p class="label">Lesson complete</p><h2>Your goal</h2><div class="goal-box">${esc(Store.lessonGoal(n))}</div>
         <p class="small muted mt mb0">It's on your Home screen as a daily habit.</p>
         ${n < window.LESSONS.length ? `<a class="btn btn-primary mt" href="lesson.html?n=${n + 1}">Next lesson</a>` : ""}</section>`
-    : `<form class="panel mt-lg" id="goal-form" novalidate>
+    : `<form autocomplete="off" class="panel mt-lg" id="goal-form" novalidate>
         <p class="label">Set your goal</p>
         <div class="field" data-f="goal"><label for="goal">${esc(l.prompt)}</label>
-          <textarea id="goal" placeholder="${esc(l.placeholder)}" style="min-height:140px"></textarea>
+          <textarea autocomplete="off" id="goal" placeholder="${esc(l.placeholder)}" style="min-height:140px"></textarea>
           <div class="hint"><span id="wc">0</span> / 30 words minimum</div><div class="err" hidden></div></div>
         <div class="field" data-f="habit"><label for="habit">Name it as a daily habit</label>
-          <input id="habit" type="text" maxlength="80" placeholder="${esc(l.habitPlaceholder)}"><div class="hint">It shows up on Home so you can check it off each day.</div><div class="err" hidden></div></div>
+          <input autocomplete="off" id="habit" type="text" maxlength="80" placeholder="${esc(l.habitPlaceholder)}"><div class="hint">It shows up on Home so you can check it off each day.</div><div class="err" hidden></div></div>
         <button class="btn btn-primary btn-block">Finish lesson (+${Store.POINTS.lesson})</button>
       </form>`}
   </div>`;
