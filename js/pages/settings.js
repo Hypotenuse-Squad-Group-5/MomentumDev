@@ -1,4 +1,5 @@
 /* Settings: General (privacy, notifications) + Profile. Changes save instantly. */
+let interestPicks = null; // interests picked on the Profile tab, until saved
 UI.mount("settings", function render() {
   const { icon, esc } = UI;
   const s = Store.state.settings, p = Store.profile(Store.ME);
@@ -7,7 +8,9 @@ UI.mount("settings", function render() {
   const sel = (k, title, sub, opts) => `<label class="setting-row"><span class="grow">${title}${sub ? `<br><span class="small muted">${sub}</span>` : ""}</span><select data-k="${k}">${opts.map(([v, l]) => `<option value="${v}"${s[k] === v ? " selected" : ""}>${l}</option>`).join("")}</select></label>`;
   const vis = Object.entries(UI.VIS);
   const STATES = ["AL","AK","AZ","AR","CA","CO","CT","DE","DC","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT","VA","WA","WV","WI","WY"];
-const INTERESTS = ["Pickleball", "Hiking", "Board games", "Music", "Climbing", "Art", "Volleyball", "Puzzles", "Running & Jogging", "Tennis", "Basketball", "Soccer", "Swimming", "Weightlifting & Fitness", "Yoga", "Pilates", "Cycling & Biking", "Skiing & Snowboarding", "Martial Arts", "Dance", "Painting & Drawing", "Photography", "Creative Writing & Journaling", "Crafting & DIY", "Knitting & Crochet", "Pottery & Ceramics", "Graphic Design", "Graphic Novels & Comics", "Woodworking", "Fixing Cars", "Welding", "Movies & Film", "TV Shows & Binge-Watching",  "Reading & Literature", "Anime", "Listening to Podcasts", "Live Concerts", "Theater & Performing Arts", "Stand-Up Comedy", "Playing an Instrument", "Video Games", "Coding & Tech Projects", "Cooking & Baking", "Foodie & Restaurant Exploring", "Travel & Exploring", "Gardening & Houseplants", "Camping & Outdoorsy", "Fashion & Style", "Skincare & Beauty", "Interior Design & Decor", "Thrifting & Vintage Shopping", "Volunteering & Community Service", "Meditation & Mindfulness", "Language Learning", "Personal Finance & Investing", "Astronomy & Stargazing", "Meal Prepping", "Content Creation & Streaming", "Entrepreneurship", "Campus Clubs", "Spirituality & Church", "Driving", "Off-roading", "Campus Events", "Sports Games"];
+  const INTERESTS = Store.interestOptions(); // from the `interests` table (Supabase → Table Editor → interests)
+  if (!interestPicks) interestPicks = (p.interests || []).slice(); // unsaved picks survive a re-render
+  const picked = interestPicks;
   document.getElementById("main").innerHTML = `
   <div style="max-width:720px">
     <h1>Settings</h1>
@@ -68,7 +71,7 @@ const INTERESTS = ["Pickleball", "Hiking", "Board games", "Music", "Climbing", "
         <div class="field" data-f="birthday"><label for="birthday">Birthdate</label><input id="birthday" type="date" value="${esc(p.birthday || "")}"><div class="err" hidden></div></div>
       </div>
       <div class="field" data-f="sex"><label for="sex">Sex</label><select id="sex"><option value="">Choose</option>${[["male", "Male"], ["female", "Female"], ["prefer_not_to_say", "Prefer not to say"]].map(([val, l]) => `<option value="${val}"${p.sex === val ? " selected" : ""}>${l}</option>`).join("")}</select><div class="err" hidden></div></div>
-      <div class="field"><span class="flabel">Interests</span><div class="chips">${INTERESTS.map((i) => `<label class="chip"><input type="checkbox" value="${i}"${(p.interests || []).includes(i) ? " checked" : ""}>${i}</label>`).join("")}</div><div class="hint">Used to filter and suggest activities. Saved on this device for now.</div></div>
+      <div class="field"><span class="flabel" id="int-label">Interests</span>${INTERESTS.length ? `<div class="picker" id="int-picker"><div class="chips picker-tags" id="int-tags"></div><input type="text" id="int-search" enterkeyhint="done" placeholder="Search or pick interests" autocomplete="off" role="combobox" aria-labelledby="int-label" aria-expanded="false" aria-controls="int-list"><ul class="picker-list" id="int-list" role="listbox" hidden></ul></div>` : '<p class="hint mb0">Interests couldn\'t be loaded. If this keeps happening, migration 005 may not have been run.</p>'}<div class="hint">Used to filter and suggest activities.</div></div>
       <button class="btn btn-primary btn-block" id="pf-save">Save changes</button>
     </form>`}
   </div>`;
@@ -81,6 +84,7 @@ const INTERESTS = ["Pickleball", "Hiking", "Board games", "Music", "Climbing", "
   const cl = document.getElementById("clear");
   if (cl) cl.onclick = () => UI.modal(`<h2>Remove all demo data?</h2><p>This clears every demo habit, friend, message, post, RSVP${Store.live ? "" : ", and activity"} in this browser, leaving only your account. You can bring it all back with "Reset demo data".</p><div class="modal-actions"><button class="btn" data-close>Cancel</button><button class="btn btn-danger" id="do-clear">Remove demo data</button></div>`,
     { onMount: (m, close) => (m.querySelector("#do-clear").onclick = () => { Store.clearDemo(); close(); UI.toast("Demo data removed"); }) });
+  interestPicker(INTERESTS, picked, esc, icon);
   const pf = document.getElementById("profile-form");
   if (pf) pf.onsubmit = async (e) => {
     e.preventDefault();
@@ -97,11 +101,65 @@ const INTERESTS = ["Pickleball", "Hiking", "Board games", "Music", "Climbing", "
     if (v("birthday")) { const adult = new Date(); adult.setFullYear(adult.getFullYear() - 18); if (new Date(v("birthday") + "T00:00") > adult) bad("birthday", "You must be 18 or older."); }
     if (pf.querySelector(".invalid")) { msg.textContent = "Fix the highlighted fields."; msg.hidden = false; return; }
     const btn = pf.querySelector("#pf-save"); btn.disabled = true; btn.textContent = "Saving…";
-    const r = await Store.updateProfile({ first: v("first"), city: v("city"), state: v("state"), bio: v("bio"), last: v("last"), phone: v("phone"), address: v("address"), zip: v("zip"), birthday: v("birthday"), sex: v("sex"), interests: [...pf.querySelectorAll(".chip input:checked")].map((x) => x.value) });
+    const r = await Store.updateProfile({ first: v("first"), city: v("city"), state: v("state"), bio: v("bio"), last: v("last"), phone: v("phone"), address: v("address"), zip: v("zip"), birthday: v("birthday"), sex: v("sex"), interests: picked.slice() });
     btn.disabled = false; btn.textContent = "Save changes";
     if (!r.ok) { msg.textContent = "Couldn't save: " + r.message; msg.hidden = false; return; }
+    interestPicks = null; // next render reloads from the saved profile
     UI.toast("Profile saved");
   };
 
 }, { live: true });
+// Interests picker: picks show as tags; type to narrow the alphabetical list.
+function interestPicker(options, picked, esc, icon) {
+  const box = document.getElementById("int-picker");
+  if (!box) return;
+  const tags = box.querySelector("#int-tags"), input = box.querySelector("#int-search"), list = box.querySelector("#int-list");
+  let shown = [], active = -1;
+  const drawTags = () => {
+    tags.innerHTML = picked.map((n) => `<span class="chip picked">${esc(n)}<button type="button" class="chip-x" data-remove="${esc(n)}" aria-label="Remove ${esc(n)}">${icon("x", "sm")}</button></span>`).join("");
+    tags.hidden = !picked.length;
+  };
+  const drawList = () => {
+    const q = input.value.trim().toLowerCase();
+    shown = options.filter((n) => !picked.includes(n) && n.toLowerCase().includes(q));
+    if (active >= shown.length) active = shown.length - 1;
+    list.innerHTML = shown.length
+      ? shown.map((n, i) => `<li role="option" id="int-opt-${i}" data-i="${i}"${i === active ? ' class="active" aria-selected="true"' : ""}>${esc(n)}</li>`).join("")
+      : `<li class="none">${q ? "No matches" : "You've picked them all"}</li>`;
+    input.setAttribute("aria-activedescendant", active >= 0 ? "int-opt-" + active : "");
+    const a = list.querySelector(".active"); // keep the highlighted option visible (scrolls the list only, not the page)
+    if (a && a.offsetTop < list.scrollTop) list.scrollTop = a.offsetTop;
+    else if (a && a.offsetTop + a.offsetHeight > list.scrollTop + list.clientHeight) list.scrollTop = a.offsetTop + a.offsetHeight - list.clientHeight;
+  };
+  const place = () => { // open upward when there isn't room below (phone tab bar, keyboard)
+    const r = input.getBoundingClientRect(), bar = document.querySelector(".tabbar");
+    const bottom = Math.min(window.visualViewport ? visualViewport.height : innerHeight, bar && getComputedStyle(bar).display !== "none" ? bar.getBoundingClientRect().top : Infinity);
+    const top = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--header-h")) || 60;
+    const below = bottom - r.bottom - 8, above = r.top - top - 8, up = below < 180 && above > below;
+    list.classList.toggle("up", up);
+    list.style.maxHeight = Math.max(120, Math.min(240, up ? above : below)) + "px";
+  };
+  const open = () => { list.hidden = false; input.setAttribute("aria-expanded", "true"); drawList(); place(); };
+  const close = () => { list.hidden = true; input.setAttribute("aria-expanded", "false"); active = -1; };
+  const add = (n) => { picked.push(n); input.value = ""; active = -1; drawTags(); drawList(); place(); input.focus(); };
+
+  input.onfocus = open;
+  input.onclick = open;
+  input.oninput = () => { active = input.value.trim() ? 0 : -1; open(); };
+  input.onkeydown = (e) => {
+    if (e.key === "ArrowDown") { e.preventDefault(); if (list.hidden) open(); active = Math.min(active + 1, shown.length - 1); drawList(); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); active = Math.max(active - 1, 0); drawList(); }
+    else if (e.key === "Enter") { e.preventDefault(); if (!list.hidden && shown[active]) add(shown[active]); } // never submits the form
+    else if (e.key === "Escape") { if (!list.hidden) { e.preventDefault(); close(); } }
+    else if (e.key === "Backspace" && !input.value && picked.length) { picked.pop(); drawTags(); drawList(); }
+  };
+  list.onmousedown = (e) => e.preventDefault(); // keep focus in the box while clicking
+  list.onclick = (e) => { const li = e.target.closest("[data-i]"); if (li) add(shown[+li.dataset.i]); };
+  tags.onclick = (e) => {
+    const b = e.target.closest("[data-remove]"); if (!b) return;
+    picked.splice(picked.indexOf(b.dataset.remove), 1); drawTags(); if (!list.hidden) drawList();
+  };
+  input.onblur = close;
+  drawTags();
+}
 window.addEventListener("hashchange", () => location.reload());

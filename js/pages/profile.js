@@ -31,7 +31,7 @@
             <div class="grow"><h1 class="mb0">${esc(own || friend ? Store.fullName(id) : p.first)}</h1>
               <p class="muted small mb0">${esc([p.city, p.state].filter(Boolean).join(", "))}${metA ? " · Met at " + esc(metA.title) : ""}</p>
               ${p.memberSince ? `<p class="muted small mb0">Member since ${new Date(p.memberSince).toLocaleDateString(undefined, { month: "long", year: "numeric" })}</p>` : ""}</div></div>
-          ${own || friend ? `${p.bio ? `<p class="mt">${esc(p.bio)}</p>` : ""}<div class="chips">${(p.interests || []).map((i) => `<span class="tag">${esc(i)}</span>`).join("")}</div>` : `<p class="muted small mt">You'll see more once you're friends.</p>`}
+          ${own || friend ? `${p.bio ? `<p class="mt">${esc(p.bio)}</p>` : ""}<div class="chips mt">${(p.interests || []).map((i) => `<span class="tag">${esc(i)}</span>`).join("")}</div>` : `<p class="muted small mt">You'll see more once you're friends.</p>`}
           <div class="profile-stats">
             <div><b>${attended}</b><span>Activities</span></div>
             <div><b>${own ? Store.friends().length : friend ? "Friend" : "-"}</b><span>${own ? "Friends" : "Status"}</span></div>

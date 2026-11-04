@@ -727,6 +727,23 @@
       if (pub.error) return { ok: false, message: pub.error.message };
       const priv = await sb.from("profile_private").update({ last_name: fields.last, phone: fields.phone, home_address: fields.address, zip_code: fields.zip, sex: fields.sex, birthdate: fields.birthday }).eq("profile_id", ME);
       if (priv.error) return { ok: false, message: priv.error.message };
+      if (Array.isArray(fields.interests)) {
+        const idOf = {}; (interestCache || []).forEach((i) => (idOf[i.name] = i.id));
+        const before = Object.keys(myInterestIds);
+        const add = fields.interests.filter((n) => !(n in myInterestIds) && idOf[n] != null);
+        const remove = before.filter((n) => !fields.interests.includes(n));
+        if (remove.length) {
+          const r = await sb.from("profile_interests").delete().eq("profile_id", ME).in("interest_id", remove.map((n) => myInterestIds[n]));
+          if (r.error) return { ok: false, message: r.error.message };
+          remove.forEach((n) => delete myInterestIds[n]);
+        }
+        if (add.length) {
+          const r = await sb.from("profile_interests").insert(add.map((n) => ({ profile_id: ME, interest_id: idOf[n] })));
+          if (r.error) return { ok: false, message: r.error.message };
+          add.forEach((n) => (myInterestIds[n] = idOf[n]));
+        }
+        fields = { ...fields, interests: Object.keys(myInterestIds) };
+      }
     }
     Object.assign(state.profiles[ME], fields); save();
     return { ok: true };
@@ -784,6 +801,33 @@
     return true;
   }
 
+  // Interests: the list comes from the `interests` table (admins edit it in Supabase → Table Editor).
+  // Each user's picks live in `profile_interests` (migration 005). Demo mode uses this short list.
+  const DEMO_INTERESTS = ["Art", "Board games", "Climbing", "Cooking", "Hiking", "Music", "Pickleball", "Puzzles", "Reading", "Volleyball"];
+  let interestCache = null;  // active interests: [{ id, name }] in admin-chosen order
+  let myInterestIds = {};    // my picks: { name: interest_id }
+  async function loadInterests() {
+    const [list, mine] = await Promise.all([
+      sb.from("interests").select("id,name").eq("is_active", true).order("name"), // alphabetical for the picker
+      sb.from("profile_interests").select("interest_id, interest:interests(name)").eq("profile_id", ME),
+    ]);
+    if (list.error || !list.data) { console.error("Interests didn't load (has migration 005 been run?)", list.error); return false; }
+    interestCache = list.data;
+    if (!mine.error && mine.data) {
+      myInterestIds = {};
+      mine.data.forEach((r) => { if (r.interest) myInterestIds[r.interest.name] = r.interest_id; });
+      state.profiles[ME].interests = Object.keys(myInterestIds);
+    }
+    return true;
+  }
+  // Names for the picker: active interests, plus any retired one you already picked (so it isn't lost).
+  function interestOptions() {
+    if (!live) return DEMO_INTERESTS;
+    const active = (interestCache || []).map((i) => i.name);
+    const mine = (state.profiles[ME].interests || []).filter((n) => !active.includes(n));
+    return active.concat(mine);
+  }
+
   let ready = null;
   function init() {
     if (!live) return Promise.resolve(true);
@@ -804,7 +848,7 @@
       const old = state.profiles[ME] || {};
       state.profiles[ME] = { ...old, ...me, interests: old.interests || [], attendeeDisplay: state.settings.attendeeDisplay };
       state.meId = ME; state.signedIn = true;
-      await Promise.all([loadPointValues(), loadHabitData(), loadPosts()]);
+      await Promise.all([loadPointValues(), loadHabitData(), loadPosts(), loadInterests()]);
       persist();
       return true;
     })();
@@ -863,6 +907,6 @@
     conversations, conversation, unread, unreadCount, isRequestToMe, markRead, openDirect, send, respondRequest,
     otherMember, memberStatus, shareActivityPeople,
     // settings
-    setSetting, updateProfile, signIn, signOut, reset, clearDemo,
+    setSetting, updateProfile, interestOptions, signIn, signOut, reset, clearDemo,
   };
 })();
