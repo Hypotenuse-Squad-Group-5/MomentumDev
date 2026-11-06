@@ -14,7 +14,7 @@
   }
 
   const STATES = ["AL","AK","AZ","AR","CA","CO","CT","DE","DC","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT","VA","WA","WV","WI","WY"];
-  let mode = "signin";      // "signin" | "signup" | "check-email"
+  let mode = location.hash === "#signup" ? "signup" : "signin"; // "signin" | "signup" | "check-email" (#signup comes from the landing page)
   let pendingEmail = "";
   const saved = {};          // keeps typed values when the form re-renders
 
@@ -66,11 +66,12 @@
     main.innerHTML = `
     <div class="auth-wrap"><div class="auth-card">
       <section class="auth-hero">
-        <div class="row"><span class="brand-mark" style="background:oklch(1 0 0 / 18%)">M</span><span class="brand-name">Momentum</span></div>
+        <a class="row" href="index.html" style="text-decoration:none" aria-label="Momentum home"><span class="brand-mark" style="background:oklch(1 0 0 / 18%)">M</span><span class="brand-name">Momentum</span></a>
         <div><p style="opacity:.75;font-weight:600">Less scrolling. More living.</p><h1>Make room for what feels real.</h1><p style="opacity:.8">Build better phone habits, find things to do nearby, and show up for them with real people.</p></div>
         <p class="small" style="opacity:.65;margin:0">Private by default · Built for meeting in person</p>
       </section>
-      <section class="auth-form">${formHtml()}</section>
+      <section class="auth-form">${formHtml()}
+        <p class="hint mt mb0">Momentum is a student class project at BYU. It isn't a company and isn't run by BYU. Please use a password you don't use anywhere else. <a href="about.html">About &amp; Privacy</a></p></section>
     </div></div>`;
     bind();
   }

@@ -271,7 +271,7 @@
     main.innerHTML = '<p class="muted">Loading…</p>';
     // Auth guard: no session → sign-in page. Nothing below runs for signed-out visitors.
     const signedIn = await Store.init();
-    if (signedIn === false) { location.replace("index.html"); return; }
+    if (signedIn === false) { location.replace("login.html"); return; }
     if (signedIn === "noprofile") {
       main.innerHTML = '<div class="panel" style="max-width:480px;margin:40px auto"><h2>We couldn\'t load your profile</h2><p class="muted">' + esc(Store.loadError || "") + '</p><button class="btn btn-primary" id="np-out">Sign out</button></div>';
       document.getElementById("np-out").onclick = async () => { await Store.auth.signOut(); location.replace("index.html"); };

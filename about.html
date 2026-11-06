@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>About &amp; Privacy | Momentum</title>
+<meta name="description" content="What Momentum is, who is building it, what information it collects, and who can see it.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="css/styles.css">
+<link rel="stylesheet" href="css/landing.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="index.html" aria-label="Momentum home"><span class="brand-mark">M</span><span class="brand-name">Momentum</span></a>
+    <nav aria-label="Main">
+      <a class="btn btn-ghost btn-sm" href="login.html">Log in</a>
+      <a class="btn btn-primary btn-sm" href="login.html#signup">Sign up</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <article class="doc">
+    <span class="eyebrow">Last updated November 2026</span>
+    <h1>About &amp; Privacy</h1>
+    <p class="muted">The short version: Momentum is a student class project. We ask for as little as we can, we never sell or advertise with your information, and your private details stay private.</p>
+    <nav class="toc" aria-label="On this page">
+      <a class="btn btn-sm" href="#about">About Momentum</a>
+      <a class="btn btn-sm" href="#data">What we collect</a>
+      <a class="btn btn-sm" href="#storage">Where it's stored</a>
+      <a class="btn btn-sm" href="#choices">Your choices</a>
+      <a class="btn btn-sm" href="#safety">Meeting up safely</a>
+    </nav>
+
+    <h2 id="about">About Momentum</h2>
+    <div class="panel">
+      <p>A lot of college students spend more time on their phones than they'd like, especially in the evenings, and it can leave them feeling more alone. Momentum is our attempt to help: small daily habits, short lessons about how phones and apps compete for your attention, and real activities around Provo where you can meet people in person.</p>
+      <p>Momentum is being built by a team of students at Brigham Young University as a project for an information systems class. <b>It is not a company and is not run, sponsored, or endorsed by BYU.</b> It's free, it has no ads, and it's still being built, so some features are unfinished.</p>
+      <p class="mb0">Momentum is for people 18 and older.</p>
+    </div>
+
+    <h2 id="data">What we collect, and who can see it</h2>
+    <div class="panel">
+      <table class="data-table">
+        <thead><tr><th>Information</th><th>Why we need it</th><th>Who can see it</th></tr></thead>
+        <tbody>
+          <tr><td>First name</td><td>So people know who they're meeting.</td><td>Signed-in members</td></tr>
+          <tr><td>Last name</td><td>To help friends recognize you.</td><td>Only you, for now</td></tr>
+          <tr><td>Email</td><td>To sign you in and confirm your account.</td><td>Only you</td></tr>
+          <tr><td>Password</td><td>To sign you in.</td><td>No one. It's stored scrambled (hashed) by our login provider, so even we can't read it.</td></tr>
+          <tr><td>Birthday</td><td>To confirm you're 18 or older.</td><td>Only you</td></tr>
+          <tr><td>Sex</td><td>So people can know the general makeup of a group before meeting up. "Prefer not to say" is always an option.</td><td>Only you. In the future it may appear only as a group total on an activity, like "3 men, 2 women going."</td></tr>
+          <tr><td>Bio and interests</td><td>Optional, to help you find people and activities you'll like.</td><td>Your bio: signed-in members. Your interests: only you, for now.</td></tr>
+          <tr><td>Habits, check-ins, lessons, and points</td><td>To track your progress and streaks.</td><td>Only you</td></tr>
+          <tr><td>Posts</td><td>To share what you've been up to.</td><td>Signed-in members</td></tr>
+          <tr><td>Activities you post</td><td>So others can join you.</td><td>Signed-in members see the details. The exact address is shown only to the host.</td></tr>
+        </tbody>
+      </table>
+      <p class="small muted mt mb0">We don't ask for your phone number or home address.</p>
+    </div>
+
+    <h2 id="storage">Where it's stored</h2>
+    <div class="panel">
+      <ul>
+        <li><b>Supabase</b> runs our database and logins. Database rules (called row level security) make sure each person can only read and change what they're allowed to.</li>
+        <li><b>GitHub Pages</b> hosts the website's files. It doesn't receive anything you type into Momentum.</li>
+        <li><b>Google Fonts</b> supplies the site's fonts, so Google can see that your browser loaded them.</li>
+        <li>Your browser keeps a few things on your device, like your sign-in and some settings.</li>
+      </ul>
+      <p class="mb0"><b>What we don't do:</b> no ads, no selling or sharing your information, and no tracking or analytics tools. If we ever add a feature that sends information to another service, we'll update this page and tell you before it's turned on.</p>
+    </div>
+
+    <h2 id="choices">Your choices</h2>
+    <div class="panel">
+      <ul>
+        <li>Edit your profile any time in <b>Settings</b>.</li>
+        <li>Delete your posts and archive your habits whenever you like.</li>
+        <!-- TODO before publishing: replace TEAM-EMAIL with the team's contact email (in both places below). -->
+        <li class="mb0">To delete your account and everything in it, or to ask us anything, email <a href="mailto:cbs706@byu.edu"><b>cbs706@byu.edu</b></a>.</li>
+      </ul>
+    </div>
+
+    <h2 id="safety">Meeting up safely</h2>
+    <div class="panel">
+      <ul>
+        <li>Meet in public places, especially the first time.</li>
+        <li>Tell a friend where you're going and when you'll be back.</li>
+        <li>Trust your gut. It's always okay to leave or skip an activity.</li>
+        <li>If someone makes you feel unsafe, contact local authorities first, then let us know.</li>
+      </ul>
+    </div>
+  </article>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <span>Momentum · a student project from Provo, Utah · 2026</span>
+    <nav aria-label="Footer"><a href="index.html">Home</a><a href="login.html">Log in</a><a href="login.html#signup">Sign up</a></nav>
+  </div>
+</footer>
+</body>
+</html>

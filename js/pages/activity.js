@@ -130,7 +130,7 @@ function openCommit(a) {
           const r = Store.commit(a.id, plus);
           if (r.ok) { UI.flash("You're committed to " + a.title, r.points); location.href = "calendar.html?added=" + a.id; return; }
           close();
-          if (r.code === "login") return UI.alertModal("Sign in to commit", "You need to be signed in to commit to an activity.", { error: true, actions: '<button class="btn" data-close>Back to activity</button><a class="btn btn-primary" href="index.html">Sign in</a>' });
+          if (r.code === "login") return UI.alertModal("Sign in to commit", "You need to be signed in to commit to an activity.", { error: true, actions: '<button class="btn" data-close>Back to activity</button><a class="btn btn-primary" href="login.html">Sign in</a>' });
           if (r.code === "conflict") return UI.alertModal("You can't commit to this one", `It overlaps or starts within 30 minutes of something you're already committed to:</p><div class="soft"><b>${esc(r.conflict.title)}</b><br><span class="small">${esc(UI.fmtRange(r.conflict))}</span></div><p class="hint mt">Committed activities need at least 30 minutes between one ending and the next starting.`, { error: true, actions: '<button class="btn btn-primary" data-close>Back to activity</button>' });
           UI.alertModal("Couldn't commit", esc(r.message), { error: true });
         };
