@@ -47,6 +47,20 @@ UI.mount("activities", async function render() {
   </div>`;
 
   const form = document.getElementById("post-form");
+   // Force strict maxlength enforcement in case pasting or browser quirks bypass it
+  ["title", "activityName", "location", "city", "address", "description", "bring"].forEach((id) => {
+    const el = form.querySelector("#" + id);
+    if (!el) return;
+    const max = el.getAttribute("maxlength");
+    if (max) {
+      el.addEventListener("input", () => {
+        if (el.value.length > max) {
+          el.value = el.value.slice(0, max);
+        }
+      });
+    }
+  });
+   
   const val = (id) => form.querySelector("#" + id).value;
   form.onsubmit = async (e) => {
     e.preventDefault();
