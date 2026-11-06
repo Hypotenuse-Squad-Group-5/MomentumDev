@@ -13,7 +13,6 @@
     location.replace("home.html"); return;
   }
 
-  const STATES = ["AL","AK","AZ","AR","CA","CO","CT","DE","DC","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT","VA","WA","WV","WI","WY"];
   let mode = location.hash === "#signup" ? "signup" : "signin"; // "signin" | "signup" | "check-email" (#signup comes from the landing page)
   let pendingEmail = "";
   const saved = {};          // keeps typed values when the form re-renders
@@ -37,7 +36,7 @@
     }
     const signup = mode === "signup";
     return `<h2>${signup ? "Create your account" : "Welcome back"}</h2>
-      <p class="muted">${signup ? "Everything here is required. Only your first name, city, and state are visible to other people." : "Sign in to keep your streak going."}</p>
+      <p class="muted">${signup ? "Everything here is required. Other members only see your first name." : "Sign in to keep your streak going."}</p>
       <form id="auth" class="mt" novalidate>
         <div class="alert" id="form-msg" hidden></div>
         ${signup ? `<div class="grid-2">${field("first_name", "First name", text("first_name", "text", 'autocomplete="given-name" maxlength="40"'))}${field("last_name", "Last name", text("last_name", "text", 'autocomplete="family-name" maxlength="60"'), "Private")}</div>` : ""}
@@ -45,16 +44,7 @@
         ${field("password", "Password", pw("password", signup ? "new-password" : "current-password"))}
         ${signup ? field("password_confirm", "Confirm password", pw("password_confirm", "new-password")) : ""}
         ${signup ? `
-          ${field("phone", "Phone", text("phone", "tel", 'autocomplete="tel" placeholder="(801) 555-0123"'), "Private")}
-          ${field("home_address", "Home address", text("home_address", "text", 'autocomplete="street-address"'), "Private. Never shown to anyone.")}
-          <div class="grid-2">
-            ${field("city", "City", text("city", "text", 'autocomplete="address-level2"'))}
-            ${field("state", "State", `<select id="state" autocomplete="address-level1"><option value="">Choose</option>${STATES.map((s) => `<option${saved.state === s ? " selected" : ""}>${s}</option>`).join("")}</select>`)}
-          </div>
-          <div class="grid-2">
-            ${field("zip_code", "Zip code", text("zip_code", "text", 'inputmode="numeric" maxlength="5" autocomplete="postal-code"'), "Private")}
-            ${field("birthdate", "Birthdate", text("birthdate", "date", 'autocomplete="bday"'), "Private. You must be 18+.")}
-          </div>
+          ${field("birthdate", "Birthdate", text("birthdate", "date", 'autocomplete="bday"'), "Private. You must be 18+.")}
           ${field("sex", "Sex", `<select id="sex"><option value="">Choose</option>${[["male", "Male"], ["female", "Female"], ["prefer_not_to_say", "Prefer not to say"]].map(([v, l]) => `<option value="${v}"${saved.sex === v ? " selected" : ""}>${l}</option>`).join("")}</select>`, "Private")}` : ""}
         <button class="btn btn-primary btn-block" id="submit">${signup ? "Create account" : "Sign in"}</button>
       </form>
@@ -84,12 +74,9 @@
   // Same rules the database enforces, checked here first so people get clear messages.
   function validateSignup(v) {
     const errs = {};
-    ["first_name", "last_name", "email", "password", "password_confirm", "phone", "home_address", "city", "state", "zip_code", "birthdate", "sex"].forEach((k) => { if (!v[k]) errs[k] = "Required."; });
+    ["first_name", "last_name", "email", "password", "password_confirm", "birthdate", "sex"].forEach((k) => { if (!v[k]) errs[k] = "Required."; });
     if (v.password && v.password_confirm && v.password !== v.password_confirm) errs.password_confirm = "Passwords don't match.";
     if (v.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.email)) errs.email = "Enter a valid email.";
-    if (v.phone) { const d = v.phone.replace(/\D/g, ""); if (d.length < 10 || d.length > 15) errs.phone = "Enter a full phone number."; }
-    if (v.home_address && v.home_address.length < 5) errs.home_address = "Enter your full street address.";
-    if (v.zip_code && !/^[0-9]{5}$/.test(v.zip_code)) errs.zip_code = "Use a 5-digit zip code.";
     if (v.birthdate) {
       const b = new Date(v.birthdate + "T00:00"), adult = new Date(); adult.setFullYear(adult.getFullYear() - 18);
       if (b > adult) errs.birthdate = "You must be 18 or older to use Momentum.";
@@ -169,8 +156,7 @@
       }
       busy(true);
       const { data, error } = await Store.auth.signUp(v.email, v.password, {
-        first_name: v.first_name, last_name: v.last_name, phone: v.phone, home_address: v.home_address,
-        city: v.city, state: v.state, zip_code: v.zip_code, sex: v.sex, birthdate: v.birthdate,
+        first_name: v.first_name, last_name: v.last_name, sex: v.sex, birthdate: v.birthdate,
       });
       busy(false);
       if (error) return showMsg(friendly(error));

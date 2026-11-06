@@ -40,8 +40,8 @@
   padding: 14px 16px; border-radius: 14px;
   background: var(--glass-strong); border: 1px solid var(--glass-strong); box-shadow: var(--shadow);
 }
-.preview .card:nth-child(2) { margin-left: 22px; }
-.preview .card:nth-child(3) { margin-right: 22px; }
+.preview .card:nth-child(2) { margin-right: -30px; margin-left: 30px }
+.preview .card:nth-child(3) { margin-right: 30px; margin-left: -30px }
 .preview .ic {
   display: grid; place-items: center; flex-shrink: 0;
   width: 42px; height: 42px; border-radius: 11px;
