@@ -18,7 +18,7 @@ UI.mount("activities", async function render() {
       <div class="field" data-f="title"><label for="title">Title</label><input id="title" type="text" maxlength="60" placeholder="e.g. Board Game Night"><div class="err" hidden></div></div>
       <div class="grid-2">
         <div class="field" data-f="typeId"><label for="typeId">Activity type</label><select id="typeId"><option value="">Choose a type</option>${types.map((t) => `<option value="${t.id}">${esc(t.name)}</option>`).join("")}</select><div class="err" hidden></div></div>
-        <div class="field" data-f="activityName"><label for="activityName">Activity</label><input id="activityName" type="text" placeholder="e.g. board games"><div class="hint">Used for search and filters.</div><div class="err" hidden></div></div>
+        <div class="field" data-f="activityName"><label for="activityName">Activity</label><input id="activityName" type="text" maxlength="40" placeholder="e.g. board games"><div class="hint">Used for search and filters.</div><div class="err" hidden></div></div>
       </div>
       <div class="field" data-f="date"><label for="date">Date</label><input id="date" type="date" min="${new Date().toISOString().slice(0, 10)}" value="${tomorrow}"><div class="err" hidden></div></div>
       <div class="grid-2">
@@ -26,16 +26,16 @@ UI.mount("activities", async function render() {
         <div class="field" data-f="end"><label for="end">Ends</label><input id="end" type="time"><div class="err" hidden></div></div>
       </div>
       <div class="grid-2">
-        <div class="field" data-f="location"><label for="location">General location</label><input id="location" type="text" placeholder="e.g. Kiwanis Park"><div class="hint">Shown publicly on the feed and map.</div><div class="err" hidden></div></div>
-        <div class="field" data-f="city"><label for="city">City</label><input id="city" type="text" value="Provo"><div class="err" hidden></div></div>
+        <div class="field" data-f="location"><label for="location">General location</label><input id="location" maxlength="50" type="text" placeholder="e.g. Kiwanis Park"><div class="hint">Shown publicly on the feed and map.</div><div class="err" hidden></div></div>
+        <div class="field" data-f="city"><label for="city">City</label><input id="city" maxlength="20" type="text" value="Provo"><div class="err" hidden></div></div>
       </div>
-      <div class="field" data-f="address"><label for="address">Exact address</label><input id="address" type="text" placeholder="Street address"><div class="hint">${icon("lock", "sm")} Only shown to people after they commit.</div><div class="err" hidden></div></div>
+      <div class="field" data-f="address"><label for="address">Exact address</label><input id="address" maxlength="150" type="text" placeholder="Street address"><div class="hint">${icon("lock", "sm")} Only shown to people after they commit.</div><div class="err" hidden></div></div>
       <div class="grid-2">
         <div class="field" data-f="min"><label for="min">Min. people</label><input id="min" type="number" min="3" max="20" value="3"><div class="err" hidden></div></div>
         <div class="field" data-f="max"><label for="max">Max. people</label><input id="max" type="number" min="3" max="20" placeholder="20"><div class="err" hidden></div></div>
       </div>
       <div class="field" data-f="description"><label for="description">Description</label><textarea id="description" maxlength="1000" placeholder="What will you do? Who is it good for?"></textarea><div class="err" hidden></div></div>
-      <div class="field"><label for="bring">What to bring <span class="opt">(optional)</span></label><input id="bring" type="text" placeholder="e.g. water, a snack to share"></div>
+      <div class="field"><label for="bring">What to bring <span class="opt">(optional)</span></label><input id="bring" maxlength="80" type="text" placeholder="e.g. water, a snack to share"></div>
       <div class="field"><span class="flabel">Cover photo <span class="opt">(optional)</span></span><div class="photo cover">${icon("camera", "lg")}</div><p class="hint">Photo upload comes in a later slice.</p></div>
       <fieldset class="field choice-list" style="border:0;padding:0">
         <legend class="flabel" style="font-weight:600;margin-bottom:6px">Who can see this activity?</legend>
