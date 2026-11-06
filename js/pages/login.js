@@ -40,12 +40,12 @@
       <p class="muted">${signup ? "Everything here is required. Other members only see your first name." : "Sign in to keep your streak going."}</p>
       <form id="auth" class="mt" novalidate>
         <div class="alert" id="form-msg" hidden></div>
-        ${signup ? `<div class="grid-2">${field("first_name", "First name", text("first_name", "text", 'autocomplete="given-name" maxlength="40"'))}${field("last_name", "Last name", text("last_name", "text", 'autocomplete="family-name" maxlength="60"'), "Private")}</div>` : ""}
+        ${signup ? `<div class="grid-2">${field("first_name", "First name", text("first_name", "text", 'autocomplete="given-name" maxlength="40"'))}${field("last_name", "Last name", text("last_name", "text", 'autocomplete="family-name" maxlength="60"'), "Private. Only friends can see this.")}</div>` : ""}
         ${field("email", "Email", text("email", "email", 'autocomplete="email"'), signup ? "Private. Used to sign in." : "")}
-        ${field("password", "Password", pw("password", signup ? "new-password" : "current-password"), signup ? "Use upper and lowercase letters, a number, and a symbol." : "")}
+        ${field("password", "Password", pw("password", signup ? "new-password" : "current-password"), signup ? "--> Use upper and lowercase letters, a number, and a symbol." : "")}
         ${signup ? field("password_confirm", "Confirm password", pw("password_confirm", "new-password")) : ""}
         ${signup ? `
-          ${field("sex", "Sex", `<select id="sex"><option value="">Choose</option>${[["male", "Male"], ["female", "Female"], ["prefer_not_to_say", "Prefer not to say"]].map(([v, l]) => `<option value="${v}"${saved.sex === v ? " selected" : ""}>${l}</option>`).join("")}</select>`, "Private")}
+          ${field("sex", "Sex", `<select id="sex"><option value="">Choose</option>${[["male", "Male"], ["female", "Female"], ["prefer_not_to_say", "Prefer not to say"]].map(([v, l]) => `<option value="${v}"${saved.sex === v ? " selected" : ""}>${l}</option>`).join("")}</select>`, "Private. Only used for aggregate activity details.")}
           <div class="field" data-f="age_ok"><label style="display:flex;align-items:flex-start;gap:10px;font-weight:500;cursor:pointer">
             <input type="checkbox" id="age_ok"${saved.age_ok ? " checked" : ""} style="width:20px;height:20px;margin:2px 0 0;flex-shrink:0;accent-color:var(--primary)">
             <span>I confirm I'm 18 or older and I've read the <a href="about.html" target="_blank" rel="noopener"><b>About &amp; Privacy</b></a> page.</span></label><div class="err" hidden></div></div>` : ""}
