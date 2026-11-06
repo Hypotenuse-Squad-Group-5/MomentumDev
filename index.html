@@ -3,19 +3,157 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Sign in | Momentum</title>
-<meta name="description" content="Momentum: build better phone habits, find things to do nearby, and show up for them.">
+<title>Momentum | Build better phone habits and meet people in person</title>
+<meta name="description" content="Momentum is a free student project from Provo, Utah: build better phone habits, take short lessons on how your phone hooks you, and find real things to do with real people.">
+<meta property="og:title" content="Momentum: less scrolling, more living">
+<meta property="og:description" content="Build better phone habits and find things to do in person. A student project from Provo, Utah.">
+<!-- Google Search Console: paste the verification tag here, e.g. <meta name="google-site-verification" content="..."> -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
 <link rel="stylesheet" href="css/styles.css">
+<link rel="stylesheet" href="css/landing.css">
+<script>
+  // Email confirmation links land on the site's front page. Hand them to the sign-in page,
+  // which finishes signing the person in.
+  (function () {
+    var h = location.hash, s = location.search;
+    if (/access_token=|error_description=/.test(h) || /[?&](code|error_description)=/.test(s)) {
+      location.replace("login.html" + s + h);
+    }
+  })();
+</script>
 </head>
-<body data-page="login">
-<main id="main" class="page"></main>
-<script src="js/config.js"></script>
-<script src="js/vendor/supabase.js"></script>
-<script src="js/store.js"></script>
-<script src="js/ui.js"></script>
-<script src="js/pages/login.js"></script>
+<body>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="index.html" aria-label="Momentum home"><span class="brand-mark">M</span><span class="brand-name">Momentum</span></a>
+    <nav aria-label="Main">
+      <a class="nav-link hide-sm" href="about.html">About &amp; Privacy</a>
+      <a class="btn btn-ghost btn-sm" href="login.html" data-signed-out>Log in</a>
+      <a class="btn btn-primary btn-sm" href="login.html#signup" data-signed-out>Sign up</a>
+      <a class="btn btn-primary btn-sm" href="home.html" data-signed-in hidden>Open Momentum</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <section class="wrap hero">
+    <div>
+      <span class="eyebrow">A student project from Provo, Utah</span>
+      <h1>Less scrolling.<br>More living.</h1>
+      <p class="lede">Momentum helps college students spend less time on their phones and more time with real people. Build habits that stick, learn why your phone is so hard to put down, and find things to do around Provo.</p>
+      <div class="cta">
+        <a class="btn btn-primary" href="login.html#signup" data-signed-out>Create a free account</a>
+        <a class="btn" href="login.html" data-signed-out>Log in</a>
+        <a class="btn btn-primary" href="home.html" data-signed-in hidden>Open Momentum</a>
+        <a class="btn" href="about.html">How we handle your data</a>
+      </div>
+      <p class="small muted">Free · No ads · Built by students for a BYU class</p>
+    </div>
+
+    <div class="preview" aria-hidden="true">
+      <span class="tag-ex">Example</span>
+      <div class="card">
+        <span class="ic flame"><svg class="i" viewBox="0 0 24 24"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg></span>
+        <div><b>No phone for the first hour</b><span>6-day streak · checked in today</span></div>
+      </div>
+      <div class="card">
+        <span class="ic"><svg class="i" viewBox="0 0 24 24"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></svg></span>
+        <div><b>How your phone is engineered to hook you</b><span>Lesson 1 · 6 minutes</span></div>
+      </div>
+      <div class="card">
+        <span class="ic"><svg class="i" viewBox="0 0 24 24"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></svg></span>
+        <div><b>Pickleball at the park</b><span>Saturday 10 AM · 6 going</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="wrap section">
+    <div class="section-head">
+      <h2>Everything points you off the screen</h2>
+      <p class="muted">Momentum isn't another feed. Each part is built to help you put the phone down and do something real.</p>
+    </div>
+    <div class="features">
+      <div class="panel feature">
+        <span class="ic"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></span>
+        <h3>Daily habits</h3>
+        <p>Pick a few small habits, check in each day, and watch your streak grow.</p>
+      </div>
+      <div class="panel feature">
+        <span class="ic"><svg class="i" viewBox="0 0 24 24"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></svg></span>
+        <h3>Short lessons</h3>
+        <p>Five-minute reads on how apps grab your attention and what actually helps.</p>
+      </div>
+      <div class="panel feature">
+        <span class="ic"><svg class="i" viewBox="0 0 24 24"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></svg></span>
+        <h3>Things to do</h3>
+        <p>Find activities around Provo, or post your own, from game nights to hikes.</p>
+      </div>
+      <div class="panel feature">
+        <span class="ic"><svg class="i" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
+        <h3>Real friends</h3>
+        <p>Commit to plans, show up, and stay connected with the people you meet.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="wrap section">
+    <div class="section-head"><h2>How it works</h2></div>
+    <div class="steps">
+      <div class="panel step"><h3>Create an account</h3><p>Just a few basics, like your name and email. Momentum is for people 18 and older.</p></div>
+      <div class="panel step"><h3>Start small</h3><p>Choose a habit or two and read your first lesson. It takes about five minutes.</p></div>
+      <div class="panel step"><h3>Show up</h3><p>Join an activity, meet people in person, and earn points for following through.</p></div>
+    </div>
+  </section>
+
+  <section class="wrap section">
+    <div class="panel note-band">
+      <div>
+        <span class="eyebrow">Who's behind this</span>
+        <h2>A class project, built in the open</h2>
+        <p class="muted mb0">Momentum is being built by a team of BYU students for an information systems class. It isn't a company, and it isn't run or endorsed by BYU. We built it because we know how easy it is to lose an evening to scrolling.</p>
+      </div>
+      <ul>
+        <li>We only ask for what the app needs.</li>
+        <li>Your email is never shown to other people, and your last name is only visible to your friends.</li>
+        <li>No ads, and we never sell your data.</li>
+        <li><a href="about.html"><b>Read About &amp; Privacy</b></a></li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="wrap section final-cta">
+    <h2>Ready to put the phone down?</h2>
+    <p class="muted">It's free, and it takes about a minute to sign up.</p>
+    <div class="row">
+      <a class="btn btn-primary" href="login.html#signup" data-signed-out>Create a free account</a>
+      <a class="btn" href="login.html" data-signed-out>Log in</a>
+      <a class="btn btn-primary" href="home.html" data-signed-in hidden>Open Momentum</a>
+    </div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <span>Momentum · a student project from Provo, Utah · 2026</span>
+    <nav aria-label="Footer"><a href="about.html">About &amp; Privacy</a><a href="login.html">Log in</a><a href="login.html#signup">Sign up</a></nav>
+  </div>
+</footer>
+
+<script>
+  // Already signed in on this device? Swap "Log in / Sign up" for "Open Momentum".
+  (function () {
+    var signedIn = false;
+    try {
+      for (var i = 0; i < localStorage.length; i++) {
+        if (/^sb-.+-auth-token$/.test(localStorage.key(i))) { signedIn = true; break; }
+      }
+    } catch (e) {}
+    if (!signedIn) return;
+    document.querySelectorAll("[data-signed-out]").forEach(function (el) { el.hidden = true; });
+    document.querySelectorAll("[data-signed-in]").forEach(function (el) { el.hidden = false; });
+  })();
+</script>
 </body>
 </html>

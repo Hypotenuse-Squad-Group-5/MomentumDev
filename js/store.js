@@ -43,17 +43,18 @@
   // =====================================================================
   function seed() {
     const profiles = {};
-    const addP = (key, first, last, city, lat, lng, bio, interests, extra = {}) =>
-      (profiles[P[key]] = { id: P[key], username: key, first, last, city, lat, lng, bio: bio || "", interests: interests || [], attendeeDisplay: "first_name", ...extra });
-    addP("chase", "Chase", "Example", "Provo, UT", 40.2338, -111.6585, "Student in Provo. Trying to swap scrolling for actually doing things.", ["Pickleball", "Reading", "Hiking"],
-      { email: "chase@example.com", phone: "(555) 555-0123", address: "100 Example St", birthday: "2004-05-14", gender: "Man" });
-    addP("mia", "Mia", "Thompson", "Provo, UT", 40.245, -111.662, "Board game collector, amateur puzzle champion, always hosting something.", ["Board games", "Puzzles", "Cooking"]);
-    addP("jake", "Jake", "Rivera", "Provo, UT", 40.221, -111.644, "Trying to spend more weekends outside than on my couch.", ["Hiking", "Climbing", "Volleyball"]);
-    addP("taylor", "Taylor", "Brooks", "Orem, UT", 40.2969, -111.6946, "Climber. Will teach you to fall safely.", ["Climbing"]);
-    addP("alex", "Alex", "Park", "Provo, UT", 40.228, -111.673);
-    addP("jordan", "Jordan", "Kim", "Provo, UT", 40.251, -111.649);
-    addP("riley", "Riley", "Shaw", "Springville, UT", 40.1652, -111.6107, "", [], { attendeeDisplay: "hidden" });
-    addP("sam", "Sam", "Lee", "Provo, UT", 40.239, -111.669);
+    // Everyone measures distance from central Provo (no one's home location is stored).
+    const addP = (key, first, last, bio, interests, extra = {}) =>
+      (profiles[P[key]] = { id: P[key], username: key, first, last, lat: 40.2338, lng: -111.6585, bio: bio || "", interests: interests || [], attendeeDisplay: "first_name", ...extra });
+    addP("chase", "Chase", "Example", "Student in Provo. Trying to swap scrolling for actually doing things.", ["Pickleball", "Reading", "Hiking"],
+      { email: "chase@example.com", sex: "male", ageConfirmedAt: "2026-10-01T12:00:00Z" });
+    addP("mia", "Mia", "Thompson", "Board game collector, amateur puzzle champion, always hosting something.", ["Board games", "Puzzles", "Cooking"]);
+    addP("jake", "Jake", "Rivera", "Trying to spend more weekends outside than on my couch.", ["Hiking", "Climbing", "Volleyball"]);
+    addP("taylor", "Taylor", "Brooks", "Climber. Will teach you to fall safely.", ["Climbing"]);
+    addP("alex", "Alex", "Park");
+    addP("jordan", "Jordan", "Kim");
+    addP("riley", "Riley", "Shaw", "", [], { attendeeDisplay: "hidden" });
+    addP("sam", "Sam", "Lee");
 
     const act = (n, host, type, title, name, desc, bring, days, from, to, loc, city, lat, lng, min, max, createdDaysAgo) => ({
       id: A(n), hostId: P[host], type, title, activityName: name, description: desc, bring,
@@ -168,7 +169,7 @@
 
   function fromRow(row) {
     if (row.host && row.host_id !== ME) {
-      remoteProfiles[row.host_id] = { id: row.host_id, first: row.host.first_name, last: "", city: row.host.city, state: row.host.state, memberSince: row.host.created_at, avatarUrl: row.host.avatar_url || null, bio: "", interests: [], attendeeDisplay: "first_name" };
+      remoteProfiles[row.host_id] = { id: row.host_id, first: row.host.first_name, last: "", memberSince: row.host.created_at, avatarUrl: row.host.avatar_url || null, bio: "", interests: [], attendeeDisplay: "first_name" };
     }
     return {
       id: row.id, hostId: row.host_id, hostName: row.host ? row.host.first_name : null,
@@ -185,11 +186,11 @@
     loadError = null;
     if (live) {
       let { data, error } = await sb.from("activities")
-        .select("*, host:profiles!activities_host_id_fkey(first_name,city,state,avatar_url,created_at), type:activity_types(name)")
+        .select("*, host:profiles!activities_host_id_fkey(first_name,avatar_url,created_at), type:activity_types(name)")
         .order("starts_at");
       if (error) {
         const alt = await sb.from("activities")
-          .select("*, host:profiles!activities_host_id_fkey(first_name,city,state,created_at), type:activity_types(name)")
+          .select("*, host:profiles!activities_host_id_fkey(first_name,created_at), type:activity_types(name)")
           .order("starts_at");
         if (!alt.error) {
           data = alt.data;
@@ -210,8 +211,6 @@
         id: row.author_id,
         first: row.author.first_name,
         last: "",
-        city: row.author.city || "",
-        state: row.author.state || "",
         memberSince: row.author.created_at,
         avatarUrl: row.author.avatar_url || null,
         bio: "",
@@ -238,11 +237,11 @@
     if (postCache && !force) return postCache;
     if (live) {
       let { data, error } = await sb.from("posts")
-        .select("id, author_id, caption, activity_id, visibility, created_at, author:profiles!posts_author_id_fkey(first_name,city,state,avatar_url,created_at)")
+        .select("id, author_id, caption, activity_id, visibility, created_at, author:profiles!posts_author_id_fkey(first_name,avatar_url,created_at)")
         .order("created_at", { ascending: false });
       if (error) {
         const alt = await sb.from("posts")
-          .select("id, author_id, caption, activity_id, visibility, created_at, author:profiles(first_name,city,state,created_at)")
+          .select("id, author_id, caption, activity_id, visibility, created_at, author:profiles(first_name,created_at)")
           .order("created_at", { ascending: false });
         if (!alt.error) {
           data = alt.data;
@@ -334,7 +333,7 @@
   // =====================================================================
   // People + friends
   // =====================================================================
-  function profile(id) { return state.profiles[id] || remoteProfiles[id] || { id, first: "Someone", last: "", city: "", avatarUrl: null }; }
+  function profile(id) { return state.profiles[id] || remoteProfiles[id] || { id, first: "Someone", last: "", avatarUrl: null }; }
   function fullName(id) { const p = profile(id); return (p.first + " " + (p.last || "")).trim(); }
   function friendshipWith(id) { return state.friendships.find((f) => (f.requesterId === ME && f.addresseeId === id) || (f.addresseeId === ME && f.requesterId === id)); }
   function isFriend(id) { const f = friendshipWith(id); return !!f && f.status === "accepted"; }
@@ -618,7 +617,7 @@
         caption: caption.trim(),
         activity_id: activityId || null,
         visibility: "public",
-      }).select("id, author_id, caption, activity_id, visibility, created_at, author:profiles!posts_author_id_fkey(first_name,city,state,created_at)").single();
+      }).select("id, author_id, caption, activity_id, visibility, created_at, author:profiles!posts_author_id_fkey(first_name,avatar_url,created_at)").single();
       if (res.error) {
         res = await sb.from("posts").insert({
           author_id: ME,
@@ -736,9 +735,9 @@
   // Signed in: saves to Supabase (public fields → profiles, private → profile_private).
   async function updateProfile(fields) {
     if (live) {
-      const pub = await sb.from("profiles").update({ first_name: fields.first, city: fields.city, state: fields.state, bio: fields.bio || null }).eq("id", ME);
+      const pub = await sb.from("profiles").update({ first_name: fields.first, bio: fields.bio || null }).eq("id", ME);
       if (pub.error) return { ok: false, message: pub.error.message };
-      const priv = await sb.from("profile_private").update({ last_name: fields.last, phone: fields.phone, home_address: fields.address, zip_code: fields.zip, sex: fields.sex, birthdate: fields.birthday }).eq("profile_id", ME);
+      const priv = await sb.from("profile_private").update({ last_name: fields.last, sex: fields.sex }).eq("profile_id", ME);
       if (priv.error) return { ok: false, message: priv.error.message };
       if (Array.isArray(fields.interests)) {
         const idOf = {}; (interestCache || []).forEach((i) => (idOf[i.name] = i.id));
@@ -922,11 +921,11 @@
   function profileFromRows(p, pp) {
     pp = pp || {};
     return {
-      id: p.id, username: p.username, first: p.first_name, last: pp.last_name || "", city: p.city, state: p.state, bio: p.bio || "",
+      id: p.id, username: p.username, first: p.first_name, last: pp.last_name || "", bio: p.bio || "",
       avatarUrl: p.avatar_url || null,
-      memberSince: p.created_at, email: pp.email || "", phone: pp.phone || "", address: pp.home_address || "", zip: pp.zip_code || "",
-      sex: pp.sex || "", birthday: pp.birthdate || "",
-      lat: pp.latitude != null ? Number(pp.latitude) : PROVO.lat, lng: pp.longitude != null ? Number(pp.longitude) : PROVO.lng,
+      memberSince: p.created_at, email: pp.email || "",
+      sex: pp.sex || "", ageConfirmedAt: pp.age_confirmed_at || null,
+      lat: PROVO.lat, lng: PROVO.lng, // distances are measured from central Provo; no home location is stored
     };
   }
   // Habits, check-ins, and habit points come from the database (migration 002).
@@ -986,9 +985,9 @@
       const { data } = await sb.auth.getSession();
       const session = data.session;
       if (!session) return false;
-      let { data: p, error } = await sb.from("profiles").select("id,username,first_name,city,state,bio,avatar_url,created_at").eq("auth_user_id", session.user.id).maybeSingle();
+      let { data: p, error } = await sb.from("profiles").select("id,username,first_name,bio,avatar_url,created_at").eq("auth_user_id", session.user.id).maybeSingle();
       if (error) {
-        const alt = await sb.from("profiles").select("id,username,first_name,city,state,bio,created_at").eq("auth_user_id", session.user.id).maybeSingle();
+        const alt = await sb.from("profiles").select("id,username,first_name,bio,created_at").eq("auth_user_id", session.user.id).maybeSingle();
         if (!alt.error && alt.data) { p = alt.data; error = null; }
       }
       if (error || !p) { loadError = error ? error.message : "No profile found for this account."; return "noprofile"; }
@@ -999,7 +998,8 @@
       try { saved = JSON.parse(localStorage.getItem(KEY)); } catch (e) { /* ignore */ }
       const me = profileFromRows(p, pp);
       state = saved && saved.version === 1 ? saved : emptyStateFor({ ...me, interests: [], attendeeDisplay: "first_name" });
-      const old = state.profiles[ME] || {};
+      const old = { ...(state.profiles[ME] || {}) };
+      ["phone", "address", "zip", "city", "state", "birthday"].forEach((k) => delete old[k]); // removed in migration 008: clear this browser's copy too
       state.profiles[ME] = { ...old, ...me, interests: old.interests || [], attendeeDisplay: state.settings.attendeeDisplay };
       state.meId = ME; state.signedIn = true;
       await Promise.all([loadPointValues(), loadHabitData(), loadPosts(), loadInterests()]);

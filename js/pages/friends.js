@@ -15,7 +15,7 @@
         <form class="row" id="search"><input type="search" style="flex:1" placeholder="Find someone by name" value="${esc(q)}" aria-label="Find people"><button class="btn">${icon("search", "sm")}Search</button></form>
         ${q ? `<p class="label mt">Results</p><div class="stack">${found.map((id) => {
           const pending = Store.friendshipWith(id);
-          return `<div class="panel tight person">${UI.avatar(id)}<span class="grow"><b>${esc(Store.profile(id).first)}</b><br><span class="small muted">${esc(Store.profile(id).city || "")}</span></span>
+          return `<div class="panel tight person">${UI.avatar(id)}<span class="grow"><b>${esc(Store.profile(id).first)}</b></span>
             ${pending ? '<span class="tag grey">Requested</span>' : `<button class="btn btn-sm" data-add="${id}">${icon("userPlus", "sm")}Add friend</button>`}</div>`;
         }).join("") || '<p class="muted small">No one found.</p>'}</div>` : ""}
 
