@@ -20,10 +20,11 @@
   const field = (id, label, input, hint = "") =>
     `<div class="field" data-f="${id}"><label for="${id}">${label}</label>${input}${hint ? `<div class="hint">${hint}</div>` : ""}<div class="err" hidden></div></div>`;
   const EYE = '<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>';
-  // Password box with a "hold to show" eye: visible only while pressed, hidden the moment you let go.
+  const EYE_OFF = '<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3l18 18"/><path d="M10.6 5.1A10.9 10.9 0 0 1 12 5c6.5 0 10 7 10 7a17.6 17.6 0 0 1-3.2 4.2"/><path d="M6.6 6.6C3.9 8.4 2 12 2 12s3.5 7 10 7a10.4 10.4 0 0 0 5.4-1.6"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>';
+  // Password box with an eye button that shows/hides the password (toggles both boxes together).
   const pw = (id, autocomplete) =>
     `<div style="position:relative"><input id="${id}" type="password" autocomplete="${autocomplete}" style="padding-right:48px">` +
-    `<button type="button" class="icon-btn" data-peek="${id}" aria-label="Hold to show password" title="Hold to show" style="position:absolute;right:2px;top:1px;touch-action:none">${EYE}</button></div>`;
+    `<button type="button" class="icon-btn" data-peek="${id}" aria-label="Show password" aria-pressed="false" title="Show password" style="position:absolute;right:2px;top:1px">${EYE}</button></div>`;
   const text = (id, type = "text", attrs = "") => `<input id="${id}" type="${type}" value="${esc(saved[id] || "")}" ${attrs}>`;
 
   function formHtml() {
@@ -41,11 +42,13 @@
         <div class="alert" id="form-msg" hidden></div>
         ${signup ? `<div class="grid-2">${field("first_name", "First name", text("first_name", "text", 'autocomplete="given-name" maxlength="40"'))}${field("last_name", "Last name", text("last_name", "text", 'autocomplete="family-name" maxlength="60"'), "Private")}</div>` : ""}
         ${field("email", "Email", text("email", "email", 'autocomplete="email"'), signup ? "Private. Used to sign in." : "")}
-        ${field("password", "Password", pw("password", signup ? "new-password" : "current-password"))}
+        ${field("password", "Password", pw("password", signup ? "new-password" : "current-password"), signup ? "Use upper and lowercase letters, a number, and a symbol." : "")}
         ${signup ? field("password_confirm", "Confirm password", pw("password_confirm", "new-password")) : ""}
         ${signup ? `
-          ${field("birthdate", "Birthdate", text("birthdate", "date", 'autocomplete="bday"'), "Private. You must be 18+.")}
-          ${field("sex", "Sex", `<select id="sex"><option value="">Choose</option>${[["male", "Male"], ["female", "Female"], ["prefer_not_to_say", "Prefer not to say"]].map(([v, l]) => `<option value="${v}"${saved.sex === v ? " selected" : ""}>${l}</option>`).join("")}</select>`, "Private")}` : ""}
+          ${field("sex", "Sex", `<select id="sex"><option value="">Choose</option>${[["male", "Male"], ["female", "Female"], ["prefer_not_to_say", "Prefer not to say"]].map(([v, l]) => `<option value="${v}"${saved.sex === v ? " selected" : ""}>${l}</option>`).join("")}</select>`, "Private")}
+          <div class="field" data-f="age_ok"><label style="display:flex;align-items:flex-start;gap:10px;font-weight:500;cursor:pointer">
+            <input type="checkbox" id="age_ok"${saved.age_ok ? " checked" : ""} style="width:20px;height:20px;margin:2px 0 0;flex-shrink:0;accent-color:var(--primary)">
+            <span>I confirm I'm 18 or older and I've read the <a href="about.html" target="_blank" rel="noopener"><b>About &amp; Privacy</b></a> page.</span></label><div class="err" hidden></div></div>` : ""}
         <button class="btn btn-primary btn-block" id="submit">${signup ? "Create account" : "Sign in"}</button>
       </form>
       <p class="center small mt">${signup ? "Already have an account?" : "New to Momentum?"} <a href="#" id="switch"><b>${signup ? "Sign in" : "Sign up"}</b></a></p>
@@ -74,14 +77,10 @@
   // Same rules the database enforces, checked here first so people get clear messages.
   function validateSignup(v) {
     const errs = {};
-    ["first_name", "last_name", "email", "password", "password_confirm", "birthdate", "sex"].forEach((k) => { if (!v[k]) errs[k] = "Required."; });
+    ["first_name", "last_name", "email", "password", "password_confirm", "sex"].forEach((k) => { if (!v[k]) errs[k] = "Required."; });
+    if (!v.age_ok) errs.age_ok = "You must be 18 or older to use Momentum.";
     if (v.password && v.password_confirm && v.password !== v.password_confirm) errs.password_confirm = "Passwords don't match.";
     if (v.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.email)) errs.email = "Enter a valid email.";
-    if (v.birthdate) {
-      const b = new Date(v.birthdate + "T00:00"), adult = new Date(); adult.setFullYear(adult.getFullYear() - 18);
-      if (b > adult) errs.birthdate = "You must be 18 or older to use Momentum.";
-      else if (b.getFullYear() < 1900) errs.birthdate = "Enter a real birthdate.";
-    }
     return errs;
   }
 
@@ -92,6 +91,7 @@
     if (/email not confirmed/i.test(m)) return "Confirm your email first. Check your inbox for the link.";
     if (/database error saving new user/i.test(m)) return "Some details didn't pass our checks. Double-check every field and try again.";
     if (/rate limit|too many/i.test(m)) return "Too many attempts. Wait a few minutes and try again.";
+    if (/at least one character of each/i.test(m)) return "Use at least one lowercase letter, one uppercase letter, one number, and one symbol (like ! or #).";
     if (/password/i.test(m)) return m; // password rules from your Supabase settings
     return m || "Something went wrong. Try again.";
   }
@@ -108,25 +108,25 @@
     $("switch").onclick = (e) => { e.preventDefault(); mode = mode === "signup" ? "signin" : "signup"; render(); };
     const form = $("auth");
     const isPw = (id) => id === "password" || id === "password_confirm";
-    form.querySelectorAll("input, select").forEach((el) => (el.oninput = () => { if (!isPw(el.id)) saved[el.id] = el.value; if (isPw(el.id)) checkMatch(); }));
+    form.querySelectorAll("input, select").forEach((el) => (el.oninput = () => { if (!isPw(el.id)) saved[el.id] = el.type === "checkbox" ? el.checked : el.value; if (isPw(el.id)) checkMatch(); }));
     // Flag a mismatch as soon as the confirm box has something in it
     function checkMatch() {
       const c = $("password_confirm"); if (!c) return;
       if (c.value && c.value !== $("password").value) fieldError("password_confirm", "Passwords don't match.");
       else clearField("password_confirm");
     }
-    form.querySelectorAll("[data-peek]").forEach((btn) => {
-      const input = $(btn.dataset.peek);
-      const show = (e) => { if (e) e.preventDefault(); input.type = "text"; };
-      const hide = () => { input.type = "password"; };
-      btn.addEventListener("pointerdown", show);
-      ["pointerup", "pointerleave", "pointercancel"].forEach((ev) => btn.addEventListener(ev, hide));
-      btn.addEventListener("keydown", (e) => { if ((e.key === " " || e.key === "Enter") && !e.repeat) show(e); });
-      btn.addEventListener("keyup", hide);
-      btn.addEventListener("blur", hide);
-      btn.addEventListener("contextmenu", (e) => e.preventDefault()); // long-press on phones
+    // Eye buttons: clicking either one shows or hides BOTH password boxes.
+    const peekBtns = [...form.querySelectorAll("[data-peek]")];
+    const setPeek = (show) => peekBtns.forEach((btn) => {
+      $(btn.dataset.peek).type = show ? "text" : "password";
+      btn.innerHTML = show ? EYE_OFF : EYE;
+      btn.setAttribute("aria-pressed", String(show));
+      btn.setAttribute("aria-label", show ? "Hide passwords" : "Show passwords");
+      btn.title = show ? "Hide passwords" : "Show passwords";
     });
-    window.addEventListener("blur", () => form.querySelectorAll("[data-peek]").forEach((b) => ($(b.dataset.peek).type = "password")));
+    peekBtns.forEach((btn) => {
+      btn.onclick = () => setPeek($(btn.dataset.peek).type === "password");
+    });
     form.onsubmit = async (e) => {
       e.preventDefault();
       form.querySelectorAll(".invalid").forEach((f) => { f.classList.remove("invalid"); f.querySelector(".err").hidden = true; });
@@ -134,7 +134,7 @@
 
       if (!Store.live) { Store.signIn(); location.href = "home.html"; return; } // demo mode
 
-      const v = {}; form.querySelectorAll("input, select").forEach((el) => (v[el.id] = isPw(el.id) ? el.value : el.value.trim()));
+      const v = {}; form.querySelectorAll("input, select").forEach((el) => (v[el.id] = el.type === "checkbox" ? el.checked : isPw(el.id) ? el.value : el.value.trim()));
       const btn = $("submit"); const label = btn.textContent;
       const busy = (on) => { btn.disabled = on; btn.textContent = on ? "One moment…" : label; };
 
@@ -156,7 +156,7 @@
       }
       busy(true);
       const { data, error } = await Store.auth.signUp(v.email, v.password, {
-        first_name: v.first_name, last_name: v.last_name, sex: v.sex, birthdate: v.birthdate,
+        first_name: v.first_name, last_name: v.last_name, sex: v.sex, age_confirmed: v.age_ok === true,
       });
       busy(false);
       if (error) return showMsg(friendly(error));

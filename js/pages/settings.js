@@ -69,7 +69,7 @@ UI.mount("settings", function render() {
       <p class="label mt">${icon("lock", "sm")} Private: only you see these</p>
       <div class="field" data-f="last"><label for="last">Last name</label><input id="last" type="text" maxlength="60" value="${esc(p.last || "")}"><div class="err" hidden></div></div>
       <div class="field"><label for="email">Email</label><input id="email" type="email" value="${esc(p.email || "")}" disabled><div class="hint">Your sign-in email. Changing it comes in a later update.</div></div>
-      <div class="field" data-f="birthday"><label for="birthday">Birthdate</label><input id="birthday" type="date" value="${esc(p.birthday || "")}"><div class="hint">Only used to confirm you're 18 or older.</div><div class="err" hidden></div></div>
+      ${p.ageConfirmedAt ? `<p class="small muted">${icon("check", "sm")} You confirmed you're 18 or older on ${new Date(p.ageConfirmedAt).toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" })}.</p>` : ""}
       <div class="field" data-f="sex"><label for="sex">Sex</label><select id="sex"><option value="">Choose</option>${[["male", "Male"], ["female", "Female"], ["prefer_not_to_say", "Prefer not to say"]].map(([val, l]) => `<option value="${val}"${p.sex === val ? " selected" : ""}>${l}</option>`).join("")}</select><div class="err" hidden></div></div>
       <div class="field"><span class="flabel" id="int-label">Interests</span>${INTERESTS.length ? `<div class="picker" id="int-picker"><div class="chips picker-tags" id="int-tags"></div><input type="text" id="int-search" enterkeyhint="done" placeholder="Search or pick interests" autocomplete="off" role="combobox" aria-labelledby="int-label" aria-expanded="false" aria-controls="int-list"><ul class="picker-list" id="int-list" role="listbox" hidden></ul></div>` : '<p class="hint mb0">Interests couldn\'t be loaded. If this keeps happening, migration 005 may not have been run.</p>'}<div class="hint">Used to filter and suggest activities.</div></div>
       <button class="btn btn-primary btn-block" id="pf-save">Save changes</button>
@@ -145,11 +145,10 @@ UI.mount("settings", function render() {
     const msg = pf.querySelector("#pf-msg"); msg.hidden = true;
     const bad = (k, m) => { const f = pf.querySelector(`[data-f="${k}"]`); f.classList.add("invalid"); const el = f.querySelector(".err"); el.textContent = m; el.hidden = false; };
     // Same rules the database enforces
-    ["first", "last", "birthday", "sex"].forEach((k) => { if (!v(k)) bad(k, "Required."); });
-    if (v("birthday")) { const adult = new Date(); adult.setFullYear(adult.getFullYear() - 18); if (new Date(v("birthday") + "T00:00") > adult) bad("birthday", "You must be 18 or older."); }
+    ["first", "last", "sex"].forEach((k) => { if (!v(k)) bad(k, "Required."); });
     if (pf.querySelector(".invalid")) { msg.textContent = "Fix the highlighted fields."; msg.hidden = false; return; }
     const btn = pf.querySelector("#pf-save"); btn.disabled = true; btn.textContent = "Saving…";
-    const r = await Store.updateProfile({ first: v("first"), bio: v("bio"), last: v("last"), birthday: v("birthday"), sex: v("sex"), interests: picked.slice() });
+    const r = await Store.updateProfile({ first: v("first"), bio: v("bio"), last: v("last"), sex: v("sex"), interests: picked.slice() });
     btn.disabled = false; btn.textContent = "Save changes";
     if (!r.ok) { msg.textContent = "Couldn't save: " + r.message; msg.hidden = false; return; }
     interestPicks = null; // next render reloads from the saved profile

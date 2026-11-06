@@ -47,7 +47,7 @@
     const addP = (key, first, last, bio, interests, extra = {}) =>
       (profiles[P[key]] = { id: P[key], username: key, first, last, lat: 40.2338, lng: -111.6585, bio: bio || "", interests: interests || [], attendeeDisplay: "first_name", ...extra });
     addP("chase", "Chase", "Example", "Student in Provo. Trying to swap scrolling for actually doing things.", ["Pickleball", "Reading", "Hiking"],
-      { email: "chase@example.com", birthday: "2004-05-14", sex: "male" });
+      { email: "chase@example.com", sex: "male", ageConfirmedAt: "2026-10-01T12:00:00Z" });
     addP("mia", "Mia", "Thompson", "Board game collector, amateur puzzle champion, always hosting something.", ["Board games", "Puzzles", "Cooking"]);
     addP("jake", "Jake", "Rivera", "Trying to spend more weekends outside than on my couch.", ["Hiking", "Climbing", "Volleyball"]);
     addP("taylor", "Taylor", "Brooks", "Climber. Will teach you to fall safely.", ["Climbing"]);
@@ -737,7 +737,7 @@
     if (live) {
       const pub = await sb.from("profiles").update({ first_name: fields.first, bio: fields.bio || null }).eq("id", ME);
       if (pub.error) return { ok: false, message: pub.error.message };
-      const priv = await sb.from("profile_private").update({ last_name: fields.last, sex: fields.sex, birthdate: fields.birthday }).eq("profile_id", ME);
+      const priv = await sb.from("profile_private").update({ last_name: fields.last, sex: fields.sex }).eq("profile_id", ME);
       if (priv.error) return { ok: false, message: priv.error.message };
       if (Array.isArray(fields.interests)) {
         const idOf = {}; (interestCache || []).forEach((i) => (idOf[i.name] = i.id));
@@ -924,7 +924,7 @@
       id: p.id, username: p.username, first: p.first_name, last: pp.last_name || "", bio: p.bio || "",
       avatarUrl: p.avatar_url || null,
       memberSince: p.created_at, email: pp.email || "",
-      sex: pp.sex || "", birthday: pp.birthdate || "",
+      sex: pp.sex || "", ageConfirmedAt: pp.age_confirmed_at || null,
       lat: PROVO.lat, lng: PROVO.lng, // distances are measured from central Provo; no home location is stored
     };
   }
@@ -999,7 +999,7 @@
       const me = profileFromRows(p, pp);
       state = saved && saved.version === 1 ? saved : emptyStateFor({ ...me, interests: [], attendeeDisplay: "first_name" });
       const old = { ...(state.profiles[ME] || {}) };
-      ["phone", "address", "zip", "city", "state"].forEach((k) => delete old[k]); // removed in migration 008: clear this browser's copy too
+      ["phone", "address", "zip", "city", "state", "birthday"].forEach((k) => delete old[k]); // removed in migration 008: clear this browser's copy too
       state.profiles[ME] = { ...old, ...me, interests: old.interests || [], attendeeDisplay: state.settings.attendeeDisplay };
       state.meId = ME; state.signedIn = true;
       await Promise.all([loadPointValues(), loadHabitData(), loadPosts(), loadInterests()]);
