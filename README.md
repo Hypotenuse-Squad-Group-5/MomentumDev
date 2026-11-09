@@ -1,70 +1,55 @@
-# Hypotenuse-Squad--Group-5
-This will be the repository we'll use for our team project in IS401.
+# Momentum
 
-App Summary: 
-Young, isolated college students in Provo spend too much time on their phones rather than forming real connections and do not have effective resources to help them develop better habits and find long-term satisfaction. This increased amount of screen time frequently leads them to feeling alone, worsens their mental health, and makes it more difficult to form real-life social support networks during challenging college years. They need to find meaningful ways to spend their free time, especially in the evenings, to avoid doom scrolling. This website should motivate them to have less desire to unintentionally waste time throughout down time each day. They will be able to RSVP to various activities, post your own, communicate with others who are attending events in Provo, learn more about the effects of social media, and create and apply realistic goals or habits. 
+Momentum helps students build intentional phone habits, practice six short lessons, and plan time together offline. The app uses buildless HTML/CSS/JavaScript, GitHub Pages, and Supabase Auth/Postgres.
 
-ERD:
-<img width="1652" height="1277" alt="Momentum_ERD_FInal_page-0001" src="https://github.com/user-attachments/assets/324e5491-9231-4aa4-bef9-58fdee511903" />
+## Lessons and habits
 
-Tech Stack:
-We decided to use HTML/CSS/JavaScript for our front end. Our hosting service is GitHub and as our back end database service we're using Supabase. We decided to go this route for several reasons. The main reason is because these languages and services are the ones we're most familiar with so it will make editing easier. Beyond that, we want to avoid having to pay for AI services and it's very easy to use up free tokens quickly, but we did use Claude to help put it all together with the resources we gave it. 
+This branch (`feature/interactive-lessons`) contains curriculum version 2:
 
-How to get it running (starting with a copy of this repo’s code):
-1.  Create a Github repo with the code
-	-Take these files, and upload them onto a fresh git hub repo.
-2.  Create an ERD
-	-There is a schema file that you can use to create the supabase tables set up.
-Open a new project on supabase
-Go to the query tool, and paste in the schema query (found on github → /database/schema). Run the query.
-	-If you want to view the ERD on Lucid chart, do the following.
-Open a lucid document
-Select file → import → ERD → PostgreSQL
-Copy the presented query, and run it in a new query back on the supabase project.
-Copy the result as a CSV. Return to Lucid chart. Click next, paste all.
-Run it, and now you have a field of imported tables.
-Place all the loaded tables onto the document, and relationships will form automatically.
-3. In the Github repo, you need to connect your supabase.
--Open the config.js on Github’
--Go to the supabase project overview → copy, towards the top.
--Copy ‘Project URL’ → paste it into the congif.js supabase url.
--Copy ‘Publishable key’ → paste it into the config.js supabase anon key
--Save those changes
-4. Publish your repo on Github as a page, and voilà!
+1. Habits & Goals
+2. Your Phone’s Pull
+3. Scroll Less, Sleep Better
+4. Find Your Offline
+5. Build Real Connection
+6. Make Plans That Stick
 
+Each unfinished lesson ends with a reflection (30 words minimum, 10,000 characters maximum), a daily habit name (1–80 characters), and Finish lesson. Finishing while signed in saves the reflection, completion, linked habit, and lesson points in one database transaction. Retrying does not create another habit or award points twice. The app waits for confirmation and preserves typed answers on failure.
 
-Verifying the vertical slice:
-1. Open the live site link and enter any email and any text as a password. The log in step is not live right now.
-2. From the home page, click the “Post an Activity” button
-3. Fill in the required information including “Title,” “Activity Type,” “Date,” start and end time and address.
-4. Select “Public” under activity visibility
-5. Verify the information, then click “Post activity”. Doing this will log the activity in the Supabase “activities” table (request to backend, which grabs data and responds back into frontend).
-6. Open the link in a private web browser such as Chrome Incognito and log in. Again, the email and password are meaningless. Do not try to create a real account or use a real username or password.
-7. Click on “Activities” and the activity you created should appear on the list! This occurs because the website pulls all the activities from the activities table in Supabase and displays them on screen.
+Home and the completed lesson display the same habit record. Renaming or archiving it on Home is reflected when the lesson is reopened. Habits and completion records are scoped to the authenticated user's profile, and reload/sign-in restores progress from Supabase. Practice quizzes and planner fields are not individually stored; a plan is included in the saved reflection only when the learner chooses to add it.
 
+Old five-lesson database records and existing habits are preserved as curriculum version 1. They are not automatically marked as completions of the reordered six-lesson curriculum. Lesson numbers in URLs are curriculum positions, not database IDs.
 
+## Running locally
 
+From this directory run `python3 -m http.server 8765`, then open `http://localhost:8765/`.
 
+- With configured publishable credentials in `js/config.js`, sign in with a real Supabase account. Actions can write real database records.
+- For an isolated demo, use a separate copy of the site and set `window.MOMENTUM_CONFIG = {};` in that copy's config. Demo data stays in that browser and does not test database sync.
+- Reload with Cmd+Shift+R after source changes. A fresh private window gives a fresh demo session.
+- Never put a Supabase service-role/secret key in frontend files.
 
+## Database deployment
 
-Verifying Vertical Slice 3 (Text Profile Posts with Supabase):
-1. Run migration 004 in Supabase:
-   - In Supabase → SQL Editor → New query, paste the contents of `database/004_posts.sql` and click Run.
-2. Sign in to your account on the site.
-3. Navigate to **Profile** (click your avatar in the top-right header).
-4. Click the **"Share a post"** button.
-5. Notice that the privacy setting is explicitly locked to **"Public (All posts are currently public)"** and photo placeholders indicate **"Photos coming soon. Posts are text-only for now."**
-6. Enter text into the **Caption** field describing something you did (e.g., "Finished a 5-mile run at Rock Canyon today!").
-7. Click **"Post"**. The post is saved directly into the Supabase `posts` table and appears under "Your posts and activities" with a "Public" badge and a "Delete" option.
-8. Open the site in an Incognito / private browsing window (or on another device / account):
-   - Check the **Feed** on the Social page (`social.html`) or view the author's profile.
-   - The post will appear for everyone because it is stored in and retrieved from Supabase.
-9. Test Deletion:
-   - On the author's profile, click **"Delete"** on the post and confirm.
-   - The post will be deleted from Supabase and will no longer show up anywhere.
-  
+Read [database/README.md](database/README.md) before applying anything. The lesson integration is `database/007_lesson_sync.sql`; it must be applied before deploying this branch's new Store code. It adds versioned lesson metadata and a restricted completion function while preserving existing rows.
 
-Interests Section:
--This a dynamic interests selection on the user settings page (settings.js), backed by Supabase tables
--The interest options are managed by an array (INTERESTS) in settings.js, which renders selectable options for users to personalize their profile 
--In Supabase, the interests table stores the master list of all interest categories and profile_interests is a joining table for individual users to select their interests from 
+**Do not re-run `database/schema.sql` or historical account cleanup scripts on a live project.** `schema.sql` drops tables; older files describe historical setup, not a safe production reset or an exact snapshot of today's database. Use reviewed, incremental migrations for an existing project.
+
+The SQL in this repository follows the team's numbered-file convention. Supabase migration history records production applications separately; do not blindly replay numbered files already installed on a project.
+
+## Verification
+
+- `node --test tests/*.test.cjs`: offline progression and mocked live integration/error handling.
+- `database/internal/verify_lesson_sync.sql`: authorized-operator test of real database functions, account isolation, all six lessons, and retries. It rolls back test writes; use accounts without v2 completions as described in the file.
+- Manual: finish lesson 1, check Home, rename/archive the habit, reopen the lesson, then sign in from another browser and verify restoration. Test a second account for isolation. A temporary offline preview does not establish that live sync works.
+
+## Other existing features
+
+The data layer also includes account sign-in, activities, text posts, interests, habit check-ins and points, and habit ordering/archiving. Other screens still include browser-local behavior; do not assume messaging, RSVP flows, or all social features are fully synchronized. Posts and activity features have their own migrations and permissions. Their behavior is outside this lesson migration.
+
+## Team handoff
+
+- [Lesson integration notes](docs/interactive-lessons-handoff.md)
+- [Database operations and rollback](database/README.md)
+- [Internal reporting](database/internal/README.md)
+
+Changes remain on `feature/interactive-lessons`; `main` and `lesson/progress-sync` are not merged by this work. Coordinate Store changes with the progress-sync owner before merging branches.

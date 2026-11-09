@@ -10,6 +10,7 @@ UI.mount("lessons", function render() {
     return;
   }
   const done = Store.isLessonDone(n);
+  const habit = Store.lessonHabit(n);
 
   main.innerHTML = `
   <div style="max-width:720px">
@@ -25,12 +26,12 @@ UI.mount("lessons", function render() {
     </article>
 
     ${done ? `<section class="panel mt-lg"><p class="label">Lesson complete</p><h2>Your goal</h2><div class="goal-box">${esc(Store.lessonGoal(n))}</div>
-        <p class="small muted mt mb0">It's on your Home screen as a daily habit.</p>
+        ${habit ? `<h3 class="mt">Your daily habit</h3><div class="goal-box">${esc(habit.title)}</div><p class="small muted mt mb0">${habit.active ? "This is the same habit shown on Home." : "This habit is archived. You can restore it on Home."} <a href="home.html">Manage habit</a></p>` : `<p class="small muted mt mb0">Your linked habit is unavailable. Check your habits on <a href="home.html">Home</a>.</p>`}
         ${n < window.LESSONS.length ? `<a class="btn btn-primary mt" href="lesson.html?n=${n + 1}">Next lesson</a>` : ""}</section>`
     : `<form autocomplete="off" class="panel mt-lg" id="goal-form" novalidate>
         <p class="label">Set your goal</p>
         <div class="field" data-f="goal"><label for="goal">${esc(l.prompt)}</label>
-          <textarea autocomplete="off" id="goal" placeholder="${esc(l.placeholder)}" style="min-height:140px"></textarea>
+          <textarea maxlength="10000" autocomplete="off" id="goal" placeholder="${esc(l.placeholder)}" style="min-height:140px"></textarea>
           <div class="hint"><span id="wc">0</span> / 30 words minimum</div><div class="err" hidden></div></div>
         <div class="field" data-f="habit"><label for="habit">Your daily habit</label>
           <input autocomplete="off" id="habit" type="text" maxlength="80" placeholder="${esc(l.habitPlaceholder)}" aria-describedby="habit-hint habit-error">
@@ -50,9 +51,10 @@ UI.mount("lessons", function render() {
     Object.values(fields).forEach((f) => { f.classList.remove("invalid"); f.querySelector(".err").hidden = true; });
     const w = UI.words(goal.value), h = form.querySelector("#habit").value.trim();
     const bad = (k, msg) => { fields[k].classList.add("invalid"); const el = fields[k].querySelector(".err"); el.textContent = msg; el.hidden = false; };
+    if (goal.value.length > 10000) bad("goal", "Keep your reflection within 10,000 characters.");
     if (w < 30) bad("goal", "Write at least 30 words to finish this lesson. You're at " + w + ".");
     if (!h) bad("habit", "Give your daily habit a short name.");
-    if (w < 30 || !h) { fields[!h ? "habit" : "goal"].querySelector("input, textarea").focus(); return; }
+    if (w < 30 || goal.value.length > 10000 || !h) { fields[!h ? "habit" : "goal"].querySelector("input, textarea").focus(); return; }
     const button = form.querySelector('button[type="submit"], button');
     button.disabled = true;
     let r;

@@ -63,3 +63,18 @@ profiles, multiple events for one host, past and future events, committed and
 cancelled direct RSVPs, and accepted guest-only records. The report SELECTs are
 copied into that check with fixture table names; keep them synchronized when
 changing counting rules.
+
+## Lesson progress reporting and integration checks
+
+`lesson_progress.sql` adds an operator-only report of curriculum-v2 completion
+counts, total lessons, and last completion time by profile. It omits reflection
+contents. It reads `lessons` and `lesson_completions`; use an authorized operator
+role for team totals. Ordinary user roles remain restricted to their own records.
+This report requires migration 007 and does not change the existing event reports.
+
+`verify_lesson_sync.sql` is a separate write-and-rollback integration test, **not**
+a SELECT-only report. It validates completion, habit linkage, order, validation,
+retry protection, and cross-account isolation. It uses two existing accounts
+internally, requires accounts without v2 progress, and rolls every test write
+back. Do not remove the transaction or rollback. See `../README.md` for migration
+and rollback details. Existing event-tracker verification above remains historical.

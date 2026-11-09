@@ -128,10 +128,15 @@ UI.mount("home", function render() {
   const start = document.getElementById("habit-start");
   if (start) start.onclick = () => { habitManage = true; render(); document.querySelector("#add-habit input").focus(); };
   const addForm = document.getElementById("add-habit");
-  if (addForm) addForm.onsubmit = (e) => {
+  if (addForm) addForm.onsubmit = async (e) => {
     e.preventDefault(); const inp = e.target.querySelector("input");
     if (!inp.value.trim()) { inp.classList.add("invalid"); inp.focus(); return; }
-    Store.addHabit(inp.value); UI.toast("Habit added");
+    const button = addForm.querySelector("button");
+    if (button.disabled) return;
+    button.disabled = true;
+    try { await Store.addHabit(inp.value); UI.toast("Habit added"); }
+    catch (error) { UI.alertModal("Couldn't add habit", UI.esc(error.message), { error: true }); }
+    finally { button.disabled = false; }
   };
   document.querySelectorAll("[data-invite]").forEach((b) => (b.onclick = () => {
     const r = Store.respondPlusOne(b.dataset.invite, b.hasAttribute("data-yes"));
