@@ -167,9 +167,25 @@
   const remoteProfiles = {}; // public profile cards of other users, learned from the activities they host
   if (!live) load();         // demo mode loads right away; signed-in mode loads in init()
 
+  function cacheRemoteProfile(p) {
+    if (!p || !p.id || p.id === ME) return;
+    const prev = remoteProfiles[p.id] || {
+      id: p.id, first: p.first_name || "Someone", last: "",
+      bio: "", avatarUrl: null, memberSince: null,
+      interests: [], attendeeDisplay: "first_name",
+    };
+    remoteProfiles[p.id] = {
+      ...prev,
+      first: p.first_name || prev.first,
+      bio: p.bio !== undefined ? (p.bio || "") : prev.bio,
+      avatarUrl: p.avatar_url !== undefined ? (p.avatar_url || null) : prev.avatarUrl,
+      memberSince: p.created_at || prev.memberSince,
+    };
+  }
+
   function fromRow(row) {
     if (row.host && row.host_id !== ME) {
-      remoteProfiles[row.host_id] = { id: row.host_id, first: row.host.first_name, last: "", memberSince: row.host.created_at, avatarUrl: row.host.avatar_url || null, bio: "", interests: [], attendeeDisplay: "first_name" };
+      cacheRemoteProfile({ id: row.host_id, ...row.host });
     }
     return {
       id: row.id, hostId: row.host_id, hostName: row.host ? row.host.first_name : null,
@@ -207,19 +223,7 @@
 
   function fromPostRow(row) {
     if (row.author && row.author_id !== ME) {
-      remoteProfiles[row.author_id] = remoteProfiles[row.author_id] || {
-        id: row.author_id,
-        first: row.author.first_name,
-        last: "",
-        memberSince: row.author.created_at,
-        avatarUrl: row.author.avatar_url || null,
-        bio: "",
-        interests: [],
-        attendeeDisplay: "first_name",
-      };
-      if (row.author.avatar_url) {
-        remoteProfiles[row.author_id].avatarUrl = row.author.avatar_url;
-      }
+      cacheRemoteProfile({ id: row.author_id, ...row.author });
     }
     return {
       id: row.id,
@@ -345,10 +349,184 @@
     const theirs = state.rsvps.filter((r) => r.profileId === otherId && r.status === "committed").map((r) => r.activityId);
     return theirs.find((id) => mine.has(id)) || null;
   }
-  function acceptFriend(fid) { const f = state.friendships.find((x) => x.id === fid); if (!f) return; f.status = "accepted"; f.since = nowIso(); f.metAt = f.metAt || sharedActivityId(f.requesterId); save(); }
-  function declineFriend(fid) { state.friendships = state.friendships.filter((x) => x.id !== fid); save(); }
-  function removeFriend(id) { const f = friendshipWith(id); if (f) { state.friendships = state.friendships.filter((x) => x !== f); save(); } }
-  function sendFriendRequest(id) { if (friendshipWith(id)) return; state.friendships.push({ id: uid(), requesterId: ME, addresseeId: id, status: "pending", metAt: sharedActivityId(id), since: nowIso() }); save(); }
+  async function loadFriendships(force) {
+    if (!live || !ME) return state.friendships || [];
+    try {
+      const q = sb.from("friendships")
+        .select("id, requester_id, addressee_id, status, met_at_activity_id, created_at, accepted_at, requester:profiles!friendships_requester_id_fkey(id,first_name,bio,avatar_url,created_at), addressee:profiles!friendships_addressee_id_fkey(id,first_name,bio,avatar_url,created_at)");
+      if (typeof q.or !== "function") return state.friendships || [];
+      const { data, error } = await q.or(`requester_id.eq.${ME},addressee_id.eq.${ME}`);
+      if (error) {
+        console.warn("Could not load friendships from Supabase (has migration 010 been run?):", error.message);
+        return state.friendships || [];
+      }
+      if (data) {
+        data.forEach((r) => {
+          const other = r.requester_id === ME ? r.addressee : r.requester;
+          const otherId = r.requester_id === ME ? r.addressee_id : r.requester_id;
+          if (other) cacheRemoteProfile({ id: otherId, ...other });
+        });
+        state.friendships = data.map((r) => ({
+          id: r.id,
+          requesterId: r.requester_id,
+          addresseeId: r.addressee_id,
+          status: r.status,
+          metAt: r.met_at_activity_id,
+          since: r.accepted_at || r.created_at,
+        }));
+      }
+      return state.friendships;
+    } catch (e) {
+      console.warn("loadFriendships error:", e);
+      return state.friendships || [];
+    }
+  }
+
+  async function loadProfile(id) {
+    if (!id) return { ok: false, message: "Missing profile ID", profile: null };
+    if (!live) return { ok: true, profile: state.profiles[id] || null };
+    if (id === ME) return { ok: true, profile: state.profiles[ME] || null };
+    try {
+      const { data, error } = await sb.from("profiles")
+        .select("id, first_name, bio, avatar_url, created_at")
+        .eq("id", id)
+        .maybeSingle();
+      if (error) return { ok: false, message: error.message, profile: remoteProfiles[id] || null };
+      if (!data) return { ok: true, profile: null };
+      cacheRemoteProfile(data);
+      return { ok: true, profile: remoteProfiles[id] };
+    } catch (e) {
+      return { ok: false, message: e.message || "Could not load profile", profile: remoteProfiles[id] || null };
+    }
+  }
+
+  async function sendFriendRequest(id) {
+    if (!id || id === ME) return { ok: false, message: "Invalid user" };
+    if (friendshipWith(id)) return { ok: false, message: "Already requested or friends" };
+    const shared = sharedActivityId(id);
+    const sharedAct = shared && activity(shared);
+    const metAt = (!live || (sharedAct && sharedAct.source === "supabase")) ? (shared || null) : null;
+    if (live) {
+      const { data, error } = await sb.from("friendships")
+        .insert({ requester_id: ME, addressee_id: id, status: "pending", met_at_activity_id: metAt })
+        .select("id, created_at")
+        .single();
+      if (error) {
+        if (error.code === "23505" || /duplicate|unique/i.test(error.message || "")) {
+          await loadFriendships(true);
+          save();
+          const existing = friendshipWith(id);
+          if (existing && existing.status === "accepted") {
+            return { ok: false, code: "exists", message: "You're already friends." };
+          }
+          if (existing && existing.addresseeId === ME) {
+            return { ok: false, code: "exists", message: "They already sent you a friend request — you can accept it now." };
+          }
+          return { ok: false, code: "exists", message: "A friend request is already pending." };
+        }
+        return { ok: false, message: error.message };
+      }
+      state.friendships.push({ id: data.id, requesterId: ME, addresseeId: id, status: "pending", metAt, since: data.created_at });
+    } else {
+      state.friendships.push({ id: uid(), requesterId: ME, addresseeId: id, status: "pending", metAt, since: nowIso() });
+    }
+    save();
+    return { ok: true };
+  }
+
+  async function cancelFriendRequest(idOrFid) {
+    const f = state.friendships.find((x) => x.status === "pending" && x.requesterId === ME && (x.id === idOrFid || x.addresseeId === idOrFid));
+    if (!f) return { ok: false, message: "Request not found" };
+    if (live) {
+      const { error } = await sb.from("friendships").delete().eq("id", f.id);
+      if (error) return { ok: false, message: error.message };
+    }
+    state.friendships = state.friendships.filter((x) => x !== f);
+    save();
+    return { ok: true };
+  }
+
+  async function acceptFriend(fid) {
+    const f = state.friendships.find((x) => x.id === fid && x.status === "pending" && x.addresseeId === ME);
+    if (!f) return { ok: false, message: "Friend request not found" };
+    const now = nowIso();
+    if (live) {
+      const { data, error } = await sb.from("friendships")
+        .update({ status: "accepted", accepted_at: now })
+        .eq("id", fid)
+        .select("id")
+        .maybeSingle();
+      if (error) return { ok: false, message: error.message };
+      if (!data) {
+        await loadFriendships(true);
+        save();
+        return { ok: false, message: "That friend request is no longer pending." };
+      }
+    }
+    f.status = "accepted";
+    f.since = now;
+    f.metAt = f.metAt || sharedActivityId(f.requesterId);
+    save();
+    return { ok: true };
+  }
+
+  async function declineFriend(fid) {
+    const f = state.friendships.find((x) => x.id === fid && x.status === "pending" && x.addresseeId === ME);
+    if (!f) return { ok: false, message: "Request not found" };
+    if (live) {
+      const { error } = await sb.from("friendships").delete().eq("id", fid);
+      if (error) return { ok: false, message: error.message };
+    }
+    state.friendships = state.friendships.filter((x) => x !== f);
+    save();
+    return { ok: true };
+  }
+
+  async function removeFriend(id) {
+    const f = friendshipWith(id);
+    if (!f || f.status !== "accepted") return { ok: false, message: "Friend not found" };
+    if (live) {
+      const { error } = await sb.from("friendships").delete().eq("id", f.id);
+      if (error) return { ok: false, message: error.message };
+    }
+    state.friendships = state.friendships.filter((x) => x !== f);
+    save();
+    return { ok: true };
+  }
+
+  async function searchProfiles(query) {
+    if (!query || !query.trim()) return { ok: true, ids: [] };
+    const q = query.trim();
+    if (live) {
+      try {
+        const escaped = q.replace(/[\\%_]/g, "\\$&");
+        const { data, error } = await sb.from("profiles")
+          .select("id, first_name, bio, avatar_url, created_at")
+          .ilike("first_name", `%${escaped}%`)
+          .neq("id", ME)
+          .order("first_name")
+          .limit(20);
+        if (error) {
+          console.warn("searchProfiles error:", error.message);
+          return { ok: false, message: error.message || "Could not search profiles.", ids: [] };
+        }
+        (data || []).forEach(cacheRemoteProfile);
+        return { ok: true, ids: (data || []).map((p) => p.id) };
+      } catch (e) {
+        console.warn("searchProfiles error:", e);
+        return { ok: false, message: e.message || "Could not search profiles.", ids: [] };
+      }
+    }
+    const ql = q.toLowerCase();
+    return {
+      ok: true,
+      ids: Object.keys(state.profiles).filter((id) => {
+        if (id === ME) return false;
+        const name = isFriend(id) ? fullName(id) : profile(id).first;
+        return name.toLowerCase().includes(ql);
+      }),
+    };
+  }
 
   // =====================================================================
   // Activities: RSVPs, +1s, cancellations, check-ins
@@ -941,7 +1119,7 @@
   }
   function signIn() { if (state) { state.signedIn = true; save(); } }
   function signOut() { if (state) { state.signedIn = false; save(); } }
-  function reset() { state = seed(); actCache = null; postCache = null; persist(); loadActivities().then(() => loadPosts().then(emit)); }
+  function reset() { state = seed(); actCache = null; postCache = null; persist(); loadActivities().then(() => loadPosts().then(() => loadFriendships().then(emit))); }
   // The opposite of reset: keep only your own account, clear every demo row.
   // Use it to preview empty states. (Activities in Supabase are unaffected.)
   function clearDemo() {
@@ -1045,7 +1223,7 @@
       ["phone", "address", "zip", "city", "state", "birthday"].forEach((k) => delete old[k]); // removed in migration 008: clear this browser's copy too
       state.profiles[ME] = { ...old, ...me, interests: old.interests || [], attendeeDisplay: state.settings.attendeeDisplay };
       state.meId = ME; state.signedIn = true;
-      const [, habitsLoaded, lessonsLoaded] = await Promise.all([loadPointValues(), loadHabitData(), loadLessonData(), loadPosts(), loadInterests()]);
+      const [, habitsLoaded, lessonsLoaded] = await Promise.all([loadPointValues(), loadHabitData(), loadLessonData(), loadPosts(), loadInterests(), loadFriendships()]);
       if (!habitsLoaded || !lessonsLoaded) { loadError = "We couldn't load your saved habits and lesson progress. Please reload to try again."; return "syncerror"; }
       persist();
       return true;
@@ -1095,7 +1273,7 @@
     report, saveReport,
     // people
     profile, fullName, isFriend, friends, friendshipWith, incomingRequests, sentRequests, acceptFriend, declineFriend,
-    removeFriend, sendFriendRequest, sharedActivityId,
+    removeFriend, sendFriendRequest, cancelFriendRequest, loadFriendships, loadProfile, searchProfiles, sharedActivityId,
     // growth
     habits, archivedHabits, isHabitDone, toggleHabit, addHabit, removeHabit, archiveHabit: removeHabit, restoreHabit, editHabit, reorderHabits, isLessonDone, isLessonUnlocked, currentLesson,
     completeLesson, lessonGoal, lessonHabit, streak, lastDays, stats, pointHistory,

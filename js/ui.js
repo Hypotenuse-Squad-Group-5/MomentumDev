@@ -160,16 +160,14 @@
       '<a href="profile.html" class="avatar-btn" aria-label="My profile">' + avatar(Store.ME, "sm") + "</a>";
   }
 
+  let currentPageKey = null;
   function buildShell(pageKey) {
+    currentPageKey = pageKey;
     const main = document.getElementById("main");
     const header = document.createElement("header"); header.className = "app-header"; header.id = "app-header";
     const shell = document.createElement("div"); shell.className = "shell";
-    const side = document.createElement("nav"); side.className = "sidebar panel"; side.setAttribute("aria-label", "Main");
-    side.innerHTML = NAV.map((n) => '<a class="nav-item' + (n.key === pageKey ? " active" : "") + '" href="' + n.href + '"' + (n.key === pageKey ? ' aria-current="page"' : "") + ">" + icon(n.icon) + n.label + "</a>").join("") +
-      '<a class="nav-item' + (pageKey === "profile" ? " active" : "") + '" href="profile.html">' + icon("user") + "My profile</a><hr>" +
-      '<a class="nav-item' + (pageKey === "settings" ? " active" : "") + '" href="settings.html">' + icon("settings") + "Settings</a>";
-    const tabs = document.createElement("nav"); tabs.className = "tabbar"; tabs.setAttribute("aria-label", "Main");
-    tabs.innerHTML = NAV.map((n) => '<a href="' + n.href + '"' + (n.key === pageKey ? ' class="active" aria-current="page"' : "") + ">" + icon(n.icon) + n.label + "</a>").join("");
+    const side = document.createElement("nav"); side.className = "sidebar panel"; side.id = "app-sidebar"; side.setAttribute("aria-label", "Main");
+    const tabs = document.createElement("nav"); tabs.className = "tabbar"; tabs.id = "app-tabbar"; tabs.setAttribute("aria-label", "Main");
     main.parentNode.insertBefore(header, main);
     main.parentNode.insertBefore(shell, main);
     shell.appendChild(side); shell.appendChild(main);
@@ -178,7 +176,23 @@
     document.body.appendChild(panel);
     renderHeader();
   }
+  function renderNav(pageKey) {
+    if (!pageKey) return;
+    const reqCount = Store.incomingRequests ? Store.incomingRequests().length : 0;
+    const socialBadge = reqCount > 0 ? ' <span class="badge" aria-label="' + reqCount + ' pending friend requests">' + reqCount + "</span>" : "";
+    const side = document.getElementById("app-sidebar");
+    if (side) {
+      side.innerHTML = NAV.map((n) => '<a class="nav-item' + (n.key === pageKey ? " active" : "") + '" href="' + n.href + '"' + (n.key === pageKey ? ' aria-current="page"' : "") + ">" + icon(n.icon) + n.label + (n.key === "social" ? socialBadge : "") + "</a>").join("") +
+        '<a class="nav-item' + (pageKey === "profile" ? " active" : "") + '" href="profile.html">' + icon("user") + "My profile</a><hr>" +
+        '<a class="nav-item' + (pageKey === "settings" ? " active" : "") + '" href="settings.html">' + icon("settings") + "Settings</a>";
+    }
+    const tabs = document.getElementById("app-tabbar");
+    if (tabs) {
+      tabs.innerHTML = NAV.map((n) => '<a href="' + n.href + '"' + (n.key === pageKey ? ' class="active" aria-current="page"' : "") + ">" + icon(n.icon) + n.label + (n.key === "social" ? socialBadge : "") + "</a>").join("");
+    }
+  }
   function renderHeader() {
+    renderNav(currentPageKey);
     const h = document.getElementById("app-header"); if (!h) return;
     h.innerHTML = headerHtml();
     const btn = document.getElementById("msg-toggle");
