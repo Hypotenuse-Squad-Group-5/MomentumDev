@@ -51,9 +51,39 @@ UI.mount("activities", async function render() {
         </summary>
         <div class="form-section-body">
           <div class="field" data-f="date"><label for="date">Date</label><input id="date" type="date" min="${new Date().toISOString().slice(0, 10)}" value="${tomorrow}"><div class="err" hidden></div></div>
+          <datalist id="time-suggestions">
+            <option value="6:00"></option><option value="6:30"></option><option value="7:00"></option><option value="7:30"></option>
+            <option value="8:00"></option><option value="8:30"></option><option value="9:00"></option><option value="9:30"></option>
+            <option value="10:00"></option><option value="10:30"></option><option value="11:00"></option><option value="11:30"></option>
+            <option value="12:00"></option><option value="12:30"></option><option value="1:00"></option><option value="1:30"></option>
+            <option value="2:00"></option><option value="2:30"></option><option value="3:00"></option><option value="3:30"></option>
+            <option value="4:00"></option><option value="4:30"></option><option value="5:00"></option><option value="5:30"></option>
+          </datalist>
           <div class="grid-2">
-            <div class="field" data-f="start"><label for="start">Starts</label><input id="start" type="time"><div class="err" hidden></div></div>
-            <div class="field" data-f="end"><label for="end">Ends</label><input id="end" type="time"><div class="err" hidden></div></div>
+            <div class="field" data-f="start">
+              <label for="start-time">Starts</label>
+              <div class="time-control">
+                <input id="start-time" class="time-text-input" type="text" placeholder="6:00" list="time-suggestions" autocomplete="off" maxlength="8">
+                <div class="ampm-toggle" data-for="start">
+                  <button type="button" class="ampm-btn" data-val="AM">AM</button>
+                  <button type="button" class="ampm-btn active" data-val="PM">PM</button>
+                </div>
+              </div>
+              <input type="hidden" id="start">
+              <div class="err" hidden></div>
+            </div>
+            <div class="field" data-f="end">
+              <label for="end-time">Ends</label>
+              <div class="time-control">
+                <input id="end-time" class="time-text-input" type="text" placeholder="7:00" list="time-suggestions" autocomplete="off" maxlength="8">
+                <div class="ampm-toggle" data-for="end">
+                  <button type="button" class="ampm-btn" data-val="AM">AM</button>
+                  <button type="button" class="ampm-btn active" data-val="PM">PM</button>
+                </div>
+              </div>
+              <input type="hidden" id="end">
+              <div class="err" hidden></div>
+            </div>
           </div>
           <div class="grid-2">
             <div class="field" data-f="min"><label for="min">Min. people</label><input id="min" type="number" min="3" max="20" value="3"><div class="err" hidden></div></div>
@@ -99,30 +129,111 @@ UI.mount("activities", async function render() {
     });
   });
 
+  // Time controls with AM/PM toggle
+  function initTimeControl(type, defaultHour, defaultMin, defaultAmpm) {
+    const textInput = form.querySelector(`#${type}-time`);
+    const hiddenInput = form.querySelector(`#${type}`);
+    const toggle = form.querySelector(`.ampm-toggle[data-for="${type}"]`);
+    if (!textInput || !hiddenInput || !toggle) return { setTime: () => {} };
+
+    let ampm = defaultAmpm;
+
+    const updateToggleUI = () => {
+      toggle.querySelectorAll(".ampm-btn").forEach((b) => {
+        b.classList.toggle("active", b.dataset.val === ampm);
+      });
+    };
+
+    const updateHidden = () => {
+      let val = textInput.value.trim().toLowerCase();
+      if (!val) { hiddenInput.value = ""; return; }
+      if (val.includes("am")) { ampm = "AM"; val = val.replace(/am/g, "").trim(); }
+      else if (val.includes("pm")) { ampm = "PM"; val = val.replace(/pm/g, "").trim(); }
+      updateToggleUI();
+
+      const parts = val.split(":");
+      let h = parseInt(parts[0], 10);
+      let m = parts.length > 1 ? parseInt(parts[1], 10) : 0;
+      if (isNaN(h)) { hiddenInput.value = ""; return; }
+      if (isNaN(m) || m < 0) m = 0;
+      if (m > 59) m = 59;
+
+      if (h > 12) {
+        ampm = "PM";
+        h -= 12;
+        updateToggleUI();
+      } else if (h === 0) {
+        h = 12;
+        ampm = "AM";
+        updateToggleUI();
+      }
+
+      let h24 = h;
+      if (ampm === "PM" && h < 12) h24 += 12;
+      if (ampm === "AM" && h === 12) h24 = 0;
+      hiddenInput.value = `${String(h24).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+    };
+
+    const setTime = (h12, m, newAmpm) => {
+      textInput.value = `${h12}:${String(m).padStart(2, "0")}`;
+      ampm = newAmpm;
+      updateToggleUI();
+      updateHidden();
+    };
+
+    toggle.querySelectorAll(".ampm-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        ampm = btn.dataset.val;
+        updateToggleUI();
+        updateHidden();
+        textInput.dispatchEvent(new Event("change"));
+      });
+    });
+
+    textInput.addEventListener("input", updateHidden);
+    textInput.addEventListener("change", updateHidden);
+
+    setTime(defaultHour, defaultMin, defaultAmpm);
+    return { setTime };
+  }
+
+  const startTimeCtrl = initTimeControl("start", 6, 0, "PM");
+  const endTimeCtrl = initTimeControl("end", 7, 0, "PM");
+
   // Auto-fill end time to exactly 1 hour after start time
-  const startEl = form.querySelector("#start");
-  const endEl = form.querySelector("#end");
-  if (startEl && endEl) {
-    const autoFillEnd = () => {
-      const val = startEl.value;
-      if (!val || val.length < 5) return;
-      const [hStr, mStr] = val.split(":");
-      const h = parseInt(hStr, 10);
+  const startTextInput = form.querySelector("#start-time");
+  if (startTextInput) {
+    const handleStartChange = () => {
+      const hiddenVal = form.querySelector("#start").value;
+      if (!hiddenVal || hiddenVal.length < 5) return;
+      const [h24Str, mStr] = hiddenVal.split(":");
+      const h24 = parseInt(h24Str, 10);
       const m = parseInt(mStr, 10);
-      if (!isNaN(h) && !isNaN(m)) {
-        const endH = (h + 1) % 24;
-        endEl.value = `${String(endH).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
-        // Clear any previous error on end field if now valid
-        const endField = form.querySelector('[data-f="end"]');
-        if (endField) {
-          endField.classList.remove("invalid");
-          const err = endField.querySelector(".err");
-          if (err) err.hidden = true;
-        }
+      if (isNaN(h24) || isNaN(m)) return;
+
+      const endH24 = (h24 + 1) % 24;
+      let endH12 = endH24;
+      let endAmpm = "AM";
+      if (endH24 >= 12) {
+        endAmpm = "PM";
+        if (endH24 > 12) endH12 = endH24 - 12;
+      } else if (endH24 === 0) {
+        endH12 = 12;
+        endAmpm = "AM";
+      }
+
+      endTimeCtrl.setTime(endH12, m, endAmpm);
+
+      const endField = form.querySelector('[data-f="end"]');
+      if (endField) {
+        endField.classList.remove("invalid");
+        const err = endField.querySelector(".err");
+        if (err) err.hidden = true;
       }
     };
-    startEl.addEventListener("input", autoFillEnd);
-    startEl.addEventListener("change", autoFillEnd);
+
+    startTextInput.addEventListener("input", handleStartChange);
+    startTextInput.addEventListener("change", handleStartChange);
   }
 
   // Force strict maxlength enforcement in case pasting or browser quirks bypass it

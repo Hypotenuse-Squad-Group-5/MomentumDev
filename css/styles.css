@@ -387,6 +387,50 @@ details.form-section[open] .form-section-chevron {
   margin-bottom: 0;
 }
 
+/* ---------- Time Control with AM/PM toggle ---------- */
+.time-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.time-control .time-text-input {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+  font-size: .95rem;
+  text-align: center;
+}
+.ampm-toggle {
+  display: inline-flex;
+  border: 1px solid var(--input);
+  border-radius: 10px;
+  background: oklch(1 0 0 / 60%);
+  padding: 3px;
+  gap: 3px;
+  flex-shrink: 0;
+}
+.ampm-btn {
+  border: 0;
+  background: transparent;
+  padding: 6px 12px;
+  border-radius: 7px;
+  font-weight: 700;
+  font-size: .8rem;
+  color: var(--muted-fg);
+  cursor: pointer;
+  transition: all .15s ease;
+  line-height: 1.2;
+}
+.ampm-btn:hover {
+  color: var(--fg);
+  background: oklch(1 0 0 / 70%);
+}
+.ampm-btn.active {
+  background: var(--primary);
+  color: var(--primary-fg);
+  box-shadow: 0 1px 4px oklch(0.58 0.12 181 / 30%);
+}
+
 /* ---------- Modals + toasts ---------- */
 .modal-backdrop {
   position: fixed; inset: 0; z-index: 70;
