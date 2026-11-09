@@ -20,11 +20,11 @@ Migration 007 originally replaced the old <200-character constraint with a 10,00
 2. Confirm the live schema and duplicate counts. Do not use `schema.sql` as a production snapshot.
 3. Apply `007_lesson_sync.sql` once through Supabase migration tooling, as one transaction. Record its production migration-history version.
 4. Run `internal/verify_lesson_sync.sql` as an authorized operator. It uses two existing accounts internally and rolls test writes back. It intentionally refuses accounts already holding version-2 completions.
-5. Deploy the new frontend on the feature branch, then verify sign-in and cross-browser restoration. No additional Auth redirects are required because the existing deployed origin is retained.
+5. Deploy the new frontend from `main` (or a deliberate preview branch), then verify sign-in and cross-browser restoration. No additional Auth redirects are required because the existing deployed origin is retained.
 
 ## Recovery and rollback
 
-The pre-change code checkpoint is `checkpoint/interactive-lessons-before-db-sync` (commit `651b2123159364b6ab04ad2bfe1f9c1b929806c6`). The safest application rollback is to deploy that checkpoint while keeping the additive database changes. Older habit code can still use the unchanged legacy lesson IDs; it does not provide the new sync guarantees.
+The archival pre-change checkpoint is `checkpoint/interactive-lessons-before-db-sync` (commit `651b2123159364b6ab04ad2bfe1f9c1b929806c6`). It predates the current account-schema fixes and must not be deployed unchanged against today's database. The verified main integration is commit `4861f359947488030a764d3a395b0b17ccfe247a`; retain it as a code recovery point for future edits. An application rollback should use a tested commit compatible with the current account schema while keeping the additive database changes.
 
 Do not delete new lesson rows to roll back: their foreign keys may cascade to completions and detach habit links. Do not run historical destructive reset scripts. Disabling the new RPC for incident response should be coordinated with frontend rollback so users see a clear save failure. Reverting the versioned number constraint requires first exporting and intentionally migrating version-2 records; it is not a safe automatic rollback.
 

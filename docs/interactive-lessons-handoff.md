@@ -18,7 +18,7 @@ Practice inputs remain page-only. Add plan to my reflection appends text and sup
 
 ## Deployment and checks
 
-See [database operations](../database/README.md) and [main README](../README.md). Apply migration 007 before frontend deployment. Run the node tests and the rollback-only database regression. The completed-lesson page and Home must use the same `habits.id`; do not duplicate habit titles into a second independently editable record.
+See [database operations](../database/README.md) and [main README](../README.md). Migrations 007 and 008 must be installed before frontend deployment; both are already applied to Momentum DB. Run the node tests and the rollback-only database regression. The completed-lesson page and Home must use the same `habits.id`; do not duplicate habit titles into a second independently editable record.
 
 The earlier UI-only checkpoint is `checkpoint/interactive-lessons-before-db-sync`. Rolling back frontend code does not roll back database writes. No live reset scripts should be run.
 
