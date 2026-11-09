@@ -130,7 +130,7 @@
 
     return {
       version: 1, seededAt: nowIso(), meId: ME, signedIn: false,
-      profiles, friendships, activityTypes: ["Outdoors · Relaxed", "Outdoors · Active", "Indoors · Relaxed", "Indoors · Active", "Food & social", "Learning & creative"],
+      profiles, friendships, activityTypes: ["Outdoors · Relaxed", "Outdoors · Active", "Indoors · Relaxed", "Indoors · Active", "Food & social", "Learning & creative", "Wellness & Mindfulness", "Volunteering & Service", "Gaming & Esports", "Professional & Tech", "Other"],
       activities, addresses, rsvps, guests, reports, posts, encouragements: [], conversations,
       lessonsDone: [], habits, checkins, points,
       settings: {

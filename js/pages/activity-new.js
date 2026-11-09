@@ -7,6 +7,33 @@ UI.mount("activities", async function render() {
   const s = Store.state.settings;
   const tomorrow = new Date(Date.now() + 864e5).toISOString().slice(0, 10);
 
+  // Activity category definitions with emojis and safe fallbacks
+  const RAW_CATEGORIES = [
+    { name: "Outdoors · Active", emoji: "🏐", match: ["outdoor", "active"], fallbackId: 2 },
+    { name: "Outdoors · Relaxed", emoji: "🌲", match: ["outdoor", "relaxed"], fallbackId: 1 },
+    { name: "Indoors · Relaxed", emoji: "🎲", match: ["indoor", "relaxed"], fallbackId: 3 },
+    { name: "Indoors · Active", emoji: "🎳", match: ["indoor", "active"], fallbackId: 4 },
+    { name: "Food & Social", emoji: "🍎", match: ["food"], fallbackId: 5 },
+    { name: "Learning & Creative", emoji: "🎨", match: ["learn"], fallbackId: 6 },
+    { name: "Wellness & Mindfulness", emoji: "🧘", match: ["well", "mindful"], fallbackId: 1 },
+    { name: "Volunteering & Service", emoji: "🤝", match: ["volunteer", "service"], fallbackId: 5 },
+    { name: "Gaming & Esports", emoji: "🎮", match: ["gaming", "esport"], fallbackId: 3 },
+    { name: "Professional & Tech", emoji: "💻", match: ["tech", "profess"], fallbackId: 6 },
+    { name: "Other", emoji: "✨", match: ["other"], fallbackId: 6 },
+  ];
+
+  const CATEGORY_LIST = RAW_CATEGORIES.map((cat) => {
+    const found = types.find((t) => {
+      const lower = t.name.toLowerCase();
+      return cat.match.every((m) => lower.includes(m));
+    });
+    return {
+      id: found ? found.id : cat.fallbackId,
+      name: cat.name,
+      emoji: cat.emoji,
+    };
+  });
+
   document.getElementById("main").innerHTML = `
   <div style="max-width:720px">
     <a class="small" href="activities.html">‹ Cancel</a>
@@ -21,16 +48,47 @@ UI.mount("activities", async function render() {
         <summary>
           <div class="form-section-title">
             <span class="form-section-name">Details & Location</span>
-            <span class="form-section-desc">Title, activity type, location & description</span>
+            <span class="form-section-desc">Title, activity category, location & description</span>
           </div>
           <span class="form-section-chevron"></span>
         </summary>
         <div class="form-section-body">
           <div class="field" data-f="title"><label for="title">Title</label><input id="title" type="text" maxlength="60" placeholder="e.g. Board Game Night"><div class="err" hidden></div></div>
-          <div class="grid-2">
-            <div class="field" data-f="typeId"><label for="typeId">Activity type</label><select id="typeId"><option value="">Choose a type</option>${types.map((t) => `<option value="${t.id}">${esc(t.name)}</option>`).join("")}</select><div class="err" hidden></div></div>
-            <div class="field" data-f="activityName"><label for="activityName">Activity</label><input id="activityName" type="text" maxlength="40" placeholder="e.g. board games"><div class="hint">Used for search and filters.</div><div class="err" hidden></div></div>
+          
+          <div class="field" data-f="typeId">
+            <span class="flabel" style="font-weight:600;margin-bottom:8px">Activity category</span>
+            <div class="chips type-chips" id="type-chips">
+              ${CATEGORY_LIST.map((c) => `
+                <button type="button" class="chip type-chip" data-id="${c.id}">
+                  <span class="chip-emoji">${c.emoji}</span>
+                  <span>${esc(c.name)}</span>
+                </button>
+              `).join("")}
+            </div>
+            <input type="hidden" id="typeId" value="">
+            <div class="err" hidden></div>
           </div>
+
+          <div class="field" data-f="activityName">
+            <label for="activityName">Activity</label>
+            <input id="activityName" type="text" maxlength="40" placeholder="e.g. board games, volleyball, mindfulness meditation" list="activity-name-suggestions">
+            <datalist id="activity-name-suggestions">
+              <option value="Board games"></option>
+              <option value="Pickup volleyball"></option>
+              <option value="Pickleball"></option>
+              <option value="Sunset picnic"></option>
+              <option value="Hiking"></option>
+              <option value="Potluck & snacks"></option>
+              <option value="Mindfulness meditation"></option>
+              <option value="Park cleanup"></option>
+              <option value="Smash Bros & Mario Kart"></option>
+              <option value="Co-working & study"></option>
+              <option value="Sketching & art"></option>
+            </datalist>
+            <div class="hint">Used for search and filters.</div>
+            <div class="err" hidden></div>
+          </div>
+
           <div class="grid-2">
             <div class="field" data-f="location"><label for="location">General location</label><input id="location" maxlength="50" type="text" placeholder="e.g. Kiwanis Park"><div class="hint">Shown publicly on the feed and map.</div><div class="err" hidden></div></div>
             <div class="field" data-f="city"><label for="city">City</label><input id="city" maxlength="20" type="text" value="Provo"><div class="err" hidden></div></div>
@@ -125,6 +183,27 @@ UI.mount("activities", async function render() {
         form.querySelectorAll("details.form-section").forEach((other) => {
           if (other !== sec) other.open = false;
         });
+      }
+    });
+  });
+
+  // Single-select Activity Category chips
+  const hiddenTypeId = form.querySelector("#typeId");
+  const typeChips = form.querySelectorAll(".type-chip");
+
+  typeChips.forEach((chip) => {
+    chip.addEventListener("click", () => {
+      hiddenTypeId.value = chip.dataset.id;
+
+      // Only one active at a time
+      typeChips.forEach((c) => c.classList.toggle("active", c === chip));
+
+      // Clear any prior error on typeId
+      const field = form.querySelector('[data-f="typeId"]');
+      if (field) {
+        field.classList.remove("invalid");
+        const err = field.querySelector(".err");
+        if (err) err.hidden = true;
       }
     });
   });

@@ -431,6 +431,45 @@ details.form-section[open] .form-section-chevron {
   box-shadow: 0 1px 4px oklch(0.58 0.12 181 / 30%);
 }
 
+/* ---------- Activity type emoji chips ---------- */
+.type-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.type-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: 1px solid var(--input);
+  border-radius: 999px;
+  background: oklch(1 0 0 / 65%);
+  font-size: .88rem;
+  font-weight: 500;
+  color: var(--fg);
+  cursor: pointer;
+  transition: all .15s ease;
+  user-select: none;
+}
+.type-chip:hover {
+  background: #fff;
+  border-color: var(--primary);
+  transform: translateY(-1px);
+}
+.type-chip.active {
+  background: var(--primary);
+  color: var(--primary-fg);
+  border-color: var(--primary);
+  font-weight: 600;
+  box-shadow: 0 2px 8px oklch(0.58 0.12 181 / 28%);
+}
+.type-chip .chip-emoji {
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
 /* ---------- Modals + toasts ---------- */
 .modal-backdrop {
   position: fixed; inset: 0; z-index: 70;
