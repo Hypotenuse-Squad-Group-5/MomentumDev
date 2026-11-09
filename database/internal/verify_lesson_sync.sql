@@ -5,8 +5,8 @@ begin;
 do $$
 declare a uuid; b uuid;
 begin
-  select auth_user_id into a from public.profiles order by id limit 1;
-  select auth_user_id into b from public.profiles where auth_user_id <> a order by id limit 1;
+  select auth_user_id into a from public.profiles p where not exists(select 1 from public.lesson_completions c join public.lessons l on l.id=c.lesson_id where c.profile_id=p.id and l.curriculum_version=2) order by id limit 1;
+  select auth_user_id into b from public.profiles p where auth_user_id <> a and not exists(select 1 from public.lesson_completions c join public.lessons l on l.id=c.lesson_id where c.profile_id=p.id and l.curriculum_version=2) order by id limit 1;
   if a is null or b is null then raise exception 'Two existing accounts are required for this check.'; end if;
   perform set_config('momentum.qa_a', a::text, true);
   perform set_config('momentum.qa_b', b::text, true);
@@ -25,11 +25,14 @@ begin
   begin perform public.complete_momentum_lesson(6,repeat('word ',35),'QA habit'); exception when invalid_parameter_value then rejected := true; end;
   if not rejected then raise exception 'FAIL: locked lesson accepted'; end if;
   rejected := false;
-  begin perform public.complete_momentum_lesson(1,'too short','QA habit'); exception when invalid_parameter_value then rejected := true; end;
-  if not rejected then raise exception 'FAIL: short reflection accepted'; end if;
+  begin perform public.complete_momentum_lesson(1,'   ','QA habit'); exception when invalid_parameter_value then rejected := true; end;
+  if not rejected then raise exception 'FAIL: blank reflection accepted'; end if;
+  rejected := false;
+  begin perform public.complete_momentum_lesson(1,repeat('x',1001),'QA habit'); exception when invalid_parameter_value then rejected := true; end;
+  if not rejected then raise exception 'FAIL: over-limit reflection accepted'; end if;
   select count(*) into old_count from public.habits;
   for n in 1..6 loop
-    r := public.complete_momentum_lesson(n,repeat('A specific reflection about my phone habits and my next action. ',4),'QA lesson '||n);
+    r := public.complete_momentum_lesson(n,case when n=1 then 'A short reflection.' when n=2 then repeat('x',1000) else repeat('A specific reflection about my phone habits and my next action. ',4) end,'QA lesson '||n);
     if not (r->>'ok')::boolean then raise exception 'FAIL: lesson completion'; end if;
     if n=1 then first_habit := (r->>'habitId')::uuid; end if;
   end loop;

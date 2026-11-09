@@ -45,3 +45,9 @@ The real-database rollback test passed: sequential completion through all six le
 `profiles` includes id, auth_user_id, username, first_name, bio, avatar_url, and created_at. `profile_private` includes profile_id, last_name, email, sex, avatar_url, and age_confirmed_at. This is narrower than the original account migration in this repository. Frontend account reads/writes and signup metadata must match the current schema; in particular, signup supplies explicit age confirmation rather than birthdate. The signup trigger creates the public/private profile and settings only on a NEW auth-user insertion. Repeated signup for an existing email does not repair manually deleted app rows. Never infer an age-confirmation timestamp or recreate private fields with made-up values.
 
 The account compatibility regression uses a temporary auth-user insertion with the current signup metadata, verifies all three app records, and rolls the transaction back without sending email or retaining an account. Mocked signed-in tests also reject references to removed profile columns.
+
+## Paragraph-length reflections (migration 008)
+
+`008_reflection_character_limit.sql` removes the word minimum from all six v2 lessons and caps new reflections at 1,000 characters. A nonblank response remains required. The UI shows a character counter. Existing saved responses are never shortened or deleted, including any historical response longer than the new limit. The replacement column constraint is NOT VALID to preserve those historical records. Migration 007 above documents the earlier rules; apply 008 after 007.
+
+Migration 008 was applied as `20261109050600_reflection_character_limit`. Real-database rollback checks passed for short responses, exactly 1,000 characters, over-limit rejection, and the existing ownership/atomic-save checks. Existing user responses were preserved.

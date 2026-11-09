@@ -59,3 +59,13 @@ test('signup requires age confirmation and accepts the current required fields',
  assert.equal(Object.keys(validate(fields)).length,0);
  assert.ok(validate({...fields,age_ok:false}).age_ok);
 });
+
+test('reflections accept short text and enforce the character cap',async()=>{
+ const db=data(),a=app(db);await a.Store.init();
+ assert.equal((await a.Store.completeLesson(1,'   ','Walk')).ok,false);
+ assert.equal((await a.Store.completeLesson(1,'x'.repeat(1001),'Walk')).ok,false);
+ assert.equal(a.calls(),0);
+ assert.equal((await a.Store.completeLesson(1,'I will walk after class.','Walk')).ok,true);
+ const db2=data(),b=app(db2);await b.Store.init();
+ assert.equal((await b.Store.completeLesson(1,'x'.repeat(1000),'Walk')).ok,true);
+});

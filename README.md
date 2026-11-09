@@ -13,7 +13,7 @@ This branch (`feature/interactive-lessons`) contains curriculum version 2:
 5. Build Real Connection
 6. Make Plans That Stick
 
-Each unfinished lesson ends with a reflection (30 words minimum, 10,000 characters maximum), a daily habit name (1–80 characters), and Finish lesson. Finishing while signed in saves the reflection, completion, linked habit, and lesson points in one database transaction. Retrying does not create another habit or award points twice. The app waits for confirmation and preserves typed answers on failure.
+Each unfinished lesson ends with a reflection (no word minimum, 1,000 characters maximum; a nonblank response is required), a daily habit name (1–80 characters), and Finish lesson. Finishing while signed in saves the reflection, completion, linked habit, and lesson points in one database transaction. Retrying does not create another habit or award points twice. The app waits for confirmation and preserves typed answers on failure.
 
 Home and the completed lesson display the same habit record. Renaming or archiving it on Home is reflected when the lesson is reopened. Habits and completion records are scoped to the authenticated user's profile, and reload/sign-in restores progress from Supabase. Practice quizzes and planner fields are not individually stored; a plan is included in the saved reflection only when the learner chooses to add it.
 
@@ -38,7 +38,7 @@ Supabase Auth accounts and application profiles are separate records. Deleting a
 
 ## Database deployment
 
-Read [database/README.md](database/README.md) before applying anything. The lesson integration is `database/007_lesson_sync.sql`; it must be applied before deploying this branch's new Store code. It adds versioned lesson metadata and a restricted completion function while preserving existing rows.
+Read [database/README.md](database/README.md) before applying anything. The lesson integration is `database/007_lesson_sync.sql`; it must be applied before deploying the sync code. Apply `database/008_reflection_character_limit.sql` afterward for the current paragraph-length limit. It adds versioned lesson metadata and a restricted completion function while preserving existing rows.
 
 **Do not re-run `database/schema.sql` or historical account cleanup scripts on a live project.** `schema.sql` drops tables; older files describe historical setup, not a safe production reset or an exact snapshot of today's database. Use reviewed, incremental migrations for an existing project.
 

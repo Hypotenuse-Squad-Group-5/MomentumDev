@@ -17,7 +17,7 @@ test('all six lessons unlock and complete through the existing Store interface',
   assert.equal((await Store.completeLesson(6, 'word '.repeat(35), 'Read')).ok, false);
   for (const lesson of LESSONS) {
     assert.equal(Store.currentLesson(), lesson.n);
-    assert.equal((await Store.completeLesson(lesson.n, 'Too short', 'Read')).ok, false);
+    assert.equal((await Store.completeLesson(lesson.n, '   ', 'Read')).ok, false);
     const before = Store.habits().length;
     const result = await Store.completeLesson(lesson.n, 'A personal reflection with specific details. '.repeat(6), 'Practice lesson ' + lesson.n);
     assert.equal(result.ok, true); assert.equal(Store.habits().length, before + 1);

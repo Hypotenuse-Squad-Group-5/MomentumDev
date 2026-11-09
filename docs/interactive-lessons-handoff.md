@@ -21,3 +21,5 @@ Practice inputs remain page-only. Add plan to my reflection appends text and sup
 See [database operations](../database/README.md) and [main README](../README.md). Apply migration 007 before frontend deployment. Run the node tests and the rollback-only database regression. The completed-lesson page and Home must use the same `habits.id`; do not duplicate habit titles into a second independently editable record.
 
 The earlier UI-only checkpoint is `checkpoint/interactive-lessons-before-db-sync`. Rolling back frontend code does not roll back database writes. No live reset scripts should be run.
+
+Reflections now use a 1,000-character maximum and no word minimum (migration 008). Require only a nonblank response. Preserve existing longer responses; do not truncate saved text.

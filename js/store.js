@@ -562,8 +562,7 @@
     if (!isLessonUnlocked(n)) return { ok: false, message: "Finish the previous lesson first." };
     if (isLessonDone(n)) return { ok: false, message: "You've already finished this lesson." };
     const goal = goalText.trim(), title = habitTitle.trim();
-    const words = goal.split(/\s+/).filter(Boolean).length;
-    if (words < 30 || goal.length > 10000) return { ok: false, message: "Write at least 30 words, up to 10,000 characters, to finish this lesson." };
+    if (!goal || goal.length > 1000) return { ok: false, message: "Add a brief reflection of up to 1,000 characters." };
     if (!title || title.length > 80) return { ok: false, message: "Give your daily habit a name of 1 to 80 characters." };
     if (live) {
       try {

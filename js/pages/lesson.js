@@ -1,4 +1,4 @@
-/* A single lesson page + the 30-word goal that becomes a daily habit. */
+/* A single lesson page + a short reflection that becomes a daily habit. */
 UI.mount("lessons", function render() {
   const { icon, esc } = UI;
   const main = document.getElementById("main");
@@ -31,8 +31,8 @@ UI.mount("lessons", function render() {
     : `<form autocomplete="off" class="panel mt-lg" id="goal-form" novalidate>
         <p class="label">Set your goal</p>
         <div class="field" data-f="goal"><label for="goal">${esc(l.prompt)}</label>
-          <textarea maxlength="10000" autocomplete="off" id="goal" placeholder="${esc(l.placeholder)}" style="min-height:140px"></textarea>
-          <div class="hint"><span id="wc">0</span> / 30 words minimum</div><div class="err" hidden></div></div>
+          <textarea maxlength="1000" autocomplete="off" id="goal" placeholder="${esc(l.placeholder)}" style="min-height:140px"></textarea>
+          <div class="hint"><span id="wc">0</span> / 1,000 characters maximum</div><div class="err" hidden></div></div>
         <div class="field" data-f="habit"><label for="habit">Your daily habit</label>
           <input autocomplete="off" id="habit" type="text" maxlength="80" placeholder="${esc(l.habitPlaceholder)}" aria-describedby="habit-hint habit-error">
           <div class="hint" id="habit-hint">Name a small habit to practice. Finishing this lesson adds it to your habits on Home.</div><div class="err" id="habit-error" hidden></div></div>
@@ -44,17 +44,17 @@ UI.mount("lessons", function render() {
   const form = document.getElementById("goal-form");
   if (!form) return;
   const goal = form.querySelector("#goal"), wc = form.querySelector("#wc");
-  goal.oninput = () => { const w = UI.words(goal.value); wc.textContent = w; wc.style.color = w >= 30 ? "var(--primary)" : ""; };
+  goal.oninput = () => { const count = goal.value.length; wc.textContent = count; wc.style.color = count >= 1000 ? "var(--warn)" : ""; };
   form.onsubmit = async (e) => {
     e.preventDefault();
     const fields = { goal: form.querySelector('[data-f="goal"]'), habit: form.querySelector('[data-f="habit"]') };
     Object.values(fields).forEach((f) => { f.classList.remove("invalid"); f.querySelector(".err").hidden = true; });
-    const w = UI.words(goal.value), h = form.querySelector("#habit").value.trim();
+    const empty = !goal.value.trim(), h = form.querySelector("#habit").value.trim();
     const bad = (k, msg) => { fields[k].classList.add("invalid"); const el = fields[k].querySelector(".err"); el.textContent = msg; el.hidden = false; };
-    if (goal.value.length > 10000) bad("goal", "Keep your reflection within 10,000 characters.");
-    if (w < 30) bad("goal", "Write at least 30 words to finish this lesson. You're at " + w + ".");
+    if (goal.value.length > 1000) bad("goal", "Keep your reflection within 1,000 characters.");
+    if (empty) bad("goal", "Add a brief reflection before finishing this lesson.");
     if (!h) bad("habit", "Give your daily habit a short name.");
-    if (w < 30 || goal.value.length > 10000 || !h) { fields[!h ? "habit" : "goal"].querySelector("input, textarea").focus(); return; }
+    if (empty || goal.value.length > 1000 || !h) { fields[!h ? "habit" : "goal"].querySelector("input, textarea").focus(); return; }
     const button = form.querySelector('button[type="submit"], button');
     button.disabled = true;
     let r;
