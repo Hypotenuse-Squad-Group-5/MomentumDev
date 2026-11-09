@@ -99,6 +99,32 @@ UI.mount("activities", async function render() {
     });
   });
 
+  // Auto-fill end time to exactly 1 hour after start time
+  const startEl = form.querySelector("#start");
+  const endEl = form.querySelector("#end");
+  if (startEl && endEl) {
+    const autoFillEnd = () => {
+      const val = startEl.value;
+      if (!val || val.length < 5) return;
+      const [hStr, mStr] = val.split(":");
+      const h = parseInt(hStr, 10);
+      const m = parseInt(mStr, 10);
+      if (!isNaN(h) && !isNaN(m)) {
+        const endH = (h + 1) % 24;
+        endEl.value = `${String(endH).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+        // Clear any previous error on end field if now valid
+        const endField = form.querySelector('[data-f="end"]');
+        if (endField) {
+          endField.classList.remove("invalid");
+          const err = endField.querySelector(".err");
+          if (err) err.hidden = true;
+        }
+      }
+    };
+    startEl.addEventListener("input", autoFillEnd);
+    startEl.addEventListener("change", autoFillEnd);
+  }
+
   // Force strict maxlength enforcement in case pasting or browser quirks bypass it
   ["title", "activityName", "location", "city", "address", "description", "bring"].forEach((id) => {
     const el = form.querySelector("#" + id);
