@@ -18,9 +18,6 @@ UI.mount("lessons", function render() {
       <p class="label mt">Lesson ${n} of ${window.LESSONS.length} · ${l.minutes} min</p>
       <h1>${esc(l.title)}</h1>
       <p class="lesson-intro muted">${esc(l.summary)}</p>
-      ${!done ? `<div class="field panel tight" data-f="habit"><label for="habit">Your daily habit</label>
-        <input autocomplete="off" id="habit" form="goal-form" type="text" maxlength="80" placeholder="${esc(l.habitPlaceholder)}" aria-describedby="habit-hint habit-error">
-        <div class="hint" id="habit-hint">Name a small habit to practice. Finishing this lesson adds it to your habits on Home.</div><div class="err" id="habit-error" hidden></div></div>` : ""}
       <p class="small"><a href="#practice-title">Jump to practice</a> · <a href="#lesson-sources">Research & sources</a></p>
       ${l.stats.length ? `<div class="stat-cards">${l.stats.map(([v, c]) => `<div class="stat-card"><b>${esc(v)}</b><span>${esc(c)}</span></div>`).join("")}</div>` : ""}
       ${l.html}
@@ -35,6 +32,9 @@ UI.mount("lessons", function render() {
         <div class="field" data-f="goal"><label for="goal">${esc(l.prompt)}</label>
           <textarea autocomplete="off" id="goal" placeholder="${esc(l.placeholder)}" style="min-height:140px"></textarea>
           <div class="hint"><span id="wc">0</span> / 30 words minimum</div><div class="err" hidden></div></div>
+        <div class="field" data-f="habit"><label for="habit">Your daily habit</label>
+          <input autocomplete="off" id="habit" type="text" maxlength="80" placeholder="${esc(l.habitPlaceholder)}" aria-describedby="habit-hint habit-error">
+          <div class="hint" id="habit-hint">Name a small habit to practice. Finishing this lesson adds it to your habits on Home.</div><div class="err" id="habit-error" hidden></div></div>
         <button class="btn btn-primary btn-block">Finish lesson (+${Store.POINTS.lesson})</button>
       </form>`}
   </div>`;
@@ -46,9 +46,9 @@ UI.mount("lessons", function render() {
   goal.oninput = () => { const w = UI.words(goal.value); wc.textContent = w; wc.style.color = w >= 30 ? "var(--primary)" : ""; };
   form.onsubmit = async (e) => {
     e.preventDefault();
-    const fields = { goal: form.querySelector('[data-f="goal"]'), habit: main.querySelector('[data-f="habit"]') };
+    const fields = { goal: form.querySelector('[data-f="goal"]'), habit: form.querySelector('[data-f="habit"]') };
     Object.values(fields).forEach((f) => { f.classList.remove("invalid"); f.querySelector(".err").hidden = true; });
-    const w = UI.words(goal.value), h = document.getElementById("habit").value.trim();
+    const w = UI.words(goal.value), h = form.querySelector("#habit").value.trim();
     const bad = (k, msg) => { fields[k].classList.add("invalid"); const el = fields[k].querySelector(".err"); el.textContent = msg; el.hidden = false; };
     if (w < 30) bad("goal", "Write at least 30 words to finish this lesson. You're at " + w + ".");
     if (!h) bad("habit", "Give your daily habit a short name.");
