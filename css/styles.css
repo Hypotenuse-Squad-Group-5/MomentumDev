@@ -312,6 +312,164 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--p
   .setting-row:has(select) select { width: 100%; }
 }
 
+/* ---------- Form dropdown sections (accordion) ---------- */
+details.form-section {
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--glass);
+  margin-bottom: 14px;
+  overflow: hidden;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+details.form-section[open] {
+  border-color: var(--primary);
+  box-shadow: 0 4px 14px oklch(0.58 0.12 181 / 10%);
+}
+details.form-section.has-error {
+  border-color: var(--danger);
+}
+details.form-section > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 13px 16px;
+  cursor: pointer;
+  list-style: none;
+  background: var(--glass-strong);
+  user-select: none;
+  transition: background .15s;
+}
+details.form-section > summary::-webkit-details-marker { display: none; }
+details.form-section > summary:hover {
+  background: #fff;
+}
+details.form-section[open] > summary {
+  border-bottom: 1px solid var(--border);
+}
+.form-section-title {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.form-section-name {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: .95rem;
+  color: var(--fg);
+}
+.form-section.has-error .form-section-name {
+  color: var(--danger);
+}
+.form-section-desc {
+  font-size: .78rem;
+  color: var(--muted-fg);
+  font-weight: 400;
+}
+.form-section-chevron {
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid var(--muted-fg);
+  border-bottom: 2px solid var(--muted-fg);
+  transform: rotate(45deg);
+  transition: transform .2s ease;
+  margin-right: 4px;
+  flex-shrink: 0;
+}
+details.form-section[open] .form-section-chevron {
+  transform: rotate(-135deg);
+}
+.form-section-body {
+  padding: 16px;
+}
+.form-section-body > .field:last-child,
+.form-section-body > .grid-2:last-child {
+  margin-bottom: 0;
+}
+
+/* ---------- Time Control with AM/PM toggle ---------- */
+.time-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.time-control .time-text-input {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+  font-size: .95rem;
+  text-align: center;
+}
+.ampm-toggle {
+  display: inline-flex;
+  border: 1px solid var(--input);
+  border-radius: 10px;
+  background: oklch(1 0 0 / 60%);
+  padding: 3px;
+  gap: 3px;
+  flex-shrink: 0;
+}
+.ampm-btn {
+  border: 0;
+  background: transparent;
+  padding: 6px 12px;
+  border-radius: 7px;
+  font-weight: 700;
+  font-size: .8rem;
+  color: var(--muted-fg);
+  cursor: pointer;
+  transition: all .15s ease;
+  line-height: 1.2;
+}
+.ampm-btn:hover {
+  color: var(--fg);
+  background: oklch(1 0 0 / 70%);
+}
+.ampm-btn.active {
+  background: var(--primary);
+  color: var(--primary-fg);
+  box-shadow: 0 1px 4px oklch(0.58 0.12 181 / 30%);
+}
+
+/* ---------- Activity type emoji chips ---------- */
+.type-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.type-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: 1px solid var(--input);
+  border-radius: 999px;
+  background: oklch(1 0 0 / 65%);
+  font-size: .88rem;
+  font-weight: 500;
+  color: var(--fg);
+  cursor: pointer;
+  transition: all .15s ease;
+  user-select: none;
+}
+.type-chip:hover {
+  background: #fff;
+  border-color: var(--primary);
+  transform: translateY(-1px);
+}
+.type-chip.active {
+  background: var(--primary);
+  color: var(--primary-fg);
+  border-color: var(--primary);
+  font-weight: 600;
+  box-shadow: 0 2px 8px oklch(0.58 0.12 181 / 28%);
+}
+.type-chip .chip-emoji {
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
 /* ---------- Modals + toasts ---------- */
 .modal-backdrop {
   position: fixed; inset: 0; z-index: 70;
