@@ -1,0 +1,37 @@
+/* Lesson-only styles; shared navigation and tracking UI are unchanged. */
+.lesson-body > h1 { max-width: 22ch; text-wrap: balance; }
+.lesson-intro { font-size: 1.1rem; line-height: 1.7; }
+.lesson-body > h2 { margin-top: 2rem; }
+.lesson-body > p { line-height: 1.8; }
+.lesson-practice { margin-top: 2.5rem; padding-top: 1.5rem; border-top: 1px solid var(--border, #d9e3df); }
+.lesson-exercise { margin: 1.2rem 0; }
+.lesson-exercise fieldset { border: 0; padding: 0; margin: 0 0 1rem; min-width: 0; }
+.lesson-exercise legend { font-weight: 600; font-size: 1.1rem; margin-bottom: 1rem; }
+.lesson-options { display: grid; gap: .65rem; }
+.lesson-option { display: flex; gap: .75rem; align-items: start; padding: .9rem; border: 1px solid var(--border, #d9e3df); border-radius: 12px; cursor: pointer; line-height: 1.55; }
+.lesson-option:has(input:checked) { border-color: var(--primary); background: var(--primary-soft, #edf6f3); }
+.lesson-option input { flex: 0 0 auto; width: 18px; height: 18px; margin-top: .2rem; accent-color: var(--primary); }
+.lesson-option:focus-within { outline: 2px solid var(--primary); outline-offset: 3px; }
+.lesson-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 1rem; }
+.lesson-fields .field { min-width: 0; }
+.lesson-feedback, .lesson-plan { margin-top: 1rem; padding: 1rem; border-radius: 12px; background: var(--bg, #f5f7f6); line-height: 1.7; }
+.lesson-feedback.correct { border-left: 4px solid var(--primary); }
+.lesson-plan-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.lesson-plan-actions { display: flex; gap: .6rem; flex-wrap: wrap; }
+.lesson-plan-actions .btn { white-space: normal; }
+.lesson-sources { margin: 1.5rem 0 2rem; padding: 1.2rem; border: 1px solid var(--border, #d9e3df); border-radius: 14px; scroll-margin-top: 6rem; }
+.lesson-sources summary { cursor: pointer; font-weight: 600; }
+.lesson-sources ul { padding-left: 1.2rem; }
+.lesson-sources li { margin-top: 1rem; }
+.lesson-sources a { overflow-wrap: anywhere; }
+.lesson-practice [hidden], .lesson-feedback[hidden], .lesson-plan[hidden] { display: none; }
+@media (max-width: 600px) {
+  .lesson-fields { grid-template-columns: 1fr; }
+  .lesson-plan-actions .btn { width: 100%; }
+  .lesson-body > h1 { font-size: 1.9rem; }
+}
+
+#practice-title { scroll-margin-top: 6rem; }
+@media (max-width: 480px) {
+  .lesson-path .lesson-node { transform: none !important; max-width: 100%; }
+}

@@ -5,8 +5,8 @@
    lets us move one feature at a time from the browser to Supabase:
      - Activities: Supabase when js/config.js has keys (THE VERTICAL SLICE),
                    otherwise this browser.
-     - Everything else: this browser (localStorage), shaped like the
-                   database tables in database/schema.sql so it can move next.
+     - Accounts, habits, check-ins, lesson goals/progress, and posts also
+       sync to Supabase. Demo mode stays in this browser.
 
    Points ("the single tracking unit"), mirroring the point_events table:
      habit +10 · lesson +25 · rsvp +15 · attended +25 · first post of the day +5
@@ -509,13 +509,15 @@
     }
     return r;
   }
-  function addHabit(title, extra = {}) {
-    const h = { id: uid(), title: title.trim(), goalText: null, lessonNumber: null, active: true, createdAt: nowIso(), sortOrder: nextSortOrder(), ...extra };
-    state.habits.push(h); save();
+  async function addHabit(title, extra = {}) {
+    const clean = title.trim();
+    if (!clean || clean.length > 80) throw new Error("Give your habit a name of 1 to 80 characters.");
+    const h = { id: uid(), title: clean, goalText: null, lessonNumber: null, active: true, createdAt: nowIso(), sortOrder: nextSortOrder(), ...extra };
     if (live) {
-      sb.from("habits").insert({ id: h.id, profile_id: ME, title: h.title, goal_text: h.goalText, source_lesson_id: h.lessonNumber, sort_order: h.sortOrder })
-        .then(({ error }) => { if (error) { state.habits = state.habits.filter((x) => x.id !== h.id); syncFailed("Couldn't save habit: " + error.message); } });
+      const { error } = await sb.from("habits").insert({ id: h.id, profile_id: ME, title: h.title, goal_text: h.goalText, source_lesson_id: h.lessonId || null, sort_order: h.sortOrder });
+      if (error) throw new Error("Couldn't save habit: " + error.message);
     }
+    state.habits.push(h); save();
     return h;
   }
   // Archive = hide the habit but keep its check-ins and points (streak history stays true).
@@ -554,21 +556,62 @@
       .then((results) => { const bad = results.find((r) => r.error); if (bad) loadHabitData().then(() => syncFailed("Couldn't save the new order: " + bad.error.message)); });
   }
 
-  const LESSON_COUNT = 5;
+  const LESSON_COUNT = 6;
+  const CURRICULUM_VERSION = 2;
+  let lessonCatalog = [];
+  const pendingLessons = new Map();
   const isLessonDone = (n) => state.lessonsDone.some((l) => l.n === n);
   const isLessonUnlocked = (n) => n === 1 || isLessonDone(n - 1);
   function currentLesson() { for (let n = 1; n <= LESSON_COUNT; n++) if (!isLessonDone(n)) return n; return null; }
   function completeLesson(n, goalText, habitTitle) {
+    if (pendingLessons.has(n)) return pendingLessons.get(n);
+    const pending = saveLesson(n, goalText, habitTitle).finally(() => pendingLessons.delete(n));
+    pendingLessons.set(n, pending);
+    return pending;
+  }
+  async function saveLesson(n, goalText, habitTitle) {
+    if (!Number.isInteger(n) || n < 1 || n > LESSON_COUNT) return { ok: false, message: "Lesson not found." };
     if (!isLessonUnlocked(n)) return { ok: false, message: "Finish the previous lesson first." };
     if (isLessonDone(n)) return { ok: false, message: "You've already finished this lesson." };
-    const words = goalText.trim().split(/\s+/).filter(Boolean).length;
-    if (words < 30) return { ok: false, message: "Write at least 30 words to finish this lesson." };
-    if (!habitTitle.trim()) return { ok: false, message: "Give your daily habit a short name." };
-    state.lessonsDone.push({ n, at: nowIso(), goal: goalText.trim() });
-    addHabit(habitTitle, { goalText: goalText.trim(), lessonNumber: n }); // habit is saved to the database when signed in
+    const goal = goalText.trim(), title = habitTitle.trim();
+    if (!goal || goal.length > 1000) return { ok: false, message: "Add a brief reflection of up to 1,000 characters." };
+    if (!title || title.length > 80) return { ok: false, message: "Give your daily habit a name of 1 to 80 characters." };
+    if (live) {
+      try {
+        const { data, error } = await sb.rpc("complete_momentum_lesson", { p_number: n, p_goal: goal, p_habit_title: title });
+        if (error) return { ok: false, message: error.message };
+        if (!data || !data.ok) return { ok: false, message: "The lesson could not be saved. Please try again." };
+        const refreshed = await Promise.all([loadLessonData(), loadHabitData()]);
+        if (!refreshed.every(Boolean)) return { ok: false, message: "Your lesson was saved, but we couldn't refresh your progress. Reload this page; retrying won't create another habit." };
+        save();
+        return data;
+      } catch (error) { return { ok: false, message: error.message || "Couldn't reach the server. Your reflection is still here; please try again." }; }
+    }
+    const habit = await addHabit(title, { goalText: goal, lessonNumber: n });
+    state.lessonsDone.push({ n, at: nowIso(), goal, habitId: habit.id });
     const pts = addPoints("lesson", "lesson-" + n);
     save();
     return { ok: true, points: pts };
+  }
+  function lessonHabit(n) {
+    const completed = state.lessonsDone.find(l => l.n === n);
+    const lesson = lessonCatalog.find(l => l.number === n);
+    return state.habits.find(h => (completed && completed.habitId === h.id) || (lesson && h.lessonId === lesson.id) || (!live && h.lessonNumber === n)) || null;
+  }
+  async function loadLessonData() {
+    try {
+      const [lessons, completed] = await Promise.all([
+        sb.from("lessons").select("id,number").eq("curriculum_version", CURRICULUM_VERSION).order("number"),
+        sb.from("lesson_completions").select("lesson_id,completed_at,user_goal_response,habit_id").eq("profile_id", ME)
+      ]);
+      if (lessons.error || completed.error || lessons.data?.length !== LESSON_COUNT || !completed.data) return false;
+      lessonCatalog = lessons.data;
+      if (!state.lessonSyncVersion) state.legacyLessonProgress = state.lessonsDone || [];
+      state.lessonSyncVersion = CURRICULUM_VERSION;
+      const numbers = new Map(lessonCatalog.map(l => [l.id, l.number]));
+      state.lessonsDone = completed.data.filter(c => numbers.has(c.lesson_id)).map(c => ({ n: numbers.get(c.lesson_id), at: c.completed_at, goal: c.user_goal_response, habitId: c.habit_id }));
+      return true;
+    } catch (_) { return false; }
   }
   function lessonGoal(n) { const l = state.lessonsDone.find((x) => x.n === n); return l ? l.goal : null; }
 
@@ -928,9 +971,9 @@
       lat: PROVO.lat, lng: PROVO.lng, // distances are measured from central Provo; no home location is stored
     };
   }
-  // Habits, check-ins, and habit points come from the database (migration 002).
-  // Other point kinds (lessons, RSVPs, posts) stay in this browser until their stories.
-  const DB_POINT_KINDS = ["habit"];
+  // Habits, check-ins, and habit/lesson points come from the database.
+  // Other point kinds stay local until their own integrations.
+  const DB_POINT_KINDS = ["habit", "lesson"];
   async function loadPointValues() {
     const { data, error } = await sb.from("point_values").select("kind,points");
     if (!error && data) data.forEach((r) => (POINTS[r.kind] = r.points));
@@ -943,7 +986,7 @@
     ]);
     const err = h.error || c.error || p.error;
     if (err || !h.data || !c.data || !p.data) { if (err) console.error(err); return false; }
-    state.habits = h.data.map((r) => ({ id: r.id, title: r.title, goalText: r.goal_text, lessonNumber: r.source_lesson_id, active: r.is_active, createdAt: r.created_at, sortOrder: r.sort_order }));
+    state.habits = h.data.map((r) => ({ id: r.id, title: r.title, goalText: r.goal_text, lessonId: r.source_lesson_id, active: r.is_active, createdAt: r.created_at, sortOrder: r.sort_order }));
     state.checkins = c.data.map((r) => ({ habitId: r.habit_id, date: r.check_date }));
     state.points = state.points.filter((x) => !DB_POINT_KINDS.includes(x.kind))
       .concat(p.data.map((r) => ({ id: r.id, kind: r.kind, points: r.points, ref: r.habit_id, date: r.occurred_on, at: r.created_at })));
@@ -1002,10 +1045,11 @@
       ["phone", "address", "zip", "city", "state", "birthday"].forEach((k) => delete old[k]); // removed in migration 008: clear this browser's copy too
       state.profiles[ME] = { ...old, ...me, interests: old.interests || [], attendeeDisplay: state.settings.attendeeDisplay };
       state.meId = ME; state.signedIn = true;
-      await Promise.all([loadPointValues(), loadHabitData(), loadPosts(), loadInterests()]);
+      const [, habitsLoaded, lessonsLoaded] = await Promise.all([loadPointValues(), loadHabitData(), loadLessonData(), loadPosts(), loadInterests()]);
+      if (!habitsLoaded || !lessonsLoaded) { loadError = "We couldn't load your saved habits and lesson progress. Please reload to try again."; return "syncerror"; }
       persist();
       return true;
-    })();
+    })().catch(() => { loadError = "We couldn't reach your saved account data. Please reload to try again."; return "syncerror"; });
     return ready;
   }
 
@@ -1054,7 +1098,7 @@
     removeFriend, sendFriendRequest, sharedActivityId,
     // growth
     habits, archivedHabits, isHabitDone, toggleHabit, addHabit, removeHabit, archiveHabit: removeHabit, restoreHabit, editHabit, reorderHabits, isLessonDone, isLessonUnlocked, currentLesson,
-    completeLesson, lessonGoal, streak, lastDays, stats, pointHistory,
+    completeLesson, lessonGoal, lessonHabit, streak, lastDays, stats, pointHistory,
     // social
     loadPosts, createPost, deletePost, setPostVisibility, encouraged, toggleEncourage, feed, historyFor,
     // messages
