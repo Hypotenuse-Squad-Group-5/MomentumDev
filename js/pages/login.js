@@ -13,7 +13,7 @@
     location.replace("home.html"); return;
   }
 
-  let mode = "signin";      // "signin" | "signup" | "check-email"
+  let mode = location.hash === "#signup" ? "signup" : "signin";      // "signin" | "signup" | "check-email"
   let pendingEmail = "";
   const saved = {};          // keeps typed values when the form re-renders
 
