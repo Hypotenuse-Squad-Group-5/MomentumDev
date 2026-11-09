@@ -1,12 +1,67 @@
-/* Profile: yours (with "Share a post") or a friend's. History is newest first. */
+/* Profile: yours (with "Share a post") or someone else's. History is newest first. */
 (function () {
   const compose = { open: UI.qs("compose") === "1", photos: 0, caption: "", activityId: "", visibility: null, error: "" };
+  let fetchedId = null;
+  let loadingProfile = false;
+  let missingProfile = false;
+  let profileLoadError = "";
 
   UI.mount("profile", function render() {
     const { icon, esc } = UI;
     const id = UI.qs("id") || Store.ME;
     const own = id === Store.ME, friend = Store.isFriend(id);
+
+    if (!own && Store.live && fetchedId !== id) {
+      fetchedId = id;
+      loadingProfile = true;
+      missingProfile = false;
+      profileLoadError = "";
+      Store.loadProfile(id).then((res) => {
+        if ((UI.qs("id") || Store.ME) !== id) return;
+        loadingProfile = false;
+        if (!res.ok) {
+          profileLoadError = res.message || "Could not load this profile.";
+        } else if (!res.profile) {
+          missingProfile = true;
+        }
+        render();
+      });
+    }
+
+    if (!own && loadingProfile) {
+      document.getElementById("main").innerHTML = `
+        <div style="max-width:680px">
+          <a class="small" href="friends.html">‹ Friends</a>
+          <p class="muted mt">Loading profile…</p>
+        </div>`;
+      return;
+    }
+
+    if (!own && ((!Store.live && !Store.state.profiles[id]) || missingProfile)) {
+      document.getElementById("main").innerHTML = `
+        <div style="max-width:680px">
+          <a class="small" href="friends.html">‹ Friends</a>
+          <div class="panel mt">
+            <h1>Profile not found</h1>
+            <p class="muted small mb0">This account doesn't exist or isn't available.</p>
+          </div>
+        </div>`;
+      return;
+    }
+
     const p = Store.profile(id);
+    if (!own && profileLoadError && !p.memberSince && p.first === "Someone") {
+      document.getElementById("main").innerHTML = `
+        <div style="max-width:680px">
+          <a class="small" href="friends.html">‹ Friends</a>
+          <div class="panel mt">
+            <h1>Couldn't load profile</h1>
+            <p class="muted small mb0">${esc(profileLoadError)}</p>
+          </div>
+        </div>`;
+      return;
+    }
+
     const f = Store.friends().find((x) => x.id === id);
     const metA = f && f.metAt && Store.activity(f.metAt);
     const pending = !own && !friend && Store.friendshipWith(id);
@@ -39,8 +94,10 @@
           </div>
           <div class="row mt">${own
             ? `<button class="btn btn-primary" id="open-compose">${icon("camera", "sm")}Share a post</button><a class="btn" href="activity-new.html">${icon("plus", "sm")}Post an activity</a><a class="btn btn-ghost" href="settings.html#profile">${icon("edit", "sm")}Edit profile</a>`
-            : friend ? `<button class="btn btn-primary" id="msg">${icon("message", "sm")}Message</button>`
-            : pending ? '<span class="tag grey">Friend request pending</span>' : `<button class="btn" id="add">${icon("userPlus", "sm")}Add friend</button><button class="btn btn-ghost" id="msg">${icon("message", "sm")}Message request</button>`}</div>
+            : friend ? `<button class="btn btn-primary" id="msg">${icon("message", "sm")}Message</button><button class="btn btn-danger btn-sm" id="remove-friend">Remove friend</button>`
+            : pending && pending.requesterId === Store.ME ? `<span class="tag grey">Request sent</span><button class="btn btn-ghost btn-sm" id="cancel-req">Cancel request</button>`
+            : pending && pending.addresseeId === Store.ME ? `<button class="btn btn-primary btn-sm" id="accept-req">Accept friend request</button><button class="btn btn-ghost btn-sm" id="decline-req">Decline</button>`
+            : `<button class="btn" id="add">${icon("userPlus", "sm")}Add friend</button><button class="btn btn-ghost" id="msg">${icon("message", "sm")}Message request</button>`}</div>
         </section>
 
         ${own && compose.open ? `
@@ -73,7 +130,52 @@
     Social.bind();
     const $ = (s) => document.getElementById(s);
     if ($("msg")) $("msg").onclick = () => UI.Messages.openChat(id);
-    if ($("add")) $("add").onclick = () => { Store.sendFriendRequest(id); UI.toast("Friend request sent"); };
+    if ($("add")) $("add").onclick = async () => {
+      $("add").disabled = true;
+      const res = await Store.sendFriendRequest(id);
+      if (res.ok) UI.toast("Friend request sent");
+      else { UI.toast(res.message || "Could not send friend request"); render(); }
+    };
+    if ($("cancel-req")) $("cancel-req").onclick = async () => {
+      $("cancel-req").disabled = true;
+      const res = await Store.cancelFriendRequest(id);
+      if (res.ok) UI.toast("Request cancelled");
+      else { UI.toast(res.message || "Could not cancel request"); render(); }
+    };
+    if ($("accept-req")) $("accept-req").onclick = async () => {
+      $("accept-req").disabled = true;
+      const fRow = Store.friendshipWith(id);
+      if (fRow) {
+        const res = await Store.acceptFriend(fRow.id);
+        if (res.ok) UI.toast("You're now friends");
+        else { UI.toast(res.message || "Could not accept request"); render(); }
+      } else {
+        render();
+      }
+    };
+    if ($("decline-req")) $("decline-req").onclick = async () => {
+      $("decline-req").disabled = true;
+      const fRow = Store.friendshipWith(id);
+      if (fRow) {
+        const res = await Store.declineFriend(fRow.id);
+        if (res.ok) UI.toast("Request declined");
+        else { UI.toast(res.message || "Could not decline request"); render(); }
+      } else {
+        render();
+      }
+    };
+    if ($("remove-friend")) $("remove-friend").onclick = () => {
+      UI.modal(`<h2>Remove ${esc(Store.fullName(id))}?</h2><p>You will stop seeing each other's friends-only posts and activities.</p><div class="modal-actions"><button class="btn" data-close>Keep friend</button><button class="btn btn-danger" id="do-remove">Remove friend</button></div>`, {
+        onMount: (m, close) => (m.querySelector("#do-remove").onclick = async () => {
+          const btn = m.querySelector("#do-remove");
+          btn.disabled = true;
+          const res = await Store.removeFriend(id);
+          close();
+          if (res.ok) UI.toast("Friend removed");
+          else UI.toast(res.message || "Could not remove friend");
+        })
+      });
+    };
     if ($("empty-compose")) $("empty-compose").onclick = () => { compose.open = true; render(); $("caption").focus(); };
     if ($("open-compose")) $("open-compose").onclick = () => { compose.open = true; render(); $("caption").focus(); };
     const form = $("composer");

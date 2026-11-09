@@ -2,7 +2,9 @@
    Feed = the 10 most recent posts and activities from friends. Newest first, no reshuffling. */
 window.Social = {
   subnav(active) {
-    return `<nav class="subnav" aria-label="Social">${[["feed", "social.html", "Feed"], ["friends", "friends.html", "Friends"], ["me", "profile.html", "My profile"]]
+    const reqCount = typeof Store !== "undefined" && Store.incomingRequests ? Store.incomingRequests().length : 0;
+    const badge = reqCount > 0 ? ` <span class="badge">${reqCount}</span>` : "";
+    return `<nav class="subnav" aria-label="Social">${[["feed", "social.html", "Feed"], ["friends", "friends.html", "Friends" + badge], ["me", "profile.html", "My profile"]]
       .map(([k, h, l]) => `<a href="${h}"${k === active ? ' class="active" aria-current="page"' : ""}>${l}</a>`).join("")}</nav>`;
   },
   postCard(p, { own } = {}) {
@@ -78,7 +80,14 @@ if (document.body.dataset.page === "feed") {
       </div>`;
     Social.bind();
     document.getElementById("refresh").onclick = async () => {
-      const before = shown; await Promise.all([Store.loadActivities(true), Store.loadPosts(true)]); render();
+      const before = shown;
+      await Promise.all([
+        Store.loadActivities(true),
+        Store.loadPosts(true),
+        Store.loadFriendships ? Store.loadFriendships(true) : Promise.resolve(),
+      ]);
+      UI.renderHeader();
+      render();
       const fresh = [...shown].filter((id) => !before.has(id)).length;
       UI.toast(fresh ? fresh + " new" : "Nothing new yet");
     };

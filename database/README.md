@@ -54,4 +54,4 @@ Migration 008 was applied as `20261109050600_reflection_character_limit`. Real-d
 
 ## Main integration
 
-The photo/signup SQL files and lesson SQL files share numeric prefixes but are separate changes; refer to their full filenames, not just a migration number. Existing production schema already includes photo and slim-signup changes. The lesson migrations are recorded in Supabase migration history as listed above; merging frontend code to main does not require replaying them.
+The photo/signup SQL files and lesson SQL files share numeric prefixes but are separate changes; refer to their full filenames, not just a migration number. Existing production schema already includes photo, slim-signup, expanded activity types, and friendships (`010_friendships.sql`, originally drafted as `008_friendships.sql`) changes. The lesson migrations are recorded in Supabase migration history as listed above; merging frontend code to main does not require replaying them.

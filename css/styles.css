@@ -113,6 +113,13 @@ svg.i.lg { width: 28px; height: 28px; }
   border-radius: 9px; background: var(--danger); color: #fff;
   font-size: .66rem; font-weight: 700; line-height: 17px; text-align: center;
 }
+.subnav .badge {
+  display: inline-block;
+  min-width: 18px; height: 18px; padding: 0 5px;
+  border-radius: 9px; background: var(--danger); color: #fff;
+  font-size: .7rem; font-weight: 700; line-height: 18px; text-align: center;
+  margin-left: 5px; vertical-align: middle;
+}
 .streak-chip {
   display: inline-flex; align-items: center; gap: 4px;
   height: 34px; padding: 0 10px;
@@ -139,10 +146,17 @@ svg.i.lg { width: 28px; height: 28px; }
   -webkit-backdrop-filter: blur(18px);
 }
 .tabbar a {
+  position: relative;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
   font-size: .7rem; font-weight: 600; color: var(--muted-fg); text-decoration: none;
 }
 .tabbar a.active { color: var(--primary); }
+.tabbar a .badge {
+  position: absolute; top: 4px; left: 50%; margin-left: 6px;
+  min-width: 16px; height: 16px; padding: 0 4px;
+  border-radius: 8px; background: var(--danger); color: #fff;
+  font-size: .64rem; font-weight: 700; line-height: 16px; text-align: center;
+}
 
 .nav-item {
   display: flex; align-items: center; gap: 10px;
@@ -151,6 +165,12 @@ svg.i.lg { width: 28px; height: 28px; }
 }
 .nav-item:hover { background: var(--accent); }
 .nav-item.active { background: var(--primary-soft); color: var(--primary); font-weight: 600; }
+.nav-item .badge {
+  margin-left: auto;
+  min-width: 18px; height: 18px; padding: 0 5px;
+  border-radius: 9px; background: var(--danger); color: #fff;
+  font-size: .7rem; font-weight: 700; line-height: 18px; text-align: center;
+}
 
 /* ---------- Surfaces ---------- */
 .panel {
