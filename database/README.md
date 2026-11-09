@@ -39,3 +39,9 @@ Legacy browser-only progress is retained as `legacyLessonProgress` in the signed
 Applied to Momentum DB as migration `20261109043237_versioned_lesson_sync` on November 8, 2026 (America/Denver). The matching CLI-created file is retained under `supabase/migrations/`. Its SQL is identical to `007_lesson_sync.sql`; these are two references to the same migration, not two migrations to apply.
 
 The real-database rollback test passed: sequential completion through all six lessons, long reflections, retry protection, shared habit renaming/archiving, two-account read/write isolation, anonymous RPC denial, and rollback of a forced late save failure. After testing, existing habits/check-ins/points/completion counts were unchanged (9/8/8/0). Five legacy lessons and their existing habit link remain intact; six v2 lessons were added. Sequence gaps from rolled-back test inserts are normal and do not represent missing user records.
+
+## Current account schema compatibility
+
+`profiles` includes id, auth_user_id, username, first_name, bio, avatar_url, and created_at. `profile_private` includes profile_id, last_name, email, sex, avatar_url, and age_confirmed_at. This is narrower than the original account migration in this repository. Frontend account reads/writes and signup metadata must match the current schema; in particular, signup supplies explicit age confirmation rather than birthdate. The signup trigger creates the public/private profile and settings only on a NEW auth-user insertion. Repeated signup for an existing email does not repair manually deleted app rows. Never infer an age-confirmation timestamp or recreate private fields with made-up values.
+
+The account compatibility regression uses a temporary auth-user insertion with the current signup metadata, verifies all three app records, and rolls the transaction back without sending email or retaining an account. Mocked signed-in tests also reject references to removed profile columns.

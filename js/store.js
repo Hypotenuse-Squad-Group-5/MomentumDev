@@ -185,7 +185,7 @@
     loadError = null;
     if (live) {
       const { data, error } = await sb.from("activities")
-        .select("*, host:profiles!activities_host_id_fkey(first_name,city,state,created_at), type:activity_types(name)")
+        .select("*, host:profiles!activities_host_id_fkey(first_name,created_at), type:activity_types(name)")
         .order("starts_at");
       if (error) { loadError = error.message; console.error(error); actCache = []; }
       else actCache = data.map(fromRow);
@@ -225,11 +225,11 @@
     if (postCache && !force) return postCache;
     if (live) {
       let { data, error } = await sb.from("posts")
-        .select("id, author_id, caption, activity_id, visibility, created_at, author:profiles!posts_author_id_fkey(first_name,city,state,created_at)")
+        .select("id, author_id, caption, activity_id, visibility, created_at, author:profiles!posts_author_id_fkey(first_name,created_at)")
         .order("created_at", { ascending: false });
       if (error) {
         const alt = await sb.from("posts")
-          .select("id, author_id, caption, activity_id, visibility, created_at, author:profiles(first_name,city,state,created_at)")
+          .select("id, author_id, caption, activity_id, visibility, created_at, author:profiles(first_name,created_at)")
           .order("created_at", { ascending: false });
         if (!alt.error) {
           data = alt.data;
@@ -649,7 +649,7 @@
         caption: caption.trim(),
         activity_id: activityId || null,
         visibility: "public",
-      }).select("id, author_id, caption, activity_id, visibility, created_at, author:profiles!posts_author_id_fkey(first_name,city,state,created_at)").single();
+      }).select("id, author_id, caption, activity_id, visibility, created_at, author:profiles!posts_author_id_fkey(first_name,created_at)").single();
       if (res.error) {
         res = await sb.from("posts").insert({
           author_id: ME,
@@ -767,9 +767,9 @@
   // Signed in: saves to Supabase (public fields → profiles, private → profile_private).
   async function updateProfile(fields) {
     if (live) {
-      const pub = await sb.from("profiles").update({ first_name: fields.first, city: fields.city, state: fields.state, bio: fields.bio || null }).eq("id", ME);
+      const pub = await sb.from("profiles").update({ first_name: fields.first, bio: fields.bio || null }).eq("id", ME);
       if (pub.error) return { ok: false, message: pub.error.message };
-      const priv = await sb.from("profile_private").update({ last_name: fields.last, phone: fields.phone, home_address: fields.address, zip_code: fields.zip, sex: fields.sex, birthdate: fields.birthday }).eq("profile_id", ME);
+      const priv = await sb.from("profile_private").update({ last_name: fields.last, sex: fields.sex }).eq("profile_id", ME);
       if (priv.error) return { ok: false, message: priv.error.message };
       if (Array.isArray(fields.interests)) {
         const idOf = {}; (interestCache || []).forEach((i) => (idOf[i.name] = i.id));
@@ -823,8 +823,8 @@
       lat: pp.latitude != null ? Number(pp.latitude) : PROVO.lat, lng: pp.longitude != null ? Number(pp.longitude) : PROVO.lng,
     };
   }
-  // Habits, check-ins, and habit points come from the database (migration 002).
-  // Other point kinds (lessons, RSVPs, posts) stay in this browser until their stories.
+  // Habits, check-ins, and habit/lesson points come from the database.
+  // Other point kinds stay local until their own integrations.
   const DB_POINT_KINDS = ["habit", "lesson"];
   async function loadPointValues() {
     const { data, error } = await sb.from("point_values").select("kind,points");
@@ -880,7 +880,7 @@
       const { data } = await sb.auth.getSession();
       const session = data.session;
       if (!session) return false;
-      const { data: p, error } = await sb.from("profiles").select("id,username,first_name,city,state,bio,created_at").eq("auth_user_id", session.user.id).maybeSingle();
+      const { data: p, error } = await sb.from("profiles").select("id,username,first_name,bio,created_at").eq("auth_user_id", session.user.id).maybeSingle();
       if (error || !p) { loadError = error ? error.message : "No profile found for this account."; return "noprofile"; }
       const { data: pp } = await sb.from("profile_private").select("*").eq("profile_id", p.id).maybeSingle();
       ME = p.id;

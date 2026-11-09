@@ -10,15 +10,16 @@ function app(db, opts={}) {
   ctx.window=ctx;ctx.addEventListener=()=>{};ctx.MOMENTUM_CONFIG={SUPABASE_URL:'test',SUPABASE_ANON_KEY:'test'};
   const uid=opts.user||'user-a'; let calls=0;
   const builder=table=>{
-    const filters=[]; let inserted;
+    const filters=[]; let inserted, selection="";
     const result=()=>{
+      if ((table==='profiles' && /(^|,)(city|state)(,|$)/.test(selection)) || (table==='profile_private' && /phone|home_address|zip_code|birthdate/.test(selection))) return {data:null,error:{message:'Column does not exist in current schema'}};
       if(opts.failLoad===table) return {data:null,error:{message:'Offline'}};
       if(inserted) { if(opts.failInsert) return {error:{message:'Save rejected'}}; db[table].push(inserted);return {error:null}; }
       let data=(db[table]||[]).filter(row=>filters.every(([k,v])=>row[k]===v));
       if(['habits','lesson_completions','point_events'].includes(table)) data=data.filter(r=>r.profile_id===uid);
       return {data,error:null};
     };
-    const b={select:()=>b,eq:(k,v)=>{filters.push([k,v]);return b;},order:()=>b,in:()=>b,limit:()=>b,insert:r=>{inserted=r;return b;},maybeSingle:async()=>({data:table==='profiles'?{id:uid,auth_user_id:uid,first_name:uid,username:uid,created_at:new Date().toISOString()}:null,error:null}),then:(resolve,reject)=>Promise.resolve(result()).then(resolve,reject)};return b;
+    const b={select:columns=>{selection=columns;return b;},eq:(k,v)=>{filters.push([k,v]);return b;},order:()=>b,in:()=>b,limit:()=>b,insert:r=>{inserted=r;return b;},maybeSingle:async()=>result().error ? result() : ({data:table==='profiles'?{id:uid,auth_user_id:uid,first_name:uid,username:uid,created_at:new Date().toISOString()}:null,error:null}),then:(resolve,reject)=>Promise.resolve(result()).then(resolve,reject)};return b;
   };
   ctx.supabase={createClient:()=>({auth:{getSession:async()=>({data:{session:{user:{id:uid}}}})},from:builder,rpc:async(name,args)=>{
     calls++; await Promise.resolve();
@@ -49,4 +50,12 @@ test('failed completion and Home habit writes do not claim success or mutate sta
 });
 test('failed progress restoration blocks the live UI instead of accepting cached progress',async()=>{
  const a=app(data(),{failLoad:'lesson_completions'});assert.equal(await a.Store.init(),'syncerror');
+});
+test('signup requires age confirmation and accepts the current required fields',()=>{
+ const source=fs.readFileSync('js/pages/login.js','utf8');
+ const match=source.match(/function validateSignup\(v\) \{[\s\S]*?\n  \}/);
+ const validate=vm.runInNewContext('('+match[0]+')');
+ const fields={first_name:'Test',last_name:'Person',email:'test@example.invalid',password:'Dummy-test-123!',password_confirm:'Dummy-test-123!',sex:'prefer_not_to_say',age_ok:true};
+ assert.equal(Object.keys(validate(fields)).length,0);
+ assert.ok(validate({...fields,age_ok:false}).age_ok);
 });

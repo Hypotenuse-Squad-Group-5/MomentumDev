@@ -28,6 +28,12 @@ From this directory run `python3 -m http.server 8765`, then open `http://localho
 - Reload with Cmd+Shift+R after source changes. A fresh private window gives a fresh demo session.
 - Never put a Supabase service-role/secret key in frontend files.
 
+## Account creation and recovery
+
+The current signup form requires first name, last name, email, password, sex, and an explicit 18-or-older confirmation. The live schema no longer stores profile city/state, address, phone, or birthdate; account reads and updates must not request these deleted columns. The signup metadata must include `age_confirmed: true` only after the user checks the age-confirmation box.
+
+Supabase Auth accounts and application profiles are separate records. Deleting a `profile_private` or `profiles` row does not free the login email or rerun the signup trigger. A deliberate account reset should be handled by an authorized operator through Auth account removal and verified cascading app-data cleanup, including Storage API cleanup if files exist. This is permanent; do not use it merely to test lesson UI. Sign out of old sessions and use a fresh private window when recreating a removed account.
+
 ## Database deployment
 
 Read [database/README.md](database/README.md) before applying anything. The lesson integration is `database/007_lesson_sync.sql`; it must be applied before deploying this branch's new Store code. It adds versioned lesson metadata and a restricted completion function while preserving existing rows.

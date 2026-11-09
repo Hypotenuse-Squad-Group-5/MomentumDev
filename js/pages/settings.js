@@ -7,7 +7,6 @@ UI.mount("settings", function render() {
   const sw = (k, title, sub) => `<label class="setting-row"><span class="grow">${title}${sub ? `<br><span class="small muted">${sub}</span>` : ""}</span><input type="checkbox" class="switch" data-k="${k}"${s[k] ? " checked" : ""}></label>`;
   const sel = (k, title, sub, opts) => `<label class="setting-row"><span class="grow">${title}${sub ? `<br><span class="small muted">${sub}</span>` : ""}</span><select data-k="${k}">${opts.map(([v, l]) => `<option value="${v}"${s[k] === v ? " selected" : ""}>${l}</option>`).join("")}</select></label>`;
   const vis = Object.entries(UI.VIS);
-  const STATES = ["AL","AK","AZ","AR","CA","CO","CT","DE","DC","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT","VA","WA","WV","WI","WY"];
   const INTERESTS = Store.interestOptions(); // from the `interests` table (Supabase → Table Editor → interests)
   if (!interestPicks) interestPicks = (p.interests || []).slice(); // unsaved picks survive a re-render
   const picked = interestPicks;
@@ -56,20 +55,10 @@ UI.mount("settings", function render() {
       <div class="alert mt" id="pf-msg" hidden></div>
       <p class="label mt">Public: other members see these</p>
       <div class="field" data-f="first"><label for="first">First name</label><input id="first" type="text" maxlength="40" value="${esc(p.first)}"><div class="err" hidden></div></div>
-      <div class="grid-2">
-        <div class="field" data-f="city"><label for="city">City</label><input id="city" type="text" maxlength="60" value="${esc(p.city || "")}"><div class="err" hidden></div></div>
-        <div class="field" data-f="state"><label for="state">State</label><select id="state"><option value="">Choose</option>${STATES.map((x) => `<option${p.state === x ? " selected" : ""}>${x}</option>`).join("")}</select><div class="err" hidden></div></div>
-      </div>
       <div class="field"><label for="bio">Bio <span class="opt">(optional)</span></label><textarea id="bio" maxlength="160" style="min-height:80px">${esc(p.bio || "")}</textarea><div class="hint">Don't include your last name, address, or schedule.</div></div>
       <p class="label mt">${icon("lock", "sm")} Private: only you see these</p>
       <div class="field" data-f="last"><label for="last">Last name</label><input id="last" type="text" maxlength="60" value="${esc(p.last || "")}"><div class="err" hidden></div></div>
       <div class="field"><label for="email">Email</label><input id="email" type="email" value="${esc(p.email || "")}" disabled><div class="hint">Your sign-in email. Changing it comes in a later update.</div></div>
-      <div class="field" data-f="phone"><label for="phone">Phone</label><input id="phone" type="tel" value="${esc(p.phone || "")}"><div class="err" hidden></div></div>
-      <div class="field" data-f="address"><label for="address">Home address</label><input id="address" type="text" value="${esc(p.address || "")}"><div class="hint">Never shown to anyone.</div><div class="err" hidden></div></div>
-      <div class="grid-2">
-        <div class="field" data-f="zip"><label for="zip">Zip code</label><input id="zip" type="text" inputmode="numeric" maxlength="5" value="${esc(p.zip || "")}"><div class="err" hidden></div></div>
-        <div class="field" data-f="birthday"><label for="birthday">Birthdate</label><input id="birthday" type="date" value="${esc(p.birthday || "")}"><div class="err" hidden></div></div>
-      </div>
       <div class="field" data-f="sex"><label for="sex">Sex</label><select id="sex"><option value="">Choose</option>${[["male", "Male"], ["female", "Female"], ["prefer_not_to_say", "Prefer not to say"]].map(([val, l]) => `<option value="${val}"${p.sex === val ? " selected" : ""}>${l}</option>`).join("")}</select><div class="err" hidden></div></div>
       <div class="field"><span class="flabel" id="int-label">Interests</span>${INTERESTS.length ? `<div class="picker" id="int-picker"><div class="chips picker-tags" id="int-tags"></div><input type="text" id="int-search" enterkeyhint="done" placeholder="Search or pick interests" autocomplete="off" role="combobox" aria-labelledby="int-label" aria-expanded="false" aria-controls="int-list"><ul class="picker-list" id="int-list" role="listbox" hidden></ul></div>` : '<p class="hint mb0">Interests couldn\'t be loaded. If this keeps happening, migration 005 may not have been run.</p>'}<div class="hint">Used to filter and suggest activities.</div></div>
       <button class="btn btn-primary btn-block" id="pf-save">Save changes</button>
@@ -93,15 +82,10 @@ UI.mount("settings", function render() {
     const msg = pf.querySelector("#pf-msg"); msg.hidden = true;
     const bad = (k, m) => { const f = pf.querySelector(`[data-f="${k}"]`); f.classList.add("invalid"); const el = f.querySelector(".err"); el.textContent = m; el.hidden = false; };
     // Same rules the database enforces
-    ["first", "city", "state", "last", "phone", "address", "zip", "birthday", "sex"].forEach((k) => { if (!v(k)) bad(k, "Required."); });
-    const digits = v("phone").replace(/\D/g, "");
-    if (v("phone") && (digits.length < 10 || digits.length > 15)) bad("phone", "Enter a full phone number.");
-    if (v("address") && v("address").length < 5) bad("address", "Enter your full street address.");
-    if (v("zip") && !/^[0-9]{5}$/.test(v("zip"))) bad("zip", "Use a 5-digit zip code.");
-    if (v("birthday")) { const adult = new Date(); adult.setFullYear(adult.getFullYear() - 18); if (new Date(v("birthday") + "T00:00") > adult) bad("birthday", "You must be 18 or older."); }
+    ["first", "last", "sex"].forEach((k) => { if (!v(k)) bad(k, "Required."); });
     if (pf.querySelector(".invalid")) { msg.textContent = "Fix the highlighted fields."; msg.hidden = false; return; }
     const btn = pf.querySelector("#pf-save"); btn.disabled = true; btn.textContent = "Saving…";
-    const r = await Store.updateProfile({ first: v("first"), city: v("city"), state: v("state"), bio: v("bio"), last: v("last"), phone: v("phone"), address: v("address"), zip: v("zip"), birthday: v("birthday"), sex: v("sex"), interests: picked.slice() });
+    const r = await Store.updateProfile({ first: v("first"), bio: v("bio"), last: v("last"), sex: v("sex"), interests: picked.slice() });
     btn.disabled = false; btn.textContent = "Save changes";
     if (!r.ok) { msg.textContent = "Couldn't save: " + r.message; msg.hidden = false; return; }
     interestPicks = null; // next render reloads from the saved profile
