@@ -1402,6 +1402,19 @@
     return true;
   }
   // Names for the picker: active interests, plus any retired one you already picked (so it isn't lost).
+  // Someone else's interests (readable by signed-in members since migration 012). Loaded once per profile.
+  const interestsLoadedFor = {};
+  function loadInterestsFor(id) {
+    if (!live || !id || id === ME || interestsLoadedFor[id]) return;
+    interestsLoadedFor[id] = true;
+    sb.from("profile_interests").select("interest:interests(name)").eq("profile_id", id).then(({ data, error }) => {
+      if (error || !data) return;
+      if (!state.profiles[id] && !remoteProfiles[id]) cacheRemoteProfile({ id });
+      const p = state.profiles[id] || remoteProfiles[id];
+      p.interests = data.map((r) => r.interest && r.interest.name).filter(Boolean).sort();
+      emit();
+    });
+  }
   function interestOptions() {
     if (!live) return DEMO_INTERESTS;
     const active = (interestCache || []).map((i) => i.name);
@@ -1496,6 +1509,6 @@
     isRequestToMe, isOutgoingPending, requestStatusFor, markRead, openDirect, sendDirectMessage, send, respondRequest,
     otherMember, memberStatus, shareActivityPeople,
     // settings
-    setSetting, updateProfile, uploadAvatar, deleteAvatar, interestOptions, signIn, signOut, reset, clearDemo,
+    setSetting, updateProfile, uploadAvatar, deleteAvatar, interestOptions, loadInterestsFor, signIn, signOut, reset, clearDemo,
   };
 })();

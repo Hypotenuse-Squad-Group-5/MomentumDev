@@ -65,12 +65,12 @@ UI.mount("settings", function render() {
       <p class="label mt">Public: other members see these</p>
       <div class="field" data-f="first"><label for="first">First name</label><input id="first" type="text" maxlength="40" value="${esc(p.first)}"><div class="err" hidden></div></div>
       <div class="field"><label for="bio">Bio <span class="opt">(optional)</span></label><textarea id="bio" maxlength="160" style="min-height:80px">${esc(p.bio || "")}</textarea><div class="hint">Don't include your last name, address, or schedule.</div></div>
+      <div class="field"><span class="flabel" id="int-label">Interests</span>${INTERESTS.length ? `<div class="picker" id="int-picker"><div class="chips picker-tags" id="int-tags"></div><input type="text" id="int-search" enterkeyhint="done" placeholder="Search or pick interests" autocomplete="off" role="combobox" aria-labelledby="int-label" aria-expanded="false" aria-controls="int-list"><ul class="picker-list" id="int-list" role="listbox" hidden></ul></div>` : '<p class="hint mb0">Interests couldn\'t be loaded. If this keeps happening, migration 005 may not have been run.</p>'}<div class="hint">Used to filter and suggest activities.</div></div>
       <p class="label mt">${icon("lock", "sm")} Private: only you see these</p>
       <div class="field" data-f="last"><label for="last">Last name</label><input id="last" type="text" maxlength="60" value="${esc(p.last || "")}"><div class="err" hidden></div></div>
       <div class="field"><label for="email">Email</label><input id="email" type="email" value="${esc(p.email || "")}" disabled><div class="hint">Your sign-in email. Changing it comes in a later update.</div></div>
       ${p.ageConfirmedAt ? `<p class="small muted">${icon("check", "sm")} You confirmed you're 18 or older on ${new Date(p.ageConfirmedAt).toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" })}.</p>` : ""}
       <div class="field" data-f="sex"><label for="sex">Sex</label><select id="sex"><option value="">Choose</option>${[["male", "Male"], ["female", "Female"], ["prefer_not_to_say", "Prefer not to say"]].map(([val, l]) => `<option value="${val}"${p.sex === val ? " selected" : ""}>${l}</option>`).join("")}</select><div class="err" hidden></div></div>
-      <div class="field"><span class="flabel" id="int-label">Interests</span>${INTERESTS.length ? `<div class="picker" id="int-picker"><div class="chips picker-tags" id="int-tags"></div><input type="text" id="int-search" enterkeyhint="done" placeholder="Search or pick interests" autocomplete="off" role="combobox" aria-labelledby="int-label" aria-expanded="false" aria-controls="int-list"><ul class="picker-list" id="int-list" role="listbox" hidden></ul></div>` : '<p class="hint mb0">Interests couldn\'t be loaded. If this keeps happening, migration 005 may not have been run.</p>'}<div class="hint">Used to filter and suggest activities.</div></div>
       <button class="btn btn-primary btn-block" id="pf-save">Save changes</button>
     </form>`}
   </div>`;
@@ -83,7 +83,7 @@ UI.mount("settings", function render() {
   const cl = document.getElementById("clear");
   if (cl) cl.onclick = () => UI.modal(`<h2>Remove all demo data?</h2><p>This clears every demo habit, friend, message, post, RSVP${Store.live ? "" : ", and activity"} in this browser, leaving only your account. You can bring it all back with "Reset demo data".</p><div class="modal-actions"><button class="btn" data-close>Cancel</button><button class="btn btn-danger" id="do-clear">Remove demo data</button></div>`,
     { onMount: (m, close) => (m.querySelector("#do-clear").onclick = () => { Store.clearDemo(); close(); UI.toast("Demo data removed"); }) });
-  interestPicker(INTERESTS, picked, esc, icon);
+  interestPicker(INTERESTS, picked, esc, icon, () => refreshSave());
 
   const fileInp = document.getElementById("avatar-input");
   const changeBtn = document.getElementById("btn-change-photo");
@@ -137,6 +137,14 @@ UI.mount("settings", function render() {
   }
 
   const pf = document.getElementById("profile-form");
+  // Save button: grey and unclickable until something differs from what's saved.
+  const saveBtn = pf && pf.querySelector("#pf-save");
+  const fval = (id) => { const el = pf && pf.querySelector("#" + id); return el ? el.value.trim() : ""; };
+  const snapshot = () => JSON.stringify([fval("first"), fval("bio"), fval("last"), fval("sex"), picked.slice().sort()]);
+  let baseline = JSON.stringify([(p.first || "").trim(), (p.bio || "").trim(), (p.last || "").trim(), p.sex || "", (p.interests || []).slice().sort()]);
+  const refreshSave = () => { if (saveBtn) saveBtn.disabled = snapshot() === baseline; };
+  if (pf) { pf.addEventListener("input", refreshSave); pf.addEventListener("change", refreshSave); }
+  refreshSave();
   if (pf) pf.onsubmit = async (e) => {
     e.preventDefault();
     const v = (id) => pf.querySelector("#" + id).value.trim();
@@ -148,15 +156,16 @@ UI.mount("settings", function render() {
     if (pf.querySelector(".invalid")) { msg.textContent = "Fix the highlighted fields."; msg.hidden = false; return; }
     const btn = pf.querySelector("#pf-save"); btn.disabled = true; btn.textContent = "Saving…";
     const r = await Store.updateProfile({ first: v("first"), bio: v("bio"), last: v("last"), sex: v("sex"), interests: picked.slice() });
-    btn.disabled = false; btn.textContent = "Save changes";
-    if (!r.ok) { msg.textContent = "Couldn't save: " + r.message; msg.hidden = false; return; }
+    btn.textContent = "Save changes";
+    if (!r.ok) { msg.textContent = "Couldn't save: " + r.message; msg.hidden = false; refreshSave(); return; }
     interestPicks = null; // next render reloads from the saved profile
+    baseline = snapshot(); refreshSave(); // saved: grey again until the next change
     UI.toast("Profile saved");
   };
 
 }, { live: true });
 // Interests picker: picks show as tags; type to narrow the alphabetical list.
-function interestPicker(options, picked, esc, icon) {
+function interestPicker(options, picked, esc, icon, onChange = () => {}) {
   const box = document.getElementById("int-picker");
   if (!box) return;
   const tags = box.querySelector("#int-tags"), input = box.querySelector("#int-search"), list = box.querySelector("#int-list");
@@ -187,7 +196,7 @@ function interestPicker(options, picked, esc, icon) {
   };
   const open = () => { list.hidden = false; input.setAttribute("aria-expanded", "true"); drawList(); place(); };
   const close = () => { list.hidden = true; input.setAttribute("aria-expanded", "false"); active = -1; };
-  const add = (n) => { picked.push(n); input.value = ""; active = -1; drawTags(); drawList(); place(); input.focus(); };
+  const add = (n) => { picked.push(n); input.value = ""; active = -1; drawTags(); drawList(); place(); input.focus(); onChange(); };
 
   input.onfocus = open;
   input.onclick = open;
@@ -197,13 +206,13 @@ function interestPicker(options, picked, esc, icon) {
     else if (e.key === "ArrowUp") { e.preventDefault(); active = Math.max(active - 1, 0); drawList(); }
     else if (e.key === "Enter") { e.preventDefault(); if (!list.hidden && shown[active]) add(shown[active]); } // never submits the form
     else if (e.key === "Escape") { if (!list.hidden) { e.preventDefault(); close(); } }
-    else if (e.key === "Backspace" && !input.value && picked.length) { picked.pop(); drawTags(); drawList(); }
+    else if (e.key === "Backspace" && !input.value && picked.length) { picked.pop(); drawTags(); drawList(); onChange(); }
   };
   list.onmousedown = (e) => e.preventDefault(); // keep focus in the box while clicking
   list.onclick = (e) => { const li = e.target.closest("[data-i]"); if (li) add(shown[+li.dataset.i]); };
   tags.onclick = (e) => {
     const b = e.target.closest("[data-remove]"); if (!b) return;
-    picked.splice(picked.indexOf(b.dataset.remove), 1); drawTags(); if (!list.hidden) drawList();
+    picked.splice(picked.indexOf(b.dataset.remove), 1); drawTags(); if (!list.hidden) drawList(); onChange();
   };
   input.onblur = close;
   drawTags();
