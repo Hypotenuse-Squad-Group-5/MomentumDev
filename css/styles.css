@@ -631,10 +631,10 @@ dl.kv dd { margin: 0; }
 .cal-layout { display: grid; gap: 16px; }
 .cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-top: 12px; }
 .cal .dow { padding: 4px 0; text-align: center; font-size: .7rem; font-weight: 700; color: var(--muted-fg); }
-.cal .day { min-height: 46px; padding: 4px; border-radius: 8px; background: var(--glass-strong); font-size: .78rem; display: flex; flex-direction: column; gap: 2px; }
+.cal .day { min-height: 46px; height: 46px; padding: 4px; border-radius: 8px; background: var(--glass-strong); font-size: .78rem; display: flex; flex-direction: column; gap: 2px; overflow: hidden; }
 .cal .day.out { background: transparent; color: oklch(0.52 0.035 247 / 40%); }
 .cal .day.today .d { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--primary); color: #fff; font-weight: 700; }
-.cal .ev { display: block; padding: 2px 4px; border-radius: 4px; background: var(--primary); color: #fff; font-size: .62rem; font-weight: 600; text-decoration: none; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.cal .ev { display: block; padding: 2px 4px; border-radius: 4px; background: var(--primary); color: #fff; font-size: .62rem; font-weight: 600; text-decoration: none; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; flex-shrink: 0; min-width: 0; max-height: 18px; line-height: 14px; }
 .cal .ev.past { background: var(--muted-fg); }
 .cal .ev .t { display: none; }
 details.event { border-radius: var(--r); background: var(--glass); border: 1px solid var(--glass-strong); box-shadow: var(--shadow); }
@@ -731,7 +731,7 @@ details.event[open] > summary { border-bottom: 1px solid var(--border); }
   .modal { border-radius: 18px; }
   .modal-actions { flex-direction: row; justify-content: flex-end; }
   .big-stats { grid-template-columns: repeat(4, 1fr); }
-  .cal .day { min-height: 70px; }
+  .cal .day { min-height: 70px; height: 70px; }
   .msg-panel { left: auto; width: 420px; border-left: 1px solid var(--border); box-shadow: -20px 0 50px rgba(0,0,0,.12); }
 }
 
@@ -756,7 +756,7 @@ details.event[open] > summary { border-bottom: 1px solid var(--border); }
   .filter-panel { grid-template-columns: repeat(2, 1fr); }
   .cta-bar { bottom: 16px; }
   .cal-layout { grid-template-columns: minmax(0, 1.5fr) minmax(300px, 1fr); align-items: start; }
-  .cal .day { min-height: 88px; }
+  .cal .day { min-height: 88px; height: 88px; }
   .cal .ev .t { display: inline; }
   .auth-card { grid-template-columns: 1.05fr .95fr; }
   .auth-hero, .auth-form { padding: 48px; }
