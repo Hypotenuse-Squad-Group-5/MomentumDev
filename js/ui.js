@@ -224,7 +224,7 @@
     function hide() { open = false; render(); renderHeader(); }
     function toggle() {
       if (open) hide();
-      else { show("list"); if (Store.live) refresh(true); }
+      else { show("list"); refresh(true); }
     }
     async function refresh(silent = false) {
       if (refreshing) return;
@@ -257,7 +257,7 @@
         draftActivityId = activityId || null;
         show("thread", null);
       }
-      if (Store.live) refresh(true);
+      refresh(true);
     }
     function title(c) { return displayName(Store.otherMember(c)); }
     function fmtRetryWait(iso) {
@@ -561,7 +561,6 @@
         peopleQuery = qInp.value;
         if (searchTimer) clearTimeout(searchTimer);
         if (!peopleQuery.trim()) { runSearch(""); return; }
-        if (!Store.live) { runSearch(peopleQuery); return; }
         searching = true;
         renderResults(box);
         searchTimer = setTimeout(() => runSearch(peopleQuery), 200);

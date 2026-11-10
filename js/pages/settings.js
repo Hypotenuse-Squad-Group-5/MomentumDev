@@ -38,14 +38,10 @@ UI.mount("settings", function render() {
     </section>
     <section class="panel mt">
       <h2>Account</h2>
-      <p class="small"><span class="mode-badge${Store.live ? " live" : ""}">Activities saved to: ${Store.live ? "Supabase" : "this browser"}</span></p>
       <div class="stack">
         <a class="btn btn-block" href="index.html" id="sign-out">Sign out</a>
-        ${Store.live ? "" : `<button class="btn btn-block" id="reset">Reset demo data</button>
-        <button class="btn btn-block" id="clear">Start empty (remove all demo data)</button>`}
       </div>
-      ${Store.live ? `<p class="hint mt mb0">Signed in as ${esc(p.email || "")}. Member since ${new Date(p.memberSince).toLocaleDateString(undefined, { month: "long", year: "numeric" })}.</p>`
-        : `<p class="hint mt mb0">Both only affect this browser. "Start empty" keeps just your account so you can see every page's empty state. "Reset" brings the demo content back.</p>`}
+      <p class="hint mt mb0">Signed in as ${esc(p.email || "")}. Member since ${new Date(p.memberSince).toLocaleDateString(undefined, { month: "long", year: "numeric" })}.</p>
     </section>`
     : `
     <form class="panel" id="profile-form" novalidate>
@@ -76,13 +72,7 @@ UI.mount("settings", function render() {
   </div>`;
 
   document.querySelectorAll("[data-k]").forEach((el) => (el.onchange = () => { Store.setSetting(el.dataset.k, el.type === "checkbox" ? el.checked : el.value); UI.toast("Saved"); }));
-  const so = document.getElementById("sign-out"); if (so) so.onclick = async (e) => { e.preventDefault(); await Store.auth.signOut(); Store.signOut(); location.href = "index.html"; };
-  const rs = document.getElementById("reset");
-  if (rs) rs.onclick = () => UI.modal(`<h2>Reset demo data?</h2><p>This clears everything you've done in this browser and restores the demo content.</p><div class="modal-actions"><button class="btn" data-close>Cancel</button><button class="btn btn-danger" id="do-reset">Reset</button></div>`,
-    { onMount: (m, close) => (m.querySelector("#do-reset").onclick = () => { Store.reset(); Store.signIn(); close(); UI.toast("Demo data reset"); }) });
-  const cl = document.getElementById("clear");
-  if (cl) cl.onclick = () => UI.modal(`<h2>Remove all demo data?</h2><p>This clears every demo habit, friend, message, post, RSVP${Store.live ? "" : ", and activity"} in this browser, leaving only your account. You can bring it all back with "Reset demo data".</p><div class="modal-actions"><button class="btn" data-close>Cancel</button><button class="btn btn-danger" id="do-clear">Remove demo data</button></div>`,
-    { onMount: (m, close) => (m.querySelector("#do-clear").onclick = () => { Store.clearDemo(); close(); UI.toast("Demo data removed"); }) });
+  const so = document.getElementById("sign-out"); if (so) so.onclick = async (e) => { e.preventDefault(); await Store.auth.signOut(); location.href = "index.html"; };
   interestPicker(INTERESTS, picked, esc, icon, () => refreshSave());
 
   const fileInp = document.getElementById("avatar-input");

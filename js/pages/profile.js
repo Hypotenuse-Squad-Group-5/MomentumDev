@@ -11,7 +11,7 @@
     const id = UI.qs("id") || Store.ME;
     const own = id === Store.ME, friend = Store.isFriend(id);
 
-    if (!own && Store.live && fetchedId !== id) {
+    if (!own && fetchedId !== id) {
       fetchedId = id;
       loadingProfile = true;
       missingProfile = false;
@@ -37,7 +37,7 @@
       return;
     }
 
-    if (!own && ((!Store.live && !Store.state.profiles[id]) || missingProfile)) {
+    if (!own && ((false) || missingProfile)) {
       document.getElementById("main").innerHTML = `
         <div style="max-width:680px">
           <a class="small" href="friends.html">‹ Friends</a>

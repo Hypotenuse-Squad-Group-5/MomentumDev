@@ -6,7 +6,6 @@ UI.mount("activities", async function render() {
   const types = await Store.loadTypes();
   const s = Store.state.settings;
   const tomorrow = new Date(Date.now() + 864e5).toISOString().slice(0, 10);
-  const pastHosted = Store.myPastHosted();
 
   // Activity category definitions with emojis and safe fallbacks
   const RAW_CATEGORIES = [
@@ -35,34 +34,17 @@ UI.mount("activities", async function render() {
     };
   });
 
+  // Time choices: "-:--" (blank) plus 48 times in 15-minute steps, 6:00 through 5:45. AM/PM is the toggle beside it.
+  const TIME_OPTIONS = '<option value="">-:--</option>' + [6, 7, 8, 9, 10, 11, 12, 1, 2, 3, 4, 5]
+    .flatMap((h) => ["00", "15", "30", "45"].map((m) => `<option value="${h}:${m}">${h}:${m}</option>`)).join("");
+
   document.getElementById("main").innerHTML = `
   <div style="max-width:720px">
     <a class="small" href="activities.html">‹ Cancel</a>
-    <div class="page-head mt"><div><h1>Post an activity</h1><p class="muted mb0">Bring people together, in person.</p></div>
-      <span class="mode-badge${Store.live ? " live" : ""}" title="${Store.live ? "Connected to your Supabase project" : "No Supabase keys in js/config.js yet"}">Saved to: ${Store.live ? "Supabase" : "this browser"}</span></div>
+    <div class="page-head mt"><div><h1>Post an activity</h1><p class="muted mb0">Bring people together, in person.</p></div></div>
 
     <form class="panel" id="post-form" novalidate>
       <div class="alert" id="form-error" hidden></div>
-
-      ${pastHosted.length ? `
-      <!-- Re-use previous activity -->
-      <div class="field reuse-field" style="margin-bottom:16px">
-        <label class="reuse-toggle" style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:600">
-          <input type="checkbox" id="reuse-check"> Use info from a previous activity
-        </label>
-        <div id="reuse-picker" hidden style="margin-top:10px">
-          <p class="small muted mb0" style="margin-bottom:6px">Select an activity to pre-fill everything except the date:</p>
-          <div class="stack" id="reuse-list" style="max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;padding:6px">
-            ${pastHosted.map((a) => `
-              <button type="button" class="reuse-item" data-reuse-id="${a.id}" style="display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:8px 10px;border:0;background:none;border-radius:8px;cursor:pointer;font-size:.88rem">
-                <span style="font-size:1.1rem">${CATEGORY_LIST.find((c) => String(c.id) === String((types.find((t) => t.name === a.type) || {}).id)) ? CATEGORY_LIST.find((c) => String(c.id) === String((types.find((t) => t.name === a.type) || {}).id)).emoji : '📋'}</span>
-                <span class="grow"><b>${esc(a.title)}</b><br><span class="small muted">${esc(a.activityName || '')} · ${esc(a.location || '')} · ${new Date(a.startsAt).toLocaleDateString()}</span></span>
-              </button>
-            `).join("")}
-          </div>
-        </div>
-      </div>
-      ` : ""}
 
       <!-- Section 1: Details & Location -->
       <details class="form-section" name="post-section" open>
@@ -130,19 +112,11 @@ UI.mount("activities", async function render() {
         </summary>
         <div class="form-section-body">
           <div class="field" data-f="date"><label for="date">Date</label><input id="date" type="date" min="${new Date().toISOString().slice(0, 10)}" value="${tomorrow}"><div class="err" hidden></div></div>
-          <datalist id="time-suggestions">
-            <option value="6:00"></option><option value="6:30"></option><option value="7:00"></option><option value="7:30"></option>
-            <option value="8:00"></option><option value="8:30"></option><option value="9:00"></option><option value="9:30"></option>
-            <option value="10:00"></option><option value="10:30"></option><option value="11:00"></option><option value="11:30"></option>
-            <option value="12:00"></option><option value="12:30"></option><option value="1:00"></option><option value="1:30"></option>
-            <option value="2:00"></option><option value="2:30"></option><option value="3:00"></option><option value="3:30"></option>
-            <option value="4:00"></option><option value="4:30"></option><option value="5:00"></option><option value="5:30"></option>
-          </datalist>
-          <div class="grid-2">
+          <div class="grid-2 time-grid">
             <div class="field" data-f="start">
               <label for="start-time">Starts</label>
               <div class="time-control">
-                <input id="start-time" class="time-text-input" type="text" placeholder="6:00" list="time-suggestions" autocomplete="off" maxlength="8">
+                <select id="start-time" class="time-select">${TIME_OPTIONS}</select>
                 <div class="ampm-toggle" data-for="start">
                   <button type="button" class="ampm-btn" data-val="AM">AM</button>
                   <button type="button" class="ampm-btn active" data-val="PM">PM</button>
@@ -154,7 +128,7 @@ UI.mount("activities", async function render() {
             <div class="field" data-f="end">
               <label for="end-time">Ends</label>
               <div class="time-control">
-                <input id="end-time" class="time-text-input" type="text" placeholder="7:00" list="time-suggestions" autocomplete="off" maxlength="8">
+                <select id="end-time" class="time-select">${TIME_OPTIONS}</select>
                 <div class="ampm-toggle" data-for="end">
                   <button type="button" class="ampm-btn" data-val="AM">AM</button>
                   <button type="button" class="ampm-btn active" data-val="PM">PM</button>
@@ -190,7 +164,6 @@ UI.mount("activities", async function render() {
         </div>
       </details>
 
-      ${Store.live ? "" : `<p class="hint">Only <b>Public</b> activities appear in the shared feed once Supabase is connected.</p>`}
       <button class="btn btn-primary btn-block" id="submit">Post activity</button>
     </form>
   </div>`;
@@ -207,91 +180,6 @@ UI.mount("activities", async function render() {
       }
     });
   });
-
-  // Re-use previous activity: toggle picker and prefill
-  const reuseCheck = document.getElementById("reuse-check");
-  const reusePicker = document.getElementById("reuse-picker");
-  if (reuseCheck && reusePicker) {
-    reuseCheck.addEventListener("change", () => {
-      reusePicker.hidden = !reuseCheck.checked;
-    });
-
-    document.querySelectorAll(".reuse-item").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const a = Store.activity(btn.dataset.reuseId);
-        if (!a) return;
-
-        // Highlight selected item
-        document.querySelectorAll(".reuse-item").forEach((b) => (b.style.background = "none"));
-        btn.style.background = "var(--primary-soft, oklch(0.92 0.04 181))";
-
-
-        // Fill standard text inputs
-        const setVal = (id, v) => { const el = form.querySelector("#" + id); if (el) el.value = v || ""; };
-        setVal("title", a.title);
-        setVal("activityName", a.activityName);
-        setVal("location", a.location);
-        setVal("city", a.city);
-        setVal("description", a.description);
-        setVal("bring", a.bring);
-        setVal("min", a.min);
-        setVal("max", a.max);
-
-        // Fetch exact address (handles local state or live Supabase fallback)
-        let exactAddr = Store.address(a.id);
-        if (!exactAddr && Store.live && window.supabase) {
-          window.supabase.from("activity_addresses")
-            .select("exact_address")
-            .eq("activity_id", a.id)
-            .maybeSingle()
-            .then(({ data }) => {
-              if (data && data.exact_address) {
-                const addrEl = form.querySelector("#address");
-                if (addrEl) addrEl.value = data.exact_address;
-              }
-            });
-        } else {
-          setVal("address", exactAddr || "");
-        }
-
-        // Select the matching activity category chip
-        const matchedType = types.find((t) => t.name === a.type);
-        if (matchedType) {
-          hiddenTypeId.value = matchedType.id;
-          typeChips.forEach((c) => c.classList.toggle("active", String(c.dataset.id) === String(matchedType.id)));
-        }
-
-        // Set start / end time from the stored ISO timestamps
-        const sDate = new Date(a.startsAt);
-        const eDate = new Date(a.endsAt);
-        const to12 = (d) => {
-          let h = d.getHours(), ampm = "AM";
-          if (h >= 12) { ampm = "PM"; if (h > 12) h -= 12; }
-          if (h === 0) h = 12;
-          return { h, m: d.getMinutes(), ampm };
-        };
-        const sT = to12(sDate), eT = to12(eDate);
-        startTimeCtrl.setTime(sT.h, sT.m, sT.ampm);
-        endTimeCtrl.setTime(eT.h, eT.m, eT.ampm);
-
-        // Set visibility radio
-        if (a.visibility) {
-          const radio = form.querySelector(`input[name=visibility][value="${a.visibility}"]`);
-          if (radio) radio.checked = true;
-        }
-
-        // Clear errors
-        form.querySelectorAll("[data-f]").forEach((f) => { f.classList.remove("invalid"); const err = f.querySelector(".err"); if (err) err.hidden = true; });
-        const banner = document.getElementById("form-error"); if (banner) banner.hidden = true;
-
-        // Open the first section so they can review
-        const firstSec = form.querySelector("details.form-section");
-        if (firstSec) firstSec.open = true;
-
-        UI.toast(`Pre-filled from "" + a.title + "". Just pick a new date!`);
-      });
-    });
-  }
 
   // Single-select Activity Category chips
   const hiddenTypeId = form.querySelector("#typeId");
@@ -314,12 +202,12 @@ UI.mount("activities", async function render() {
     });
   });
 
-  // Time controls with AM/PM toggle
-  function initTimeControl(type, defaultHour, defaultMin, defaultAmpm) {
-    const textInput = form.querySelector(`#${type}-time`);
+  // Time controls: a dropdown of times (or "-:--" for none) plus the AM/PM toggle
+  function initTimeControl(type, defaultAmpm) {
+    const select = form.querySelector(`#${type}-time`);
     const hiddenInput = form.querySelector(`#${type}`);
     const toggle = form.querySelector(`.ampm-toggle[data-for="${type}"]`);
-    if (!textInput || !hiddenInput || !toggle) return { setTime: () => { } };
+    if (!select || !hiddenInput || !toggle) return { setTime: () => {} };
 
     let ampm = defaultAmpm;
 
@@ -329,38 +217,17 @@ UI.mount("activities", async function render() {
       });
     };
 
+    // Fill the hidden 24-hour value ("18:30") that the form actually posts
     const updateHidden = () => {
-      let val = textInput.value.trim().toLowerCase();
-      if (!val) { hiddenInput.value = ""; return; }
-      if (val.includes("am")) { ampm = "AM"; val = val.replace(/am/g, "").trim(); }
-      else if (val.includes("pm")) { ampm = "PM"; val = val.replace(/pm/g, "").trim(); }
-      updateToggleUI();
-
-      const parts = val.split(":");
-      let h = parseInt(parts[0], 10);
-      let m = parts.length > 1 ? parseInt(parts[1], 10) : 0;
-      if (isNaN(h)) { hiddenInput.value = ""; return; }
-      if (isNaN(m) || m < 0) m = 0;
-      if (m > 59) m = 59;
-
-      if (h > 12) {
-        ampm = "PM";
-        h -= 12;
-        updateToggleUI();
-      } else if (h === 0) {
-        h = 12;
-        ampm = "AM";
-        updateToggleUI();
-      }
-
-      let h24 = h;
-      if (ampm === "PM" && h < 12) h24 += 12;
-      if (ampm === "AM" && h === 12) h24 = 0;
+      if (!select.value) { hiddenInput.value = ""; return; }
+      const [h, m] = select.value.split(":").map(Number);
+      let h24 = h % 12;
+      if (ampm === "PM") h24 += 12;
       hiddenInput.value = `${String(h24).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
     };
 
     const setTime = (h12, m, newAmpm) => {
-      textInput.value = `${h12}:${String(m).padStart(2, "0")}`;
+      select.value = `${h12}:${String(m).padStart(2, "0")}`;
       ampm = newAmpm;
       updateToggleUI();
       updateHidden();
@@ -371,23 +238,23 @@ UI.mount("activities", async function render() {
         ampm = btn.dataset.val;
         updateToggleUI();
         updateHidden();
-        textInput.dispatchEvent(new Event("change"));
+        select.dispatchEvent(new Event("change"));
       });
     });
 
-    textInput.addEventListener("input", updateHidden);
-    textInput.addEventListener("change", updateHidden);
+    select.addEventListener("change", updateHidden);
 
-    setTime(defaultHour, defaultMin, defaultAmpm);
+    updateToggleUI();
+    updateHidden();
     return { setTime };
   }
 
-  const startTimeCtrl = initTimeControl("start", 6, 0, "PM");
-  const endTimeCtrl = initTimeControl("end", 7, 0, "PM");
+  initTimeControl("start", "PM");
+  const endTimeCtrl = initTimeControl("end", "PM");
 
   // Auto-fill end time to exactly 1 hour after start time
-  const startTextInput = form.querySelector("#start-time");
-  if (startTextInput) {
+  const startSelect = form.querySelector("#start-time");
+  if (startSelect) {
     const handleStartChange = () => {
       const hiddenVal = form.querySelector("#start").value;
       if (!hiddenVal || hiddenVal.length < 5) return;
@@ -409,6 +276,13 @@ UI.mount("activities", async function render() {
 
       endTimeCtrl.setTime(endH12, m, endAmpm);
 
+      const startField = form.querySelector('[data-f="start"]');
+      if (startField) {
+        startField.classList.remove("invalid");
+        const startErr = startField.querySelector(".err");
+        if (startErr) startErr.hidden = true;
+      }
+
       const endField = form.querySelector('[data-f="end"]');
       if (endField) {
         endField.classList.remove("invalid");
@@ -417,8 +291,7 @@ UI.mount("activities", async function render() {
       }
     };
 
-    startTextInput.addEventListener("input", handleStartChange);
-    startTextInput.addEventListener("change", handleStartChange);
+    startSelect.addEventListener("change", handleStartChange);
   }
 
   // Force strict maxlength enforcement in case pasting or browser quirks bypass it
@@ -449,9 +322,18 @@ UI.mount("activities", async function render() {
     const banner = document.getElementById("form-error"); banner.hidden = true;
     const btn = document.getElementById("submit"); btn.disabled = true; btn.textContent = "Posting…";
 
-    const r = await Store.createActivity(data);
+    const TIME = /^([01]\d|2[0-3]):[0-5]\d$/; // a real 24-hour time, e.g. 18:30
+    const timeErrs = {};
+    if (data.start && !TIME.test(data.start)) timeErrs.start = "Enter a real time, like 6:30 PM.";
+    if (data.end && !TIME.test(data.end)) timeErrs.end = "Enter a real time, like 7:30 PM.";
+    let r;
+    if (Object.keys(timeErrs).length) r = { ok: false, errors: { ...Store.validateActivity(data), ...timeErrs } };
+    else {
+      try { r = await Store.createActivity(data); }
+      catch (err) { console.error(err); r = { ok: false, message: err.message || "Something went wrong. Please try again." }; } // never leave the button spinning
+    }
     btn.disabled = false; btn.textContent = "Post activity";
-    if (r.ok) { UI.flash(Store.live ? "Activity posted to Supabase" : "Activity posted"); location.href = "activity.html?id=" + r.id; return; }
+    if (r.ok) { UI.flash("Activity posted"); location.href = "activity.html?id=" + r.id; return; }
     if (r.errors) {
       let firstBadSection = null;
       Object.entries(r.errors).forEach(([k, msg]) => {
