@@ -4,6 +4,59 @@
   let month = new Date(now.getFullYear(), now.getMonth(), 1);
   let addedShown = false;
 
+  /* ---- Holiday emoji lookup ---- */
+  const HOLIDAYS_FIXED = {
+    '1-1': ['🎆', '🥂', '🍾', '🎈', '🥳', '🕛'],
+    '2-14': ['❤️', '💖', '💘', '💝', '💕', '🌹', '💐', '🍫', '🎁'],
+    '3-17': ['☘️', '🍀', '🎩', '🌈', '🪙'],
+    '6-19': ['🖤', '✊🏾', '🗽', '⛓️‍💥', '✨'],
+    '7-4': ['🎆', '🎖️', '🗽', '🦅'],
+    '10-31': ['🎃', '👻', '🧛', '🍬', '🕸️'],
+    '11-11': ['🎆', '🎖️', '🗽', '🦅'],
+    '12-25': ['🎄', '🎅', '🤶', '🎁', '❄️'],
+    '12-31': ['🎆', '🥂', '🍾', '🎈', '🥳', '🕛']
+  };
+
+  function nthDow(year, month, dow, n) {
+    var first = new Date(year, month, 1).getDay();
+    var d = 1 + ((dow - first + 7) % 7) + (n - 1) * 7;
+    return d;
+  }
+  function lastMonday(year, month) {
+    var last = new Date(year, month + 1, 0);
+    return last.getDate() - ((last.getDay() + 6) % 7);
+  }
+  function easterDay(year) {
+    var a = year % 19, b = Math.floor(year / 100), c = year % 100,
+      d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25),
+      g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30,
+      i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7,
+      m = Math.floor((a + 11 * h + 22 * l) / 451),
+      month = Math.floor((h + l - 7 * m + 114) / 31) - 1,
+      day = ((h + l - 7 * m + 114) % 31) + 1;
+    return { m: month, d: day };
+  }
+
+  function holidayEmojis(year, month, day) {
+    var key = (month + 1) + '-' + day;
+    if (HOLIDAYS_FIXED[key]) return HOLIDAYS_FIXED[key];
+    if (month === 0 && day === nthDow(year, 0, 1, 3)) return ['🕊️', '✊🏾', '🤝', '📜'];
+    if (month === 1 && day === nthDow(year, 1, 1, 3)) return ['🦅', '🏛️', '🎩'];
+    var e = easterDay(year);
+    if (month === e.m && day === e.d) return ['🐰', '🥚', '🐣', '✝️', '🌸'];
+    if (month === 4 && day === nthDow(year, 4, 0, 2)) return ['💐', '💝', '👩', '🌸'];
+    if (month === 4 && day === lastMonday(year, 4)) return ['🎆', '🎖️', '🗽', '🦅'];
+    if (month === 8 && day === nthDow(year, 8, 1, 1)) return ['🛠️', '👷', '🍔'];
+    if (month === 9 && day === nthDow(year, 9, 1, 2)) return ['⛵', '🌎', '🪵', '🏹'];
+    if (month === 10 && day === nthDow(year, 10, 4, 4)) return ['🦃', '🍂', '🥧', '🍁', '🍗'];
+    return null;
+  }
+
+  function pickEmoji(arr, y, m, d) {
+    return arr[(y * 366 + m * 31 + d) % arr.length];
+  }
+  /* ---- end holiday emoji ---- */
+
   UI.mount("calendar", function render() {
     const { icon, esc } = UI;
     const mine = Store.myCommitments().concat(Store.hosting().filter((a) => !Store.isGoing(a.id))).sort((a, b) => new Date(a.startsAt) - new Date(b.startsAt));
@@ -18,7 +71,9 @@
     for (let d = 1; d <= daysIn; d++) {
       const key = Store.dayKey(new Date(y, m, d));
       const evs = mine.filter((a) => Store.dayKey(a.startsAt) === key);
-      cells.push(`<div class="day${key === Store.today() ? " today" : ""}"><span class="d">${d}</span>${evs.map((a) => `<a class="ev${Store.isPast(a) ? " past" : ""}" href="#ev-${a.id}" title="${esc(a.title)}">${UI.fmtTime(a.startsAt).replace(":00", "")}<span class="t"> ${esc(a.title)}</span></a>`).join("")}</div>`);
+      const hArr = holidayEmojis(y, m, d);
+      const hE = hArr ? pickEmoji(hArr, y, m, d) : '';
+      cells.push(`<div class="day${key === Store.today() ? " today" : ""}"><div class="d-row"><span class="d">${d}</span>${hE ? `<span class="h-emoji" title="${key}">${hE}</span>` : ''}</div>${evs.map((a) => `<a class="ev${Store.isPast(a) ? " past" : ""}" href="#ev-${a.id}" title="${esc(a.title)}">${UI.fmtTime(a.startsAt).replace(":00", "")}<span class="t"> ${esc(a.title)}</span></a>`).join("")}</div>`);
     }
 
     const card = (a) => {
