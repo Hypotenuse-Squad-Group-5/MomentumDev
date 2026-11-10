@@ -97,7 +97,7 @@
             : friend ? `<button class="btn btn-primary" id="msg">${icon("message", "sm")}Message</button><button class="btn btn-danger btn-sm" id="remove-friend">Remove friend</button>`
             : pending && pending.requesterId === Store.ME ? `<span class="tag grey">Request sent</span><button class="btn btn-ghost btn-sm" id="cancel-req">Cancel request</button>`
             : pending && pending.addresseeId === Store.ME ? `<button class="btn btn-primary btn-sm" id="accept-req">Accept friend request</button><button class="btn btn-ghost btn-sm" id="decline-req">Decline</button>`
-            : `<button class="btn" id="add">${icon("userPlus", "sm")}Add friend</button><button class="btn btn-ghost" id="msg">${icon("message", "sm")}Message request</button>`}</div>
+            : `<button class="btn" id="add">${icon("userPlus", "sm")}Add friend</button><button class="btn btn-ghost" id="msg">${icon("message", "sm")}${Store.requestStatusFor && Store.requestStatusFor(id).kind === "active" ? "Message" : "Message request"}</button>`}</div>
         </section>
 
         ${own && compose.open ? `

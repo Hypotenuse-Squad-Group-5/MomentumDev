@@ -36,6 +36,7 @@
     image: '<rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>',
     star: '<path d="M12 3l2.6 5.6 6.1.7-4.5 4.2 1.2 6L12 16.6 6.6 19.5l1.2-6L3.3 9.3l6.1-.7z"/>',
     trash: '<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/>',
+    refresh: '<path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/>',
   };
   const icon = (name, cls = "") => '<svg class="i ' + cls + '" viewBox="0 0 24 24" aria-hidden="true">' + (ICONS[name] || "") + "</svg>";
 
@@ -202,78 +203,373 @@
 
   // ---------- Messages panel ----------
   const Messages = (function () {
-    let open = false, view = "list", convoId = null, query = "", peopleQuery = "";
+    let open = false, view = "list", tab = "conversations", convoId = null, draftOtherId = null, draftActivityId = null;
+    let query = "", peopleQuery = "";
+    let searchResults = null, searchError = "", searching = false, searchSeq = 0, searchTimer = null;
+    let refreshing = false, sending = false, responding = false;
     const panel = () => document.getElementById("msg-panel");
-    function show(v, id) { open = true; view = v || "list"; convoId = id || null; render(); renderHeader(); }
-    function hide() { open = false; render(); renderHeader(); }
-    function toggle() { open ? hide() : show("list"); }
-    function openChat(otherId, activityId) { const c = Store.openDirect(otherId, activityId); show("thread", c.id); }
-    function title(c) {
-      if (c.kind === "activity_group") { const a = Store.activity(c.activityId); return (a ? a.title : "Activity") + " group"; }
-      return displayName(Store.otherMember(c));
+
+    function show(v, id) {
+      open = true;
+      const nextView = v || "list";
+      if (nextView === "new" && view !== "new") {
+        peopleQuery = ""; searchResults = null; searchError = ""; searching = false;
+      }
+      view = nextView;
+      convoId = id || null;
+      if (view !== "thread") { draftOtherId = null; draftActivityId = null; }
+      render();
+      renderHeader();
     }
+    function hide() { open = false; render(); renderHeader(); }
+    function toggle() {
+      if (open) hide();
+      else { show("list"); if (Store.live) refresh(true); }
+    }
+    async function refresh(silent = false) {
+      if (refreshing) return;
+      refreshing = true;
+      if (!silent) render();
+      try {
+        await Promise.all([
+          Store.loadConversations ? Store.loadConversations() : Promise.resolve(),
+          Store.loadFriendships ? Store.loadFriendships(true) : Promise.resolve(),
+        ]);
+        if (view === "thread" && !convoId && draftOtherId) {
+          const found = Store.findDirect(draftOtherId);
+          if (found) { convoId = found.id; draftOtherId = null; }
+        }
+      } finally {
+        refreshing = false;
+        render();
+        renderHeader();
+      }
+    }
+    function openChat(otherId, activityId) {
+      if (!otherId || otherId === Store.ME) return;
+      const existing = Store.findDirect(otherId);
+      if (existing) {
+        draftOtherId = null;
+        draftActivityId = null;
+        show("thread", existing.id);
+      } else {
+        draftOtherId = otherId;
+        draftActivityId = activityId || null;
+        show("thread", null);
+      }
+      if (Store.live) refresh(true);
+    }
+    function title(c) { return displayName(Store.otherMember(c)); }
+    function fmtRetryWait(iso) {
+      const ms = Math.max(0, new Date(iso).getTime() - Date.now());
+      const days = Math.ceil(ms / 864e5);
+      if (days <= 1) return "in less than a day";
+      return "in " + days + " days";
+    }
+
     function render() {
       const p = panel(); if (!p) return;
       p.hidden = !open; if (!open) { p.innerHTML = ""; return; }
       if (view === "thread") return renderThread(p);
       if (view === "new") return renderNew(p);
-      const all = Store.conversations().filter((c) => !query || title(c).toLowerCase().includes(query.toLowerCase()) || c.messages.some((m) => m.body.toLowerCase().includes(query.toLowerCase())));
-      const reqs = all.filter(Store.isRequestToMe), rest = all.filter((c) => !Store.isRequestToMe(c));
+      renderList(p);
+    }
+
+    function renderList(p) {
+      const all = Store.conversations();
+      const reqsAll = all.filter(Store.isRequestToMe);
+      const convosAll = all.filter((c) => !Store.isRequestToMe(c));
+      const unreadConvos = convosAll.filter(Store.unread).length;
+      const reqsCount = reqsAll.length;
+
+      const listForTab = () => {
+        const base = tab === "requests" ? reqsAll : convosAll;
+        const ql = query.trim().toLowerCase();
+        if (!ql) return base;
+        return base.filter((c) => title(c).toLowerCase().includes(ql) || c.messages.some((m) => m.body.toLowerCase().includes(ql)));
+      };
+
       const item = (c) => {
         const l = c.messages[c.messages.length - 1];
-        const other = c.kind === "direct" ? Store.otherMember(c) : null;
-        const preview = Store.isRequestToMe(c) ? "Message hidden until you accept" : l ? (l.senderId === Store.ME ? "You: " : c.kind === "activity_group" ? Store.profile(l.senderId).first + ": " : "") + l.body : "No messages yet";
-        return '<button class="convo-item' + (Store.unread(c) ? " unread" : "") + '" data-open="' + c.id + '">' + (other ? avatar(other, "sm") : '<span class="avatar sm">' + icon("users", "sm") + "</span>") +
-          '<span class="grow"><span class="name">' + esc(title(c)) + "</span>" + '<span class="preview" style="display:block">' + esc(preview) + "</span></span>" + (l ? '<span class="tiny muted">' + fmtAgo(l.at) + "</span>" : "") + "</button>";
+        const other = Store.otherMember(c);
+        const pendingTag = Store.isOutgoingPending && Store.isOutgoingPending(c) ? '<span class="tag grey">Pending</span>' : "";
+        const preview = l ? (l.senderId === Store.ME ? "You: " : "") + l.body : "No messages yet";
+        const isUnread = Store.unread(c);
+        return '<button class="convo-item' + (isUnread ? " unread" : "") + '" data-open="' + c.id + '">' + avatar(other, "sm") +
+          '<span class="grow"><span class="name">' + esc(title(c)) + pendingTag + "</span>" +
+          '<span class="preview" style="display:block">' + esc(preview) + "</span></span>" +
+          (l ? '<span class="tiny muted">' + fmtAgo(l.at) + "</span>" : "") + "</button>";
       };
-      p.innerHTML = '<div class="msg-head"><h2 class="grow mb0">Messages</h2><button class="btn btn-sm" data-new>' + icon("plus", "sm") + 'New chat</button><button class="icon-btn" data-hide aria-label="Close messages">' + icon("x") + "</button></div>" +
-        '<div class="msg-body"><input type="search" placeholder="Search conversations" value="' + esc(query) + '" data-q aria-label="Search conversations">' +
-        (reqs.length ? '<p class="label mt">Message requests (' + reqs.length + ")</p>" + reqs.map(item).join("") : "") +
-        '<p class="label mt">Conversations</p>' + (rest.length ? rest.map(item).join("") : query ? '<p class="muted small">No conversations match.</p>' : '<div class="center mt"><p><b>No messages yet.</b></p><p class="muted small">Message a host from any activity page, or start a chat with someone you met.</p></div>') +
-        '<p class="hint mt">Group chats exist only for activities (max 20). 1-on-1 chats archive after 6 months, groups after 3.</p></div>';
-      p.querySelector("[data-hide]").onclick = hide;
-      p.querySelector("[data-new]").onclick = () => show("new");
-      const q = p.querySelector("[data-q]"); q.oninput = () => { query = q.value; render(); const n = panel().querySelector("[data-q]"); n.focus(); n.setSelectionRange(n.value.length, n.value.length); };
-      p.querySelectorAll("[data-open]").forEach((b) => (b.onclick = () => show("thread", b.dataset.open)));
-    }
-    function renderThread(p) {
-      const c = Store.conversation(convoId); if (!c) return show("list");
-      Store.markRead(c.id);
-      const a = c.activityId ? Store.activity(c.activityId) : null;
-      const isReq = Store.isRequestToMe(c);
-      const other = c.kind === "direct" ? Store.otherMember(c) : null;
-      const waiting = other && Store.memberStatus(c, other) === "requested";
-      p.innerHTML = '<div class="msg-head"><button class="icon-btn" data-back aria-label="Back">' + icon("left") + "</button>" + (other ? avatar(other, "sm", Store.isFriend(other)) : "") +
-        '<div class="grow"><b>' + esc(title(c)) + "</b>" + (a ? '<div><a class="context-pill" href="activity.html?id=' + a.id + '">' + icon("activity", "sm") + "About: " + esc(a.title) + "</a></div>" : "") + "</div>" +
+
+      const renderItems = (box) => {
+        const items = listForTab();
+        if (items.length) { box.innerHTML = items.map(item).join(""); }
+        else if (query.trim()) { box.innerHTML = '<p class="muted small">No ' + (tab === "requests" ? "message requests" : "conversations") + " match.</p>"; }
+        else if (tab === "requests") {
+          box.innerHTML = '<div class="center mt"><p><b>No message requests.</b></p><p class="muted small">When someone who isn\'t your friend messages you, it will show up here for you to accept or decline.</p></div>';
+        } else {
+          box.innerHTML = '<div class="center mt"><p><b>No conversations yet.</b></p><p class="muted small">Message a friend directly, or search for someone to send a message request.</p><button class="btn btn-sm btn-primary mt" data-new-empty>' + icon("plus", "sm") + "New chat</button></div>";
+          const nb = box.querySelector("[data-new-empty]");
+          if (nb) nb.onclick = () => show("new");
+        }
+        box.querySelectorAll("[data-open]").forEach((b) => (b.onclick = () => show("thread", b.dataset.open)));
+      };
+
+      const existingBox = p.querySelector("#msg-list-items");
+      const existingQ = p.querySelector("[data-q]");
+      if (existingBox && existingQ && document.activeElement === existingQ) {
+        const tabsEl = p.querySelector(".msg-tabs");
+        if (tabsEl) {
+          tabsEl.innerHTML =
+            '<button type="button" role="tab" aria-selected="' + (tab === "conversations") + '" class="' + (tab === "conversations" ? "active" : "") + '" data-tab="conversations">Conversations' + (unreadConvos ? '<span class="badge">' + unreadConvos + "</span>" : "") + "</button>" +
+            '<button type="button" role="tab" aria-selected="' + (tab === "requests") + '" class="' + (tab === "requests" ? "active" : "") + '" data-tab="requests">Message requests' + (reqsCount ? '<span class="badge">' + reqsCount + "</span>" : "") + "</button>";
+          tabsEl.querySelectorAll("[data-tab]").forEach((b) => (b.onclick = () => { tab = b.dataset.tab; render(); }));
+        }
+        const refBtn = p.querySelector("[data-refresh]");
+        if (refBtn) {
+          refBtn.classList.toggle("spinning", refreshing);
+          refBtn.disabled = refreshing;
+        }
+        renderItems(existingBox);
+        return;
+      }
+
+      p.innerHTML = '<div class="msg-head"><h2 class="grow mb0">Messages</h2>' +
+        '<button class="icon-btn' + (refreshing ? " spinning" : "") + '" data-refresh aria-label="Refresh messages" title="Refresh messages"' + (refreshing ? " disabled" : "") + ">" + icon("refresh", "sm") + "</button>" +
+        '<button class="btn btn-sm" data-new>' + icon("plus", "sm") + "New chat</button>" +
         '<button class="icon-btn" data-hide aria-label="Close messages">' + icon("x") + "</button></div>" +
-        '<div class="msg-body">' + (isReq
-          ? '<div class="alert info">' + icon("lock", "sm") + "<span><b>" + esc(displayName(other)) + "</b> isn't your friend yet, so their message stays hidden until you accept.</span></div>" +
-            '<div class="row mt"><button class="btn btn-primary" data-accept>Accept</button><button class="btn" data-decline>Decline</button></div>'
-          : '<div class="thread">' + (c.messages.length ? c.messages.map((m) => '<div class="bubble' + (m.senderId === Store.ME ? " me" : "") + '">' + (c.kind === "activity_group" && m.senderId !== Store.ME ? '<span class="who">' + esc(Store.profile(m.senderId).first) + "</span>" : "") + esc(m.body) + "</div>").join("") : '<p class="muted small center">Say hi. ' + (a ? "This chat is linked to " + esc(a.title) + "." : "") + "</p>") + "</div>" +
-            (waiting ? '<p class="hint mt center">' + esc(displayName(other)) + " isn't your friend, so this is a message request. They'll see it once they accept.</p>" : "")) +
-        "</div>" + (isReq ? "" : '<form class="composer"><input type="text" placeholder="Write a message" aria-label="Message" maxlength="2000"><button class="btn btn-primary" aria-label="Send">' + icon("send", "sm") + "</button></form>");
+        '<div class="msg-body">' +
+        '<div class="msg-tabs" role="tablist" aria-label="Message sections">' +
+        '<button type="button" role="tab" aria-selected="' + (tab === "conversations") + '" class="' + (tab === "conversations" ? "active" : "") + '" data-tab="conversations">Conversations' + (unreadConvos ? '<span class="badge">' + unreadConvos + "</span>" : "") + "</button>" +
+        '<button type="button" role="tab" aria-selected="' + (tab === "requests") + '" class="' + (tab === "requests" ? "active" : "") + '" data-tab="requests">Message requests' + (reqsCount ? '<span class="badge">' + reqsCount + "</span>" : "") + "</button>" +
+        "</div>" +
+        '<input type="search" placeholder="' + (tab === "requests" ? "Search message requests" : "Search conversations") + '" value="' + esc(query) + '" data-q aria-label="Search messages">' +
+        '<div class="mt" id="msg-list-items"></div></div>';
+
+      const listBox = p.querySelector("#msg-list-items");
+      renderItems(listBox);
+      p.querySelector("[data-hide]").onclick = hide;
+      p.querySelector("[data-refresh]").onclick = () => refresh(false);
+      p.querySelector("[data-new]").onclick = () => show("new");
+      p.querySelectorAll("[data-tab]").forEach((b) => (b.onclick = () => { tab = b.dataset.tab; render(); }));
+      const q = p.querySelector("[data-q]");
+      q.oninput = () => { query = q.value; renderItems(listBox); };
+    }
+
+    function renderThread(p) {
+      const c = convoId ? Store.conversation(convoId) : null;
+      if (convoId && !c) return show("list");
+      const other = c ? Store.otherMember(c) : draftOtherId;
+      if (!other) return show("list");
+      if (c && Store.unread(c)) {
+        Store.markRead(c.id, { silent: true });
+        renderHeader();
+      }
+      const actId = (c && c.activityId) || draftActivityId;
+      const a = actId ? Store.activity(actId) : null;
+      const st = Store.requestStatusFor(other);
+      const msgs = c ? c.messages : [];
+      const name = displayName(other);
+
+      let noticeHtml = "";
+      let footerHtml = "";
+
+      if (st.kind === "incoming_request") {
+        noticeHtml = '<div class="alert info mb0">' + icon("lock", "sm") + "<span><b>" + esc(name) + "</b> isn't your friend yet. Accept to reply and move this chat to Conversations.</span></div>";
+        footerHtml = '<div class="msg-request-actions"><button class="btn btn-primary grow" data-accept' + (responding ? " disabled" : "") + '>Accept</button><button class="btn grow" data-decline' + (responding ? " disabled" : "") + ">Decline</button></div>";
+      } else if (st.kind === "declined_by_me") {
+        noticeHtml = '<div class="alert info mb0">' + icon("lock", "sm") + "<span>You previously declined this message request from <b>" + esc(name) + "</b>.</span></div>";
+        footerHtml = '<div class="msg-request-actions"><button class="btn btn-primary btn-block" data-accept' + (responding ? " disabled" : "") + ">Accept &amp; move to Conversations</button></div>";
+      } else if (st.kind === "request_waiting") {
+        footerHtml = '<div class="msg-locked">Message request sent to ' + esc(name) + ". You can send 1 follow-up on " + esc(fmtDay(st.retryAt)) + " (" + esc(fmtRetryWait(st.retryAt)) + ") if they haven't responded.</div>";
+      } else if (st.kind === "request_limit_reached") {
+        footerHtml = '<div class="msg-locked">Follow-up sent. You can send more messages once ' + esc(name) + " accepts your request.</div>";
+      } else if (st.kind === "declined_by_other") {
+        footerHtml = '<div class="msg-locked">Follow-up messages aren\'t available for this request.</div>';
+      } else {
+        if (st.kind === "request_initial") {
+          noticeHtml = '<div class="alert info">' + icon("lock", "sm") + "<span><b>" + esc(name) + "</b> isn't your friend yet, so this will appear as a message request. You can send 1 message now (and 1 follow-up after 7 days if they haven't responded).</span></div>";
+        } else if (st.kind === "request_followup_ready") {
+          noticeHtml = '<div class="alert info">' + icon("clock", "sm") + "<span><b>" + esc(name) + "</b> hasn't responded yet. You can send 1 follow-up message.</span></div>";
+        }
+        footerHtml = '<form class="composer"><input type="text" placeholder="Write a message" aria-label="Message" maxlength="2000"' + (sending ? " disabled" : "") + '><button class="btn btn-primary" aria-label="Send"' + (sending ? " disabled" : "") + ">" + icon("send", "sm") + "</button></form>";
+      }
+
+      const existingComposer = p.querySelector(".composer input");
+      const sameThreadComposer = existingComposer && existingComposer.dataset.for === other;
+      const prevDraft = sameThreadComposer ? existingComposer.value : "";
+      const hadComposerFocus = sameThreadComposer && document.activeElement === existingComposer;
+      const prevSel = hadComposerFocus ? existingComposer.selectionStart : null;
+      const shouldFocusComposer = !sameThreadComposer || hadComposerFocus;
+
+      const bubblesHtml = msgs.length
+        ? '<div class="thread">' + msgs.map((m) => '<div class="bubble' + (m.senderId === Store.ME ? " me" : "") + '">' + esc(m.body) + "</div>").join("") + "</div>"
+        : '<p class="muted small center">Say hi to ' + esc(name) + "." + (a ? " This chat is linked to " + esc(a.title) + "." : "") + "</p>";
+
+      p.innerHTML = '<div class="msg-head"><button class="icon-btn" data-back aria-label="Back">' + icon("left") + "</button>" +
+        avatar(other, "sm", true) +
+        '<div class="grow"><a href="profile.html?id=' + esc(other) + '" style="text-decoration:none"><b>' + esc(name) + "</b></a>" +
+        (a ? '<div><a class="context-pill" href="activity.html?id=' + esc(a.id) + '">' + icon("activity", "sm") + "About: " + esc(a.title) + "</a></div>" : "") + "</div>" +
+        '<button class="icon-btn' + (refreshing ? " spinning" : "") + '" data-refresh aria-label="Refresh messages" title="Refresh messages"' + (refreshing ? " disabled" : "") + ">" + icon("refresh", "sm") + "</button>" +
+        '<button class="icon-btn" data-hide aria-label="Close messages">' + icon("x") + "</button></div>" +
+        '<div class="msg-body">' +
+        (st.kind === "incoming_request" || st.kind === "declined_by_me"
+          ? noticeHtml + '<div class="mt">' + bubblesHtml + "</div>"
+          : (noticeHtml ? noticeHtml + '<div class="mt">' + bubblesHtml + "</div>" : bubblesHtml)) +
+        "</div>" + footerHtml;
+
       p.querySelector("[data-back]").onclick = () => show("list");
       p.querySelector("[data-hide]").onclick = hide;
-      const acc = p.querySelector("[data-accept]"); if (acc) { acc.onclick = () => { Store.respondRequest(c.id, true); render(); }; p.querySelector("[data-decline]").onclick = () => { Store.respondRequest(c.id, false); show("list"); }; }
+      p.querySelector("[data-refresh]").onclick = () => refresh(false);
+
+      const acc = p.querySelector("[data-accept]");
+      if (acc) {
+        acc.onclick = async () => {
+          if (responding) return;
+          responding = true; render();
+          const res = await Store.respondRequest(c.id, true);
+          responding = false;
+          if (!res.ok) { toast(res.message || "Could not accept request"); render(); return; }
+          tab = "conversations";
+          toast("Message request accepted");
+          render();
+          renderHeader();
+        };
+      }
+      const dec = p.querySelector("[data-decline]");
+      if (dec) {
+        dec.onclick = async () => {
+          if (responding) return;
+          responding = true; render();
+          const res = await Store.respondRequest(c.id, false);
+          responding = false;
+          if (!res.ok) { toast(res.message || "Could not decline request"); render(); return; }
+          toast("Message request declined");
+          show("list");
+        };
+      }
+
       const f = p.querySelector(".composer");
-      if (f) { const inp = f.querySelector("input"); f.onsubmit = (e) => { e.preventDefault(); if (!inp.value.trim()) return; Store.send(c.id, inp.value); render(); panel().querySelector(".composer input").focus(); }; inp.focus(); }
-      const body = p.querySelector(".msg-body"); body.scrollTop = body.scrollHeight;
+      if (f) {
+        const inp = f.querySelector("input");
+        inp.dataset.for = other;
+        if (prevDraft) inp.value = prevDraft;
+        f.onsubmit = async (e) => {
+          e.preventDefault();
+          const text = inp.value;
+          if (!text.trim() || sending) return;
+          sending = true;
+          const btn = f.querySelector("button");
+          inp.disabled = true; btn.disabled = true;
+          const res = await Store.sendDirectMessage({ recipientId: other, body: text, activityId: actId });
+          sending = false;
+          if (!res.ok) {
+            toast(res.message || "Could not send message");
+            inp.disabled = false; btn.disabled = false;
+            inp.focus();
+            return;
+          }
+          inp.value = "";
+          const liveInp = panel() && panel().querySelector(".composer input");
+          if (liveInp) liveInp.value = "";
+          convoId = res.conversationId;
+          draftOtherId = null;
+          draftActivityId = null;
+          tab = "conversations";
+          render();
+          renderHeader();
+          const nextInp = panel().querySelector(".composer input");
+          if (nextInp) nextInp.focus();
+        };
+        if (shouldFocusComposer) {
+          inp.focus();
+          if (prevSel != null && typeof inp.setSelectionRange === "function") {
+            try { inp.setSelectionRange(prevSel, prevSel); } catch (e) { /* ignore */ }
+          }
+        }
+      }
+      const bodyEl = p.querySelector(".msg-body");
+      bodyEl.scrollTop = bodyEl.scrollHeight;
     }
+
     function renderNew(p) {
-      const shared = Store.shareActivityPeople();
-      const everyone = Object.keys(Store.state.profiles).filter((id) => id !== Store.ME);
-      const match = (id) => !peopleQuery || Store.fullName(id).toLowerCase().includes(peopleQuery.toLowerCase());
-      const row = (id) => '<button class="convo-item" data-person="' + id + '">' + avatar(id, "sm") + '<span class="grow"><span class="name">' + esc(Store.isFriend(id) ? Store.fullName(id) : Store.profile(id).first) + '</span><span class="preview" style="display:block">' + (Store.isFriend(id) ? "Friend" : "Not a friend: sends a message request") + "</span></span></button>";
-      const list = peopleQuery ? everyone.filter(match) : shared;
+      const renderResults = (box) => {
+        const q = peopleQuery.trim();
+        const row = (id) => {
+          const isF = Store.isFriend(id);
+          const existing = Store.findDirect(id);
+          const isActive = existing && Store.memberStatus(existing, Store.ME) === "active" && Store.memberStatus(existing, id) === "active";
+          const sub = isF ? "Friend" : isActive ? "Active conversation" : "Not a friend · sends a message request";
+          return '<button class="convo-item" data-person="' + id + '">' + avatar(id, "sm") +
+            '<span class="grow"><span class="name">' + esc(isF ? Store.fullName(id) : Store.profile(id).first) + "</span>" +
+            '<span class="preview" style="display:block">' + esc(sub) + "</span></span></button>";
+        };
+        if (!q) {
+          const friendIds = Store.friends().map((f) => f.id).sort((a, b) => Store.fullName(a).localeCompare(Store.fullName(b)));
+          box.innerHTML = '<p class="label mt">Your friends</p>' +
+            (friendIds.length
+              ? friendIds.map(row).join("")
+              : '<p class="muted small">No friends yet. Search by name above to send someone a message request.</p>');
+        } else if (searching) {
+          box.innerHTML = '<p class="label mt">Search results</p><p class="muted small">Searching…</p>';
+        } else if (searchError) {
+          box.innerHTML = '<p class="label mt">Search results</p><p class="err">' + esc(searchError) + "</p>";
+        } else {
+          const ids = searchResults || [];
+          box.innerHTML = '<p class="label mt">Search results</p>' +
+            (ids.length ? ids.map(row).join("") : '<p class="muted small">No one found with that name.</p>');
+        }
+        box.querySelectorAll("[data-person]").forEach((b) => (b.onclick = () => openChat(b.dataset.person)));
+      };
+
+      const runSearch = async (qVal) => {
+        const trimmed = qVal.trim();
+        if (!trimmed) {
+          searching = false; searchError = ""; searchResults = null;
+          const b = panel()?.querySelector("#msg-new-results");
+          if (b) renderResults(b);
+          return;
+        }
+        const mySeq = ++searchSeq;
+        searching = true; searchError = "";
+        const b1 = panel()?.querySelector("#msg-new-results");
+        if (b1) renderResults(b1);
+        const res = await Store.searchProfiles(trimmed);
+        if (mySeq !== searchSeq) return;
+        searching = false;
+        if (res.ok) { searchResults = res.ids; searchError = ""; }
+        else { searchResults = []; searchError = res.message || "Could not search people."; }
+        const b2 = panel()?.querySelector("#msg-new-results");
+        if (b2) renderResults(b2);
+      };
+
+      const existingBox = p.querySelector("#msg-new-results");
+      const existingInp = p.querySelector("[data-pq]");
+      if (existingBox && existingInp && document.activeElement === existingInp) {
+        renderResults(existingBox);
+        return;
+      }
+
       p.innerHTML = '<div class="msg-head"><button class="icon-btn" data-back aria-label="Back">' + icon("left") + '</button><h2 class="grow mb0">New chat</h2><button class="icon-btn" data-hide aria-label="Close messages">' + icon("x") + "</button></div>" +
-        '<div class="msg-body"><input type="search" placeholder="Search people by name" value="' + esc(peopleQuery) + '" data-pq aria-label="Search people">' +
-        '<p class="label mt">' + (peopleQuery ? "Search results" : "People you've shared activities with") + "</p>" + (list.length ? list.map(row).join("") : '<p class="muted small">' + (peopleQuery ? "No one found." : "People you go to activities with show up here. You can also search by name.") + "</p>") + "</div>";
+        '<div class="msg-body"><input type="search" placeholder="Search people by name" value="' + esc(peopleQuery) + '" data-pq aria-label="Search people"><div id="msg-new-results"></div></div>';
       p.querySelector("[data-back]").onclick = () => show("list");
       p.querySelector("[data-hide]").onclick = hide;
-      const q = p.querySelector("[data-pq]"); q.oninput = () => { peopleQuery = q.value; render(); const n = panel().querySelector("[data-pq]"); n.focus(); n.setSelectionRange(n.value.length, n.value.length); };
-      p.querySelectorAll("[data-person]").forEach((b) => (b.onclick = () => openChat(b.dataset.person)));
+      const box = p.querySelector("#msg-new-results");
+      renderResults(box);
+      const qInp = p.querySelector("[data-pq]");
+      qInp.oninput = () => {
+        peopleQuery = qInp.value;
+        if (searchTimer) clearTimeout(searchTimer);
+        if (!peopleQuery.trim()) { runSearch(""); return; }
+        if (!Store.live) { runSearch(peopleQuery); return; }
+        searching = true;
+        renderResults(box);
+        searchTimer = setTimeout(() => runSearch(peopleQuery), 200);
+      };
+      qInp.focus();
     }
-    return { toggle, show, hide, openChat, render, isOpen: () => open };
+
+    return { toggle, show, hide, openChat, refresh, render, isOpen: () => open };
   })();
 
   // ---------- Page mounting ----------
