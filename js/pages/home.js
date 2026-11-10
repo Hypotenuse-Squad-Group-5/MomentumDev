@@ -123,7 +123,9 @@ UI.mount("home", function render() {
 
   document.querySelectorAll("[data-habit]").forEach((b) => (b.onclick = () => {
     const r = Store.toggleHabit(b.dataset.habit);
-    if (r.done) UI.toast(r.streakUp ? "Streak extended to " + Store.streak().current + " days" : "Habit checked", r.points);
+    const days = Store.streak().current;
+    if (r.done) UI.toast(r.streakUp ? "Streak extended to " + days + (days === 1 ? " day" : " days") : "Habit checked", r.points);
+    else UI.toast("Habit unchecked", r.points); // shows -10: unchecking takes the points back
   }));
   const start = document.getElementById("habit-start");
   if (start) start.onclick = () => { habitManage = true; render(); document.querySelector("#add-habit input").focus(); };

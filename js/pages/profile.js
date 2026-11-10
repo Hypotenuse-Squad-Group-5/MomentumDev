@@ -50,6 +50,7 @@
     }
 
     const p = Store.profile(id);
+    Store.loadInterestsFor(id); // interests are readable by signed-in members (migration 012)
     if (!own && profileLoadError && !p.memberSince && p.first === "Someone") {
       document.getElementById("main").innerHTML = `
         <div style="max-width:680px">
@@ -86,7 +87,9 @@
             <div class="grow"><h1 class="mb0">${esc(own || friend ? Store.fullName(id) : p.first)}</h1>
               ${metA ? `<p class="muted small mb0">Met at ${esc(metA.title)}</p>` : ""}
               ${p.memberSince ? `<p class="muted small mb0">Member since ${new Date(p.memberSince).toLocaleDateString(undefined, { month: "long", year: "numeric" })}</p>` : ""}</div></div>
-          ${own || friend ? `${p.bio ? `<p class="mt">${esc(p.bio)}</p>` : ""}<div class="chips mt">${(p.interests || []).map((i) => `<span class="tag">${esc(i)}</span>`).join("")}</div>` : `<p class="muted small mt">You'll see more once you're friends.</p>`}
+          ${(own || friend) && p.bio ? `<p class="mt">${esc(p.bio)}</p>` : ""}
+          ${(p.interests || []).length ? `<div class="chips mt">${p.interests.map((i) => `<span class="tag">${esc(i)}</span>`).join("")}</div>` : ""}
+          ${own || friend ? "" : `<p class="muted small mt">You'll see more once you're friends.</p>`}
           <div class="profile-stats">
             <div><b>${attended}</b><span>Activities</span></div>
             <div><b>${own ? Store.friends().length : friend ? "Friend" : "-"}</b><span>${own ? "Friends" : "Status"}</span></div>
