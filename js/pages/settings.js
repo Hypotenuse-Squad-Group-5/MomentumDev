@@ -21,7 +21,6 @@ UI.mount("settings", function render() {
       ${sel("activityVisibility", "Activities", "Default for new activities", vis)}
       ${sel("friendsListVisibility", "Friends list", "Who can see your friends", vis)}
       ${sel("attendeeDisplay", "On \"Who's going\" lists", "How people who aren't your friends see you", [["first_name", "Show my first name"], ["hidden", "Hide me from non-friends"]])}
-      ${sel("messageRequestsFrom", "Message requests from", "Friends can always message you", [["anyone", "Anyone"], ["shared_activities", "People from shared activities"], ["nobody", "Nobody"]])}
     </section>
     <section class="panel mt">
       <h2>Notifications</h2>

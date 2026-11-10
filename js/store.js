@@ -135,7 +135,7 @@
       lessonsDone: [], habits, checkins, points,
       settings: {
         postVisibility: "friends", activityVisibility: "public", friendsListVisibility: "friends",
-        attendeeDisplay: "first_name", messageRequestsFrom: "anyone",
+        attendeeDisplay: "first_name",
         notifyActivity: true, notifyHabits: true, notifyFriends: true, notifyMessages: true,
         remindersByEmail: false, checkinTime: "21:30", pauseBeforeOpen: false, weeklySummary: true,
       },
@@ -374,6 +374,9 @@
           metAt: r.met_at_activity_id,
           since: r.accepted_at || r.created_at,
         }));
+        state.friendships.filter((f) => f.status === "accepted").forEach((f) => {
+          promoteChatForFriend(f.requesterId === ME ? f.addresseeId : f.requesterId);
+        });
       }
       return state.friendships;
     } catch (e) {
@@ -466,6 +469,7 @@
     f.status = "accepted";
     f.since = now;
     f.metAt = f.metAt || sharedActivityId(f.requesterId);
+    promoteChatForFriend(f.requesterId);
     save();
     return { ok: true };
   }
@@ -914,33 +918,240 @@
   }
 
   // =====================================================================
-  // Messages (SN-4)
+  // Messages (SN-4): 1-on-1 private chats & message requests
   // =====================================================================
+  const RETRY_MS = 7 * 864e5;
   const memberStatus = (c, id) => (c.members.find((m) => m.id === id) || {}).status;
-  function conversations() {
-    return state.conversations.filter((c) => c.members.some((m) => m.id === ME) && memberStatus(c, ME) !== "declined")
-      .sort((a, b) => new Date(last(b).at || 0) - new Date(last(a).at || 0));
-  }
-  const last = (c) => c.messages[c.messages.length - 1] || {};
-  const isRequestToMe = (c) => memberStatus(c, ME) === "requested";
-  function unread(c) { const l = last(c); return !!l.at && l.senderId !== ME && (!c.lastRead[ME] || new Date(l.at) > new Date(c.lastRead[ME])); }
-  function unreadCount() { return conversations().filter((c) => unread(c) || isRequestToMe(c)).length; }
-  function conversation(id) { return state.conversations.find((c) => c.id === id) || null; }
-  function markRead(id) { const c = conversation(id); if (c && unread(c)) { c.lastRead[ME] = nowIso(); save(); } }
-  // Direct chat. Started from an activity ("Message host")? It skips the request step.
-  function openDirect(otherId, activityId) {
-    let c = state.conversations.find((x) => x.kind === "direct" && x.members.length === 2 && x.members.some((m) => m.id === ME) && x.members.some((m) => m.id === otherId));
-    if (c) { if (activityId) c.activityId = activityId; save(); return c; }
-    const needsRequest = !isFriend(otherId) && !activityId;
-    c = { id: uid(), kind: "direct", activityId: activityId || null, members: [{ id: ME, status: "active" }, { id: otherId, status: needsRequest ? "requested" : "active" }], lastRead: { [ME]: nowIso() }, messages: [] };
-    state.conversations.push(c); save(); return c;
-  }
-  function send(convoId, body) {
-    const c = conversation(convoId); if (!c || !body.trim()) return;
-    c.messages.push({ id: uid(), senderId: ME, body: body.trim(), at: nowIso() }); c.lastRead[ME] = nowIso(); save();
-  }
-  function respondRequest(convoId, accept) { const c = conversation(convoId); const m = c && c.members.find((x) => x.id === ME); if (m) { m.status = accept ? "active" : "declined"; c.lastRead[ME] = nowIso(); save(); } }
+  const last = (c) => (c.messages && c.messages[c.messages.length - 1]) || {};
   function otherMember(c) { return (c.members.find((m) => m.id !== ME) || {}).id; }
+  function promoteChatForFriend(otherId) {
+    if (!otherId || !state || !Array.isArray(state.conversations)) return;
+    const c = state.conversations.find((x) => x.kind === "direct" && x.members.length === 2 && x.members.some((m) => m.id === ME) && x.members.some((m) => m.id === otherId));
+    if (c) c.members.forEach((m) => { if (m.status === "requested" || m.status === "declined") m.status = "active"; });
+  }
+  function fromConversationRow(row) {
+    (row.members || []).forEach((m) => {
+      if (m.profile && m.profile_id !== ME) cacheRemoteProfile({ id: m.profile_id, ...m.profile });
+    });
+    const lastRead = {};
+    const members = (row.members || []).map((m) => {
+      if (m.last_read_at) lastRead[m.profile_id] = m.last_read_at;
+      return { id: m.profile_id, status: m.status, lastReadAt: m.last_read_at || null };
+    });
+    const messages = (row.messages || []).map((m) => ({
+      id: m.id, senderId: m.sender_id, body: m.body, at: m.created_at,
+    })).sort((a, b) => new Date(a.at) - new Date(b.at));
+    return {
+      id: row.id,
+      kind: row.kind,
+      activityId: row.activity_id || null,
+      createdAt: row.created_at,
+      members,
+      lastRead,
+      messages,
+      source: "supabase",
+    };
+  }
+  async function loadConversations() {
+    if (!live || !ME) return conversations();
+    try {
+      const q = sb.from("conversations")
+        .select("id, kind, activity_id, created_at, archived_at, members:conversation_members(profile_id, status, joined_at, last_read_at, profile:profiles(id, first_name, bio, avatar_url, created_at)), messages(id, sender_id, body, created_at)");
+      const { data, error } = await (typeof q.eq === "function" ? q.eq("kind", "direct") : q);
+      if (error) {
+        console.warn("Could not load conversations from Supabase (has migration 011 been run?):", error.message);
+        return conversations();
+      }
+      if (Array.isArray(data)) {
+        state.conversations = data.map(fromConversationRow);
+        persist();
+      }
+      return conversations();
+    } catch (e) {
+      console.warn("loadConversations error:", e);
+      return conversations();
+    }
+  }
+  function conversations() {
+    return (state.conversations || [])
+      .filter((c) => c.kind === "direct" && c.members.some((m) => m.id === ME) && c.members.some((m) => m.id !== ME) && memberStatus(c, ME) !== "declined")
+      .sort((a, b) => new Date(last(b).at || b.createdAt || 0) - new Date(last(a).at || a.createdAt || 0));
+  }
+  function findDirect(otherId) {
+    if (!otherId) return null;
+    return (state.conversations || []).find((x) => x.kind === "direct" && x.members.length === 2 && x.members.some((m) => m.id === ME) && x.members.some((m) => m.id === otherId)) || null;
+  }
+  function isRequestToMe(c) {
+    return !!c && c.kind === "direct" && memberStatus(c, ME) === "requested" && !isFriend(otherMember(c));
+  }
+  function isOutgoingPending(c) {
+    if (!c || c.kind !== "direct" || isRequestToMe(c)) return false;
+    const other = otherMember(c);
+    return !isFriend(other) && memberStatus(c, other) === "requested";
+  }
+  function unread(c) { const l = last(c); return !!l.at && l.senderId !== ME && (!c.lastRead || !c.lastRead[ME] || new Date(l.at) > new Date(c.lastRead[ME])); }
+  function unreadConversationsCount() { return conversations().filter((c) => !isRequestToMe(c) && unread(c)).length; }
+  function incomingMessageRequests() { return conversations().filter((c) => isRequestToMe(c)); }
+  function unreadCount() { return conversations().filter((c) => unread(c) || isRequestToMe(c)).length; }
+  function conversation(id) { return (state.conversations || []).find((c) => c.id === id && c.kind === "direct") || null; }
+  function markRead(id, { silent = false } = {}) {
+    const c = conversation(id);
+    if (!c || !unread(c)) return;
+    const ts = nowIso();
+    c.lastRead = c.lastRead || {};
+    c.lastRead[ME] = ts;
+    const meM = c.members.find((m) => m.id === ME);
+    if (meM) meM.lastReadAt = ts;
+    if (silent) persist();
+    else save();
+    if (live && c.source === "supabase") {
+      sb.from("conversation_members")
+        .update({ last_read_at: ts })
+        .eq("conversation_id", id)
+        .eq("profile_id", ME)
+        .then(({ error }) => { if (error) console.warn("markRead error:", error.message); });
+    }
+  }
+  function requestStatusFor(otherId) {
+    const c = findDirect(otherId);
+    const friends = isFriend(otherId);
+    if (!c) {
+      return { kind: friends ? "friend_new" : "request_initial", canSend: true, isRequest: !friends, messagesLeft: friends ? Infinity : 1, retryAt: null };
+    }
+    const mySt = memberStatus(c, ME);
+    const otherSt = memberStatus(c, otherId);
+    if (friends || (mySt === "active" && otherSt === "active")) {
+      return { kind: "active", canSend: true, isRequest: false, messagesLeft: Infinity, retryAt: null };
+    }
+    if (mySt === "requested") {
+      return { kind: "incoming_request", canSend: false, isRequest: true, messagesLeft: 0, retryAt: null };
+    }
+    if (mySt === "declined") {
+      return { kind: "declined_by_me", canSend: false, isRequest: true, messagesLeft: 0, retryAt: null };
+    }
+    if (otherSt === "declined") {
+      return { kind: "declined_by_other", canSend: false, isRequest: true, messagesLeft: 0, retryAt: null };
+    }
+    const msgs = c.messages || [];
+    if (msgs.length === 0) {
+      return { kind: "request_initial", canSend: true, isRequest: true, messagesLeft: 1, retryAt: null };
+    }
+    if (msgs.length === 1) {
+      const firstMs = new Date(msgs[0].at).getTime();
+      const retryMs = firstMs + RETRY_MS;
+      if (Date.now() >= retryMs) {
+        return { kind: "request_followup_ready", canSend: true, isRequest: true, messagesLeft: 1, retryAt: null };
+      }
+      return { kind: "request_waiting", canSend: false, isRequest: true, messagesLeft: 0, retryAt: new Date(retryMs).toISOString() };
+    }
+    return { kind: "request_limit_reached", canSend: false, isRequest: true, messagesLeft: 0, retryAt: null };
+  }
+  async function sendDirectMessage({ recipientId, body, activityId = null }) {
+    if (!recipientId || recipientId === ME) return { ok: false, message: "Choose someone else to message." };
+    const clean = String(body || "").trim();
+    if (!clean) return { ok: false, message: "Write a message first." };
+    if (clean.length > 2000) return { ok: false, message: "Keep messages under 2,000 characters." };
+
+    const st = requestStatusFor(recipientId);
+    if (!st.canSend) {
+      if (st.kind === "incoming_request") return { ok: false, message: "Accept this message request before replying." };
+      if (st.kind === "declined_by_me") return { ok: false, message: "Accept this message request to reply." };
+      if (st.kind === "declined_by_other") return { ok: false, message: "Follow-up messages aren't available for this request." };
+      if (st.kind === "request_waiting") return { ok: false, message: "You can send 1 follow-up message after 7 days if they haven't responded." };
+      return { ok: false, message: "You've already sent your follow-up message. Wait for them to accept." };
+    }
+
+    if (live) {
+      const linkedAct = activityId && activity(activityId)?.source === "supabase" ? activityId : null;
+      const { data, error } = await sb.rpc("send_direct_message", {
+        p_recipient_id: recipientId,
+        p_body: clean,
+        p_activity_id: linkedAct,
+      });
+      if (error || !data || !data.ok) {
+        return { ok: false, message: (error && error.message) || "Could not send message." };
+      }
+      const existing = conversation(data.conversationId);
+      const members = (data.members || []).map((m) => ({ id: m.id, status: m.status, lastReadAt: m.lastReadAt || null }));
+      const lastRead = {};
+      members.forEach((m) => { if (m.lastReadAt) lastRead[m.id] = m.lastReadAt; });
+      if (existing) {
+        existing.activityId = existing.activityId || data.activityId || null;
+        existing.members = members;
+        existing.lastRead = lastRead;
+        if (!existing.messages.some((m) => m.id === data.message.id)) existing.messages.push(data.message);
+      } else {
+        if (!Array.isArray(state.conversations)) state.conversations = [];
+        state.conversations.push({
+          id: data.conversationId,
+          kind: "direct",
+          activityId: data.activityId || null,
+          createdAt: data.createdAt || nowIso(),
+          members,
+          lastRead,
+          messages: [data.message],
+          source: "supabase",
+        });
+      }
+      save();
+      return { ok: true, conversationId: data.conversationId, message: data.message };
+    }
+
+    let c = findDirect(recipientId);
+    const ts = nowIso();
+    if (!c) {
+      c = {
+        id: uid(),
+        kind: "direct",
+        activityId: activityId || null,
+        createdAt: ts,
+        members: [
+          { id: ME, status: "active", lastReadAt: ts },
+          { id: recipientId, status: isFriend(recipientId) ? "active" : "requested", lastReadAt: null },
+        ],
+        lastRead: { [ME]: ts },
+        messages: [],
+        source: "local",
+      };
+      state.conversations.push(c);
+    } else if (isFriend(recipientId) || memberStatus(c, ME) === "declined") {
+      c.members.forEach((m) => (m.status = "active"));
+    }
+    const msg = { id: uid(), senderId: ME, body: clean, at: ts };
+    c.messages.push(msg);
+    c.lastRead = c.lastRead || {};
+    c.lastRead[ME] = ts;
+    const meM = c.members.find((m) => m.id === ME);
+    if (meM) meM.lastReadAt = ts;
+    save();
+    return { ok: true, conversationId: c.id, message: msg };
+  }
+  async function send(convoId, body) {
+    const c = conversation(convoId);
+    if (!c) return { ok: false, message: "Conversation not found." };
+    return sendDirectMessage({ recipientId: otherMember(c), body, activityId: c.activityId });
+  }
+  async function respondRequest(convoId, accept) {
+    const c = conversation(convoId);
+    if (!c) return { ok: false, message: "Message request not found." };
+    if (live) {
+      const { data, error } = await sb.rpc("respond_message_request", { p_conversation_id: convoId, p_accept: !!accept });
+      if (error || !data || !data.ok) {
+        return { ok: false, message: (error && error.message) || "Could not update message request." };
+      }
+    }
+    const ts = nowIso();
+    const m = c.members.find((x) => x.id === ME);
+    if (m) {
+      m.status = accept ? "active" : "declined";
+      m.lastReadAt = ts;
+    }
+    c.lastRead = c.lastRead || {};
+    c.lastRead[ME] = ts;
+    save();
+    return { ok: true, status: accept ? "active" : "declined" };
+  }
+  function openDirect(otherId) { return findDirect(otherId); }
   function shareActivityPeople() {
     const mine = new Set(myCommitmentIds().concat(hosting().map((a) => a.id)));
     const ids = new Set();
@@ -1222,8 +1433,9 @@
       const old = { ...(state.profiles[ME] || {}) };
       ["phone", "address", "zip", "city", "state", "birthday"].forEach((k) => delete old[k]); // removed in migration 008: clear this browser's copy too
       state.profiles[ME] = { ...old, ...me, interests: old.interests || [], attendeeDisplay: state.settings.attendeeDisplay };
+      if (state && state.settings) delete state.settings.messageRequestsFrom;
       state.meId = ME; state.signedIn = true;
-      const [, habitsLoaded, lessonsLoaded] = await Promise.all([loadPointValues(), loadHabitData(), loadLessonData(), loadPosts(), loadInterests(), loadFriendships()]);
+      const [, habitsLoaded, lessonsLoaded] = await Promise.all([loadPointValues(), loadHabitData(), loadLessonData(), loadPosts(), loadInterests(), loadFriendships(), loadConversations()]);
       if (!habitsLoaded || !lessonsLoaded) { loadError = "We couldn't load your saved habits and lesson progress. Please reload to try again."; return "syncerror"; }
       persist();
       return true;
@@ -1280,7 +1492,8 @@
     // social
     loadPosts, createPost, deletePost, setPostVisibility, encouraged, toggleEncourage, feed, historyFor,
     // messages
-    conversations, conversation, unread, unreadCount, isRequestToMe, markRead, openDirect, send, respondRequest,
+    loadConversations, conversations, conversation, findDirect, unread, unreadCount, unreadConversationsCount, incomingMessageRequests,
+    isRequestToMe, isOutgoingPending, requestStatusFor, markRead, openDirect, sendDirectMessage, send, respondRequest,
     otherMember, memberStatus, shareActivityPeople,
     // settings
     setSetting, updateProfile, uploadAvatar, deleteAvatar, interestOptions, signIn, signOut, reset, clearDemo,
