@@ -6,6 +6,7 @@ UI.mount("activities", async function render() {
   const types = await Store.loadTypes();
   const s = Store.state.settings;
   const tomorrow = new Date(Date.now() + 864e5).toISOString().slice(0, 10);
+  const pastHosted = Store.myPastHosted();
 
   // Activity category definitions with emojis and safe fallbacks
   const RAW_CATEGORIES = [
@@ -42,6 +43,26 @@ UI.mount("activities", async function render() {
 
     <form class="panel" id="post-form" novalidate>
       <div class="alert" id="form-error" hidden></div>
+
+      ${pastHosted.length ? `
+      <!-- Re-use previous activity -->
+      <div class="field reuse-field" style="margin-bottom:16px">
+        <label class="reuse-toggle" style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:600">
+          <input type="checkbox" id="reuse-check"> Use info from a previous activity
+        </label>
+        <div id="reuse-picker" hidden style="margin-top:10px">
+          <p class="small muted mb0" style="margin-bottom:6px">Select an activity to pre-fill everything except the date:</p>
+          <div class="stack" id="reuse-list" style="max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;padding:6px">
+            ${pastHosted.map((a) => `
+              <button type="button" class="reuse-item" data-reuse-id="${a.id}" style="display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:8px 10px;border:0;background:none;border-radius:8px;cursor:pointer;font-size:.88rem">
+                <span style="font-size:1.1rem">${CATEGORY_LIST.find((c) => String(c.id) === String((types.find((t) => t.name === a.type) || {}).id)) ? CATEGORY_LIST.find((c) => String(c.id) === String((types.find((t) => t.name === a.type) || {}).id)).emoji : '📋'}</span>
+                <span class="grow"><b>${esc(a.title)}</b><br><span class="small muted">${esc(a.activityName || '')} · ${esc(a.location || '')} · ${new Date(a.startsAt).toLocaleDateString()}</span></span>
+              </button>
+            `).join("")}
+          </div>
+        </div>
+      </div>
+      ` : ""}
 
       <!-- Section 1: Details & Location -->
       <details class="form-section" name="post-section" open>
@@ -187,6 +208,91 @@ UI.mount("activities", async function render() {
     });
   });
 
+  // Re-use previous activity: toggle picker and prefill
+  const reuseCheck = document.getElementById("reuse-check");
+  const reusePicker = document.getElementById("reuse-picker");
+  if (reuseCheck && reusePicker) {
+    reuseCheck.addEventListener("change", () => {
+      reusePicker.hidden = !reuseCheck.checked;
+    });
+
+    document.querySelectorAll(".reuse-item").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const a = Store.activity(btn.dataset.reuseId);
+        if (!a) return;
+
+        // Highlight selected item
+        document.querySelectorAll(".reuse-item").forEach((b) => (b.style.background = "none"));
+        btn.style.background = "var(--primary-soft, oklch(0.92 0.04 181))";
+
+
+        // Fill standard text inputs
+        const setVal = (id, v) => { const el = form.querySelector("#" + id); if (el) el.value = v || ""; };
+        setVal("title", a.title);
+        setVal("activityName", a.activityName);
+        setVal("location", a.location);
+        setVal("city", a.city);
+        setVal("description", a.description);
+        setVal("bring", a.bring);
+        setVal("min", a.min);
+        setVal("max", a.max);
+
+        // Fetch exact address (handles local state or live Supabase fallback)
+        let exactAddr = Store.address(a.id);
+        if (!exactAddr && Store.live && window.supabase) {
+          window.supabase.from("activity_addresses")
+            .select("exact_address")
+            .eq("activity_id", a.id)
+            .maybeSingle()
+            .then(({ data }) => {
+              if (data && data.exact_address) {
+                const addrEl = form.querySelector("#address");
+                if (addrEl) addrEl.value = data.exact_address;
+              }
+            });
+        } else {
+          setVal("address", exactAddr || "");
+        }
+
+        // Select the matching activity category chip
+        const matchedType = types.find((t) => t.name === a.type);
+        if (matchedType) {
+          hiddenTypeId.value = matchedType.id;
+          typeChips.forEach((c) => c.classList.toggle("active", String(c.dataset.id) === String(matchedType.id)));
+        }
+
+        // Set start / end time from the stored ISO timestamps
+        const sDate = new Date(a.startsAt);
+        const eDate = new Date(a.endsAt);
+        const to12 = (d) => {
+          let h = d.getHours(), ampm = "AM";
+          if (h >= 12) { ampm = "PM"; if (h > 12) h -= 12; }
+          if (h === 0) h = 12;
+          return { h, m: d.getMinutes(), ampm };
+        };
+        const sT = to12(sDate), eT = to12(eDate);
+        startTimeCtrl.setTime(sT.h, sT.m, sT.ampm);
+        endTimeCtrl.setTime(eT.h, eT.m, eT.ampm);
+
+        // Set visibility radio
+        if (a.visibility) {
+          const radio = form.querySelector(`input[name=visibility][value="${a.visibility}"]`);
+          if (radio) radio.checked = true;
+        }
+
+        // Clear errors
+        form.querySelectorAll("[data-f]").forEach((f) => { f.classList.remove("invalid"); const err = f.querySelector(".err"); if (err) err.hidden = true; });
+        const banner = document.getElementById("form-error"); if (banner) banner.hidden = true;
+
+        // Open the first section so they can review
+        const firstSec = form.querySelector("details.form-section");
+        if (firstSec) firstSec.open = true;
+
+        UI.toast(`Pre-filled from "" + a.title + "". Just pick a new date!`);
+      });
+    });
+  }
+
   // Single-select Activity Category chips
   const hiddenTypeId = form.querySelector("#typeId");
   const typeChips = form.querySelectorAll(".type-chip");
@@ -213,7 +319,7 @@ UI.mount("activities", async function render() {
     const textInput = form.querySelector(`#${type}-time`);
     const hiddenInput = form.querySelector(`#${type}`);
     const toggle = form.querySelector(`.ampm-toggle[data-for="${type}"]`);
-    if (!textInput || !hiddenInput || !toggle) return { setTime: () => {} };
+    if (!textInput || !hiddenInput || !toggle) return { setTime: () => { } };
 
     let ampm = defaultAmpm;
 

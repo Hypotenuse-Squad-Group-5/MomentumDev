@@ -106,14 +106,22 @@
 
     const msg = (who, body, hoursAgo) => ({ id: uid(), senderId: who, body, at: ago(0, hoursAgo) });
     const conversations = [
-      { id: uid(), kind: "direct", activityId: A(1), members: [{ id: ME, status: "active" }, { id: P.mia, status: "active" }], lastRead: { [ME]: ago(1) },
-        messages: [msg(P.mia, "Hey! Glad you're coming to game night", 26), msg(ME, "Wouldn't miss it", 25), msg(P.mia, "Are you bringing Codenames?", 2)] },
-      { id: uid(), kind: "activity_group", activityId: A(1), members: [ME, P.mia, P.jake, P.sam, P.riley].map((id) => ({ id, status: "active" })), lastRead: { [ME]: ago(1) },
-        messages: [msg(P.jake, "Parking is on the north side", 9), msg(P.mia, "I'll have chips and salsa", 5)] },
-      { id: uid(), kind: "direct", activityId: null, members: [{ id: ME, status: "active" }, { id: P.jake, status: "active" }], lastRead: { [ME]: nowIso() },
-        messages: [msg(P.jake, "You in for the hike?", 70), msg(ME, "See you at the trailhead", 69)] },
-      { id: uid(), kind: "direct", activityId: null, members: [{ id: P.sam, status: "active" }, { id: ME, status: "requested" }], lastRead: {},
-        messages: [msg(P.sam, "Hey, I think we were both at the potluck. Want to grab a spot at sketching on Thursday?", 20)] },
+      {
+        id: uid(), kind: "direct", activityId: A(1), members: [{ id: ME, status: "active" }, { id: P.mia, status: "active" }], lastRead: { [ME]: ago(1) },
+        messages: [msg(P.mia, "Hey! Glad you're coming to game night", 26), msg(ME, "Wouldn't miss it", 25), msg(P.mia, "Are you bringing Codenames?", 2)]
+      },
+      {
+        id: uid(), kind: "activity_group", activityId: A(1), members: [ME, P.mia, P.jake, P.sam, P.riley].map((id) => ({ id, status: "active" })), lastRead: { [ME]: ago(1) },
+        messages: [msg(P.jake, "Parking is on the north side", 9), msg(P.mia, "I'll have chips and salsa", 5)]
+      },
+      {
+        id: uid(), kind: "direct", activityId: null, members: [{ id: ME, status: "active" }, { id: P.jake, status: "active" }], lastRead: { [ME]: nowIso() },
+        messages: [msg(P.jake, "You in for the hike?", 70), msg(ME, "See you at the trailhead", 69)]
+      },
+      {
+        id: uid(), kind: "direct", activityId: null, members: [{ id: P.sam, status: "active" }, { id: ME, status: "requested" }], lastRead: {},
+        messages: [msg(P.sam, "Hey, I think we were both at the potluck. Want to grab a spot at sketching on Thursday?", 20)]
+      },
     ];
 
     const habits = [
@@ -1336,8 +1344,10 @@
   function clearDemo() {
     const full = seed();
     const me = live ? state.profiles[ME] : { ...full.profiles[ME], bio: "", interests: [] };
-    state = { ...full, empty: true, signedIn: true, profiles: { [ME]: me }, friendships: [], activities: [], addresses: {},
-      rsvps: [], guests: [], reports: [], posts: [], encouragements: [], conversations: [], lessonsDone: [], habits: [], checkins: [], points: [] };
+    state = {
+      ...full, empty: true, signedIn: true, profiles: { [ME]: me }, friendships: [], activities: [], addresses: {},
+      rsvps: [], guests: [], reports: [], posts: [], encouragements: [], conversations: [], lessonsDone: [], habits: [], checkins: [], points: []
+    };
     actCache = null; persist(); loadActivities().then(emit);
   }
 
@@ -1347,8 +1357,10 @@
   // =====================================================================
   const PROVO = { lat: 40.2338, lng: -111.6585 }; // map/distance fallback until we geocode addresses
   function emptyStateFor(me) {
-    return { ...seed(), empty: true, signedIn: true, meId: me.id, profiles: { [me.id]: me }, friendships: [], activities: [], addresses: {},
-      rsvps: [], guests: [], reports: [], posts: [], encouragements: [], conversations: [], lessonsDone: [], habits: [], checkins: [], points: [] };
+    return {
+      ...seed(), empty: true, signedIn: true, meId: me.id, profiles: { [me.id]: me }, friendships: [], activities: [], addresses: {},
+      rsvps: [], guests: [], reports: [], posts: [], encouragements: [], conversations: [], lessonsDone: [], habits: [], checkins: [], points: []
+    };
   }
   function profileFromRows(p, pp) {
     pp = pp || {};
@@ -1480,6 +1492,7 @@
     today, dayKey, addDays,
     // activities
     loadActivities, allActivities: () => actCache || [], loadTypes, validateActivity, createActivity, activity, isPast, attendees, spotsTaken,
+    myPastHosted: () => (actCache || []).filter((a) => a.hostId === ME).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)),
     myRsvp, myGuestInvite, isGoing, myCommitments, myCommitmentIds, hosting, conflictFor, commit, cancel, canCancel,
     cancellationsLeft, plusOneInvites, respondPlusOne, checkIn, needsCheckIn, address: (id) => state.addresses[id] || null,
     report, saveReport,
