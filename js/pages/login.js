@@ -51,7 +51,7 @@
     main.innerHTML = `
     <div class="auth-wrap"><div class="auth-card">
       <section class="auth-hero">
-        <a class="row" href="index.html" style="text-decoration:none" aria-label="Momentum home"><span class="brand-mark" style="background:oklch(1 0 0 / 18%)">M</span><span class="brand-name">Momentum</span></a>
+        <a class="row" href="index.html" style="text-decoration:none" aria-label="Momentum home"><span class="brand-mark on-primary"><img src="img/logo.svg" alt=""></span><span class="brand-name">Momentum</span></a>
         <div><p style="opacity:.75;font-weight:600">Less scrolling. More living.</p><h1>Make room for what feels real.</h1><p style="opacity:.8">Build better phone habits, find things to do nearby, and show up for them with real people.</p></div>
         <p class="small" style="opacity:.65;margin:0">Private by default · Built for meeting in person</p>
       </section>

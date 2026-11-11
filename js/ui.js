@@ -32,11 +32,13 @@
     userPlus: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6"/><path d="M22 11h-6"/>',
     download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/>',
     edit: '<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
+    post: '<path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.375 2.625a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-.853.505l-2.873.84a.5.5 0 0 1-.62-.62l.84-2.873a2 2 0 0 1 .506-.852z"/>',
     alert: '<circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/>',
     image: '<rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>',
     star: '<path d="M12 3l2.6 5.6 6.1.7-4.5 4.2 1.2 6L12 16.6 6.6 19.5l1.2-6L3.3 9.3l6.1-.7z"/>',
     trash: '<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/>',
     refresh: '<path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/>',
+    ban: '<circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/>',
   };
   const icon = (name, cls = "") => '<svg class="i ' + cls + '" viewBox="0 0 24 24" aria-hidden="true">' + (ICONS[name] || "") + "</svg>";
 
@@ -154,7 +156,7 @@
 
   function headerHtml() {
     const s = Store.stats(); const u = Store.unreadCount();
-    return '<a href="home.html" class="brand" aria-label="Momentum home"><span class="brand-mark">M</span><span class="brand-name">Momentum</span></a>' +
+    return '<a href="home.html" class="brand" aria-label="Momentum home"><span class="brand-mark"><img src="img/logo.svg" alt=""></span><span class="brand-name">Momentum</span></a>' +
       '<a href="streak.html" class="streak-chip" title="Your streak and points">' + icon("flame", "sm") + s.streak + "</a>" +
       '<button class="icon-btn" id="msg-toggle" aria-label="Messages" aria-expanded="false">' + icon("message") + (u ? '<span class="badge">' + u + "</span>" : "") + "</button>" +
       '<a href="settings.html" class="icon-btn" aria-label="Settings">' + icon("settings") + "</a>" +
@@ -166,8 +168,8 @@
   const shellKey = () => { const id = Store.savedLogin(); return id && id !== "saved" ? "momentum.shell." + id : null; };
   function readShell() { try { const k = shellKey(); return k ? JSON.parse(localStorage.getItem(k)) : null; } catch (e) { return null; } }
   function saveShell(data) { try { const k = shellKey(); if (k) localStorage.setItem(k, JSON.stringify(data)); } catch (e) { /* ignore */ } }
-  const BRAND_ONLY = '<a href="home.html" class="brand" aria-label="Momentum home"><span class="brand-mark">M</span><span class="brand-name">Momentum</span></a>';
-  const LOADER = '<div class="page-loader" role="status" aria-label="Loading"><span class="brand-mark loader-mark">M</span></div>';
+  const BRAND_ONLY = '<a href="home.html" class="brand" aria-label="Momentum home"><span class="brand-mark"><img src="img/logo.svg" alt=""></span><span class="brand-name">Momentum</span></a>';
+  const LOADER = '<div class="page-loader" role="status" aria-label="Loading"><span class="brand-mark loader-mark"><img src="img/logo.svg" alt=""></span></div>';
 
   let currentPageKey = null, shellReady = false;
   function buildShell(pageKey) {
@@ -246,6 +248,7 @@
         await Promise.all([
           Store.loadConversations ? Store.loadConversations() : Promise.resolve(),
           Store.loadFriendships ? Store.loadFriendships(true) : Promise.resolve(),
+          Store.loadBlocks ? Store.loadBlocks() : Promise.resolve(),
         ]);
         if (view === "thread" && !convoId && draftOtherId) {
           const found = Store.findDirect(draftOtherId);
@@ -368,6 +371,57 @@
       q.oninput = () => { query = q.value; renderItems(listBox); };
     }
 
+    function confirmBlock(otherId) {
+      if (!otherId || otherId === Store.ME) return;
+      const name = displayName(otherId);
+      modal(
+        "<h2>Block " + esc(name) + "?</h2>" +
+        "<p>They won't be notified, and neither of you will be able to message each other. This conversation will be hidden from your Messages list.</p>" +
+        '<p class="hint">You can unblock them anytime in Settings or on their profile.</p>' +
+        '<div class="modal-actions"><button type="button" class="btn" data-close>Cancel</button><button type="button" class="btn btn-danger" id="do-block">Block</button></div>',
+        {
+          onMount(m, close) {
+            const btn = m.querySelector("#do-block");
+            btn.onclick = async () => {
+              btn.disabled = true;
+              const wasFriend = Store.isFriend(otherId);
+              const res = await Store.blockUser(otherId);
+              close();
+              if (!res.ok) {
+                toast(res.message || "Could not block this user");
+                return;
+              }
+              if (open && view === "thread") {
+                show("list");
+              }
+              if (wasFriend) {
+                const full = Store.fullName(otherId);
+                modal(
+                  "<h2>" + esc(full) + " is blocked</h2>" +
+                  "<p>They can no longer message you. Since you're currently friends, would you also like to unfriend " + esc(full) + "?</p>" +
+                  '<div class="modal-actions"><button type="button" class="btn" data-close>Keep as friend</button><button type="button" class="btn btn-danger" id="do-block-unfriend">Unfriend</button></div>',
+                  {
+                    onMount(m2, close2) {
+                      const uf = m2.querySelector("#do-block-unfriend");
+                      uf.onclick = async () => {
+                        uf.disabled = true;
+                        const r2 = await Store.removeFriend(otherId);
+                        close2();
+                        if (r2.ok) toast("Blocked and removed from friends");
+                        else toast(r2.message || "Blocked, but could not unfriend");
+                      };
+                    },
+                  }
+                );
+              } else {
+                toast(name + " blocked");
+              }
+            };
+          },
+        }
+      );
+    }
+
     function renderThread(p) {
       const c = convoId ? Store.conversation(convoId) : null;
       if (convoId && !c) return show("list");
@@ -386,9 +440,13 @@
       let noticeHtml = "";
       let footerHtml = "";
 
-      if (st.kind === "incoming_request") {
+      if (st.kind === "blocked_by_me") {
+        footerHtml = '<div class="msg-locked msg-blocked-bar"><span>You blocked ' + esc(name) + '.</span><button type="button" class="btn btn-sm" data-unblock>Unblock</button></div>';
+      } else if (st.kind === "blocked_by_other") {
+        footerHtml = '<div class="msg-locked">Messaging this person is currently unavailable.</div>';
+      } else if (st.kind === "incoming_request") {
         noticeHtml = '<div class="alert info mb0">' + icon("lock", "sm") + "<span><b>" + esc(name) + "</b> isn't your friend yet. Accept to reply and move this chat to Conversations.</span></div>";
-        footerHtml = '<div class="msg-request-actions"><button class="btn btn-primary grow" data-accept' + (responding ? " disabled" : "") + '>Accept</button><button class="btn grow" data-decline' + (responding ? " disabled" : "") + ">Decline</button></div>";
+        footerHtml = '<div class="msg-request-actions"><button class="btn btn-primary grow" data-accept' + (responding ? " disabled" : "") + '>Accept</button><button class="btn grow" data-decline' + (responding ? " disabled" : "") + '>Decline</button><button class="btn btn-danger" data-block' + (responding ? " disabled" : "") + ">Block</button></div>";
       } else if (st.kind === "declined_by_me") {
         noticeHtml = '<div class="alert info mb0">' + icon("lock", "sm") + "<span>You previously declined this message request from <b>" + esc(name) + "</b>.</span></div>";
         footerHtml = '<div class="msg-request-actions"><button class="btn btn-primary btn-block" data-accept' + (responding ? " disabled" : "") + ">Accept &amp; move to Conversations</button></div>";
@@ -414,14 +472,23 @@
       const prevSel = hadComposerFocus ? existingComposer.selectionStart : null;
       const shouldFocusComposer = !sameThreadComposer || hadComposerFocus;
 
+      const emptyMsg = st.kind === "blocked_by_me"
+        ? '<p class="muted small center">You\'ve blocked ' + esc(name) + " from messaging you.</p>"
+        : st.kind === "blocked_by_other"
+          ? '<p class="muted small center">No messages yet.</p>'
+          : '<p class="muted small center">Say hi to ' + esc(name) + "." + (a ? " This chat is linked to " + esc(a.title) + "." : "") + "</p>";
+
       const bubblesHtml = msgs.length
         ? '<div class="thread">' + msgs.map((m) => '<div class="bubble' + (m.senderId === Store.ME ? " me" : "") + '">' + esc(m.body) + "</div>").join("") + "</div>"
-        : '<p class="muted small center">Say hi to ' + esc(name) + "." + (a ? " This chat is linked to " + esc(a.title) + "." : "") + "</p>";
+        : emptyMsg;
+
+      const showHeaderBlock = !Store.hasBlocked || !Store.hasBlocked(other);
 
       p.innerHTML = '<div class="msg-head"><button class="icon-btn" data-back aria-label="Back">' + icon("left") + "</button>" +
         avatar(other, "sm", true) +
         '<div class="grow"><a href="profile.html?id=' + esc(other) + '" style="text-decoration:none"><b>' + esc(name) + "</b></a>" +
         (a ? '<div><a class="context-pill" href="activity.html?id=' + esc(a.id) + '">' + icon("activity", "sm") + "About: " + esc(a.title) + "</a></div>" : "") + "</div>" +
+        (showHeaderBlock ? '<button class="icon-btn" data-block aria-label="Block ' + esc(name) + '" title="Block ' + esc(name) + '">' + icon("ban", "sm") + "</button>" : "") +
         '<button class="icon-btn' + (refreshing ? " spinning" : "") + '" data-refresh aria-label="Refresh messages" title="Refresh messages"' + (refreshing ? " disabled" : "") + ">" + icon("refresh", "sm") + "</button>" +
         '<button class="icon-btn" data-hide aria-label="Close messages">' + icon("x") + "</button></div>" +
         '<div class="msg-body">' +
@@ -433,6 +500,9 @@
       p.querySelector("[data-back]").onclick = () => show("list");
       p.querySelector("[data-hide]").onclick = hide;
       p.querySelector("[data-refresh]").onclick = () => refresh(false);
+      p.querySelectorAll("[data-block]").forEach((b) => (b.onclick = () => confirmBlock(other)));
+      const unb = p.querySelector("[data-unblock]");
+      if (unb) unb.onclick = () => confirmUnblock(other);
 
       const acc = p.querySelector("[data-accept]");
       if (acc) {
@@ -477,8 +547,13 @@
           sending = false;
           if (!res.ok) {
             toast(res.message || "Could not send message");
-            inp.disabled = false; btn.disabled = false;
-            inp.focus();
+            const latestSt = Store.requestStatusFor(other);
+            if (!latestSt.canSend) {
+              render();
+            } else {
+              inp.disabled = false; btn.disabled = false;
+              inp.focus();
+            }
             return;
           }
           inp.value = "";
@@ -509,9 +584,10 @@
         const q = peopleQuery.trim();
         const row = (id) => {
           const isF = Store.isFriend(id);
+          const blockedByMe = Store.hasBlocked && Store.hasBlocked(id);
           const existing = Store.findDirect(id);
           const isActive = existing && Store.memberStatus(existing, Store.ME) === "active" && Store.memberStatus(existing, id) === "active";
-          const sub = isF ? "Friend" : isActive ? "Active conversation" : "Not a friend · sends a message request";
+          const sub = blockedByMe ? "Blocked" : isF ? "Friend" : isActive ? "Active conversation" : "Not a friend · sends a message request";
           return '<button class="convo-item" data-person="' + id + '">' + avatar(id, "sm") +
             '<span class="grow"><span class="name">' + esc(isF ? Store.fullName(id) : Store.profile(id).first) + "</span>" +
             '<span class="preview" style="display:block">' + esc(sub) + "</span></span></button>";
@@ -616,9 +692,35 @@
     Store.subscribe(() => { renderHeader(); Messages.render(); if (opts.live !== false) render(); });
   }
 
+  function confirmUnblock(otherId, { onUnblocked } = {}) {
+    if (!otherId || otherId === Store.ME) return;
+    const name = displayName(otherId);
+    modal(
+      "<h2>Unblock " + esc(name) + "?</h2>" +
+      "<p>You and " + esc(name) + " will be able to message each other again.</p>" +
+      '<div class="modal-actions"><button type="button" class="btn" data-close>Cancel</button><button type="button" class="btn btn-primary" id="do-unblock">Unblock</button></div>',
+      {
+        onMount(m, close) {
+          const btn = m.querySelector("#do-unblock");
+          btn.onclick = async () => {
+            btn.disabled = true;
+            const res = await Store.unblockUser(otherId);
+            close();
+            if (!res.ok) {
+              toast(res.message || "Could not unblock this user");
+              return;
+            }
+            toast(name + " unblocked");
+            if (onUnblocked) onUnblocked();
+          };
+        },
+      }
+    );
+  }
+
   window.UI = {
     icon, esc, fmtDay, fmtTime, fmtRange, fmtAgo, dateBadge, VIS, visSelect, distanceMi, fmtMi, qs, words,
-    avatar, displayName, nameLink, initials, toast, flash, modal, alertModal, addToCalendarModal, calendarLinks,
+    avatar, displayName, nameLink, initials, toast, flash, modal, alertModal, confirmUnblock, addToCalendarModal, calendarLinks,
     Messages, mount, renderHeader,
   };
 })();

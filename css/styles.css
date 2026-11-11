@@ -92,12 +92,13 @@ svg.i.lg { width: 28px; height: 28px; }
   -webkit-backdrop-filter: blur(18px);
 }
 .brand { display: flex; align-items: center; gap: 8px; margin-right: auto; text-decoration: none; }
+/* The logo (img/logo.svg, which carries its own teal tile). Swap that one file to change it everywhere. */
 .brand-mark {
-  display: grid; place-items: center;
-  width: 34px; height: 34px; border-radius: 9px;
-  background: var(--primary); color: var(--primary-fg);
-  font-family: var(--font-display); font-weight: 700;
+  display: block; flex-shrink: 0;
+  width: 34px; height: 34px; border-radius: 23%;
 }
+.brand-mark img { display: block; width: 100%; height: 100%; }
+.brand-mark.on-primary { box-shadow: 0 0 0 1.5px oklch(1 0 0 / 55%); } /* teal tile on a teal panel (login) */
 .brand-name { font-family: var(--font-display); font-size: 1.12rem; font-weight: 600; }
 .icon-btn {
   position: relative;
@@ -550,6 +551,7 @@ details.form-section[open] .form-section-chevron {
 .composer input { flex: 1; }
 .msg-request-actions { display: flex; gap: 8px; padding: 12px 14px; border-top: 1px solid var(--border); background: var(--glass); }
 .msg-locked { padding: 12px 14px; border-top: 1px solid var(--border); background: var(--muted); color: var(--muted-fg); font-size: .84rem; text-align: center; }
+.msg-locked.msg-blocked-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; text-align: left; }
 .context-pill { display: inline-flex; gap: 6px; align-items: center; padding: 4px 10px; border-radius: 999px; background: var(--goal); font-size: .76rem; font-weight: 600; }
 .icon-btn.spinning svg { animation: msgspin .7s linear infinite; }
 @keyframes msgspin { to { transform: rotate(360deg); } }
@@ -672,7 +674,7 @@ details.event[open] > summary { border-bottom: 1px solid var(--border); }
 /* ---------- Page loading ---------- */
 /* Centered "M" that fades in only if loading takes longer than ~1/4 second, so fast loads show nothing. */
 .page-loader { min-height: 55vh; display: grid; place-items: center; opacity: 0; animation: loader-in 0s ease 0s forwards; }
-.loader-mark { width: 54px; height: 54px; border-radius: 15px; font-size: 1.6rem; animation: loader-beat 1s ease-in-out infinite; }
+.loader-mark { width: 54px; height: 54px; animation: loader-beat 1s ease-in-out infinite; }
 @keyframes loader-in { to { opacity: 1; } }
 @keyframes loader-beat {
   0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 oklch(0.58 0.12 181 / 55%); }
