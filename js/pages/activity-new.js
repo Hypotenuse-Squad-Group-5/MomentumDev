@@ -1,5 +1,5 @@
 /* Post an activity: THE VERTICAL SLICE.
-   Submits to Supabase when js/config.js has keys; otherwise saves in this browser.
+   Submits to Supabase. Categories come from the activity_types table.
    PL-6: missing/invalid fields block posting, are flagged, and everything typed stays put. */
 UI.mount("activities", async function render() {
   const { icon, esc } = UI;
@@ -7,32 +7,9 @@ UI.mount("activities", async function render() {
   const s = Store.state.settings;
   const tomorrow = new Date(Date.now() + 864e5).toISOString().slice(0, 10);
 
-  // Activity category definitions with emojis and safe fallbacks
-  const RAW_CATEGORIES = [
-    { name: "Outdoors · Active", emoji: "🏐", match: ["outdoor", "active"], fallbackId: 2 },
-    { name: "Outdoors · Relaxed", emoji: "🌲", match: ["outdoor", "relaxed"], fallbackId: 1 },
-    { name: "Indoors · Relaxed", emoji: "🎲", match: ["indoor", "relaxed"], fallbackId: 3 },
-    { name: "Indoors · Active", emoji: "🎳", match: ["indoor", "active"], fallbackId: 4 },
-    { name: "Food & Social", emoji: "🍎", match: ["food"], fallbackId: 5 },
-    { name: "Learning & Creative", emoji: "🎨", match: ["learn"], fallbackId: 6 },
-    { name: "Wellness & Mindfulness", emoji: "🧘", match: ["well", "mindful"], fallbackId: 1 },
-    { name: "Volunteering & Service", emoji: "🤝", match: ["volunteer", "service"], fallbackId: 5 },
-    { name: "Gaming & Esports", emoji: "🎮", match: ["gaming", "esport"], fallbackId: 3 },
-    { name: "Professional & Tech", emoji: "💻", match: ["tech", "profess"], fallbackId: 6 },
-    { name: "Other", emoji: "✨", match: ["other"], fallbackId: 6 },
-  ];
-
-  const CATEGORY_LIST = RAW_CATEGORIES.map((cat) => {
-    const found = types.find((t) => {
-      const lower = t.name.toLowerCase();
-      return cat.match.every((m) => lower.includes(m));
-    });
-    return {
-      id: found ? found.id : cat.fallbackId,
-      name: cat.name,
-      emoji: cat.emoji,
-    };
-  });
+  // Activity categories come from the activity_types table (name, emoji, sort_order).
+  // To add, rename, reorder or change an emoji, edit that table in Supabase. No code change needed.
+  const CATEGORY_LIST = types.map((t) => ({ id: t.id, name: t.name, emoji: t.emoji || "" }));
 
   // Time choices: "-:--" (blank) plus 48 times in 15-minute steps, 6:00 through 5:45. AM/PM is the toggle beside it.
   const TIME_OPTIONS = '<option value="">-:--</option>' + [6, 7, 8, 9, 10, 11, 12, 1, 2, 3, 4, 5]
@@ -63,7 +40,7 @@ UI.mount("activities", async function render() {
             <div class="chips type-chips" id="type-chips">
               ${CATEGORY_LIST.map((c) => `
                 <button type="button" class="chip type-chip" data-id="${c.id}">
-                  <span class="chip-emoji">${c.emoji}</span>
+                  <span class="chip-emoji">${esc(c.emoji)}</span>
                   <span>${esc(c.name)}</span>
                 </button>
               `).join("")}

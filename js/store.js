@@ -174,7 +174,8 @@
 
   async function loadTypes() {
     if (typeCache) return typeCache;
-    const { data, error } = await sb.from("activity_types").select("id,name").order("id");
+    const { data, error } = await sb.from("activity_types").select("id,name,emoji,sort_order")
+      .order("sort_order", { ascending: true, nullsFirst: false }).order("id");
     typeCache = error ? [] : data;
     return typeCache;
   }
@@ -1297,7 +1298,7 @@
     subscribe: (fn) => { listeners.add(fn); return () => listeners.delete(fn); },
     today, dayKey, addDays,
     // activities
-    loadActivities, allActivities: () => actCache || [], loadTypes, validateActivity, createActivity, activity, isPast, attendees, spotsTaken,
+    loadActivities, allActivities: () => actCache || [], loadTypes, types: () => typeCache || [], validateActivity, createActivity, activity, isPast, attendees, spotsTaken,
     myRsvp, myGuestInvite, isGoing, myCommitments, myCommitmentIds, hosting, conflictFor, commit, cancel, canCancel,
     cancellationsLeft, plusOneInvites, respondPlusOne, checkIn, needsCheckIn, address: (id) => state.addresses[id] || null,
     report, saveReport,

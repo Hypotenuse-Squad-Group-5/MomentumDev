@@ -592,7 +592,7 @@
       return;
     }
     if (opts.shell !== false) buildShell(pageKey);
-    await Promise.all([Store.loadActivities(), Store.loadPosts()]);
+    await Promise.all([Store.loadActivities(), Store.loadPosts(), Store.loadTypes()]);
     render();
     showFlash();
     if (Store.loadError && pageKey !== "activities") toast("Couldn't reach Supabase. Check js/config.js.");
