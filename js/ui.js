@@ -156,7 +156,7 @@
 
   function headerHtml() {
     const s = Store.stats(); const u = Store.unreadCount();
-    return '<a href="home.html" class="brand" aria-label="Momentum home"><span class="brand-mark">M</span><span class="brand-name">Momentum</span></a>' +
+    return '<a href="home.html" class="brand" aria-label="Momentum home"><span class="brand-mark"><img src="img/logo.svg" alt=""></span><span class="brand-name">Momentum</span></a>' +
       '<a href="streak.html" class="streak-chip" title="Your streak and points">' + icon("flame", "sm") + s.streak + "</a>" +
       '<button class="icon-btn" id="msg-toggle" aria-label="Messages" aria-expanded="false">' + icon("message") + (u ? '<span class="badge">' + u + "</span>" : "") + "</button>" +
       '<a href="settings.html" class="icon-btn" aria-label="Settings">' + icon("settings") + "</a>" +
@@ -168,8 +168,8 @@
   const shellKey = () => { const id = Store.savedLogin(); return id && id !== "saved" ? "momentum.shell." + id : null; };
   function readShell() { try { const k = shellKey(); return k ? JSON.parse(localStorage.getItem(k)) : null; } catch (e) { return null; } }
   function saveShell(data) { try { const k = shellKey(); if (k) localStorage.setItem(k, JSON.stringify(data)); } catch (e) { /* ignore */ } }
-  const BRAND_ONLY = '<a href="home.html" class="brand" aria-label="Momentum home"><span class="brand-mark">M</span><span class="brand-name">Momentum</span></a>';
-  const LOADER = '<div class="page-loader" role="status" aria-label="Loading"><span class="brand-mark loader-mark">M</span></div>';
+  const BRAND_ONLY = '<a href="home.html" class="brand" aria-label="Momentum home"><span class="brand-mark"><img src="img/logo.svg" alt=""></span><span class="brand-name">Momentum</span></a>';
+  const LOADER = '<div class="page-loader" role="status" aria-label="Loading"><span class="brand-mark loader-mark"><img src="img/logo.svg" alt=""></span></div>';
 
   let currentPageKey = null, shellReady = false;
   function buildShell(pageKey) {
