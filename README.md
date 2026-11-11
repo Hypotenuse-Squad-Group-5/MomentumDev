@@ -64,5 +64,8 @@ The merged site preserves the public landing and About & Privacy pages, current 
 
 The interactive lesson slice is integrated into `main` while preserving its newer landing, account, and profile-photo work. `lesson/progress-sync` remains a separate historical branch; coordinate with its owner before merging overlapping Store changes.
 
-## Team handoff
+## Level 0 Diagram
 <img width="2337" height="1528" alt="Sprint Retrospective (Team 2-5)" src="https://github.com/user-attachments/assets/1e953dd6-277e-478c-8f67-e3c58d4461ae" />
+
+## Level 1 Diagram
+<img width="2555" height="1774" alt="Sprint Retrospective (Team 2-5) (1)" src="https://github.com/user-attachments/assets/c736f8a3-dc73-46a6-ab38-5f302c60eac0" />
