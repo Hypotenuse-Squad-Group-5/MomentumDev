@@ -66,6 +66,7 @@
     const f = Store.friends().find((x) => x.id === id);
     const metA = f && f.metAt && Store.activity(f.metAt);
     const pending = !own && !friend && Store.friendshipWith(id);
+    const blockedByMe = !own && Store.hasBlocked && Store.hasBlocked(id);
     if (compose.visibility === null) compose.visibility = Store.state.settings.postVisibility;
 
     // Non-friends see public hosted activities and public posts
@@ -97,9 +98,13 @@
           </div>
           <div class="row mt">${own
             ? `<button class="btn btn-primary" id="open-compose">${icon("camera", "sm")}Share a post</button><a class="btn" href="activity-new.html">${icon("plus", "sm")}Post an activity</a><a class="btn btn-ghost" href="settings.html#profile">${icon("edit", "sm")}Edit profile</a>`
-            : friend ? `<button class="btn btn-primary" id="msg">${icon("message", "sm")}Message</button><button class="btn btn-danger btn-sm" id="remove-friend">Remove friend</button>`
-            : pending && pending.requesterId === Store.ME ? `<span class="tag grey">Request sent</span><button class="btn btn-ghost btn-sm" id="cancel-req">Cancel request</button>`
-            : pending && pending.addresseeId === Store.ME ? `<button class="btn btn-primary btn-sm" id="accept-req">Accept friend request</button><button class="btn btn-ghost btn-sm" id="decline-req">Decline</button>`
+            : friend
+              ? (blockedByMe
+                  ? `<span class="tag grey">Blocked</span><button class="btn btn-sm" id="unblock-user">Unblock</button><button class="btn btn-danger btn-sm" id="remove-friend">Remove friend</button>`
+                  : `<button class="btn btn-primary" id="msg">${icon("message", "sm")}Message</button><button class="btn btn-danger btn-sm" id="remove-friend">Remove friend</button>`)
+            : pending && pending.requesterId === Store.ME ? `<span class="tag grey">Request sent</span><button class="btn btn-ghost btn-sm" id="cancel-req">Cancel request</button>${blockedByMe ? `<span class="tag grey">Blocked</span><button class="btn btn-sm" id="unblock-user">Unblock</button>` : ""}`
+            : pending && pending.addresseeId === Store.ME ? `<button class="btn btn-primary btn-sm" id="accept-req">Accept friend request</button><button class="btn btn-ghost btn-sm" id="decline-req">Decline</button>${blockedByMe ? `<span class="tag grey">Blocked</span><button class="btn btn-sm" id="unblock-user">Unblock</button>` : ""}`
+            : blockedByMe ? `<button class="btn" id="add">${icon("userPlus", "sm")}Add friend</button><span class="tag grey">Blocked</span><button class="btn btn-sm" id="unblock-user">Unblock</button>`
             : `<button class="btn" id="add">${icon("userPlus", "sm")}Add friend</button><button class="btn btn-ghost" id="msg">${icon("message", "sm")}${Store.requestStatusFor && Store.requestStatusFor(id).kind === "active" ? "Message" : "Message request"}</button>`}</div>
         </section>
 
@@ -133,6 +138,7 @@
     Social.bind();
     const $ = (s) => document.getElementById(s);
     if ($("msg")) $("msg").onclick = () => UI.Messages.openChat(id);
+    if ($("unblock-user")) $("unblock-user").onclick = () => UI.confirmUnblock(id);
     if ($("add")) $("add").onclick = async () => {
       $("add").disabled = true;
       const res = await Store.sendFriendRequest(id);

@@ -550,6 +550,7 @@ details.form-section[open] .form-section-chevron {
 .composer input { flex: 1; }
 .msg-request-actions { display: flex; gap: 8px; padding: 12px 14px; border-top: 1px solid var(--border); background: var(--glass); }
 .msg-locked { padding: 12px 14px; border-top: 1px solid var(--border); background: var(--muted); color: var(--muted-fg); font-size: .84rem; text-align: center; }
+.msg-locked.msg-blocked-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; text-align: left; }
 .context-pill { display: inline-flex; gap: 6px; align-items: center; padding: 4px 10px; border-radius: 999px; background: var(--goal); font-size: .76rem; font-weight: 600; }
 .icon-btn.spinning svg { animation: msgspin .7s linear infinite; }
 @keyframes msgspin { to { transform: rotate(360deg); } }
