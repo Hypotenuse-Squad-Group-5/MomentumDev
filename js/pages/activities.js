@@ -21,10 +21,11 @@
     const lats = pts.map((p) => p.lat), lngs = pts.map((p) => p.lng);
     const pad = 0.02, minLat = Math.min(...lats) - pad, maxLat = Math.max(...lats) + pad, minLng = Math.min(...lngs) - pad, maxLng = Math.max(...lngs) + pad;
     const pos = (lat, lng) => `left:${(((lng - minLng) / (maxLng - minLng)) * 90 + 5).toFixed(1)}%;top:${(((maxLat - lat) / (maxLat - minLat)) * 84 + 10).toFixed(1)}%`;
-    const types = ["Outdoors · Active", "Outdoors · Relaxed", "Indoors · Relaxed", "Indoors · Active", "Food & Social", "Learning & Creative", "Wellness & Mindfulness", "Volunteering & Service", "Gaming & Esports", "Professional & Tech", "Other"];
+    const types = Store.types().map((t) => t.name); // from the activity_types table
 
     document.getElementById("main").innerHTML = `
-      <div class="page-head">        <div><h1>Activities</h1><p class="muted mb0">Things happening near you. Commit, then show up.</p></div>
+      <div class="page-head">
+        <div><h1>Activities</h1><p class="muted mb0">Things happening near you. Commit, then show up.</p></div>
         <div class="row"><button class="btn" id="toggle-filter" aria-expanded="${f.open}">${icon("filter", "sm")}Filter${activeCount ? " (" + activeCount + ")" : ""}</button><a class="btn btn-primary" href="activity-new.html">${icon("plus", "sm")}Post an activity</a></div>
       </div>
       ${Store.loadError ? `<div class="alert">${icon("alert", "sm")}<span>Couldn't load activities from Supabase: ${esc(Store.loadError)}</span></div>` : ""}
@@ -48,7 +49,7 @@
               <div class="field"><label for="f-min">Min. group size</label><input id="f-min" type="number" min="3" max="20" value="${esc(f.min)}" placeholder="Any"></div>
               <div class="field"><label for="f-max">Max. group size</label><input id="f-max" type="number" min="3" max="20" value="${esc(f.max)}" placeholder="Any"></div>
             </div>
-            <div class="field"><span class="flabel">Activity category</span><div class="chips">${types.map((t) => `<label class="chip"><input type="checkbox" value="${esc(t)}"${f.types.includes(t) ? " checked" : ""}>${esc(t)}</label>`).join("")}</div></div>
+            <div class="field"><span class="flabel">Activity type</span><div class="chips">${types.map((t) => `<label class="chip"><input type="checkbox" value="${esc(t)}"${f.types.includes(t) ? " checked" : ""}>${esc(t)}</label>`).join("")}</div></div>
             <div class="row"><button class="btn btn-primary">Show activities</button><button type="button" class="btn btn-ghost" id="clear">Clear filters</button></div>
           </form>
 
@@ -58,8 +59,8 @@
           </div>
 
           ${list.map((a, i) => {
-      const taken = Store.spotsTaken(a.id), need = Math.max(0, a.min - taken);
-      return `<a class="panel tight act-card" href="activity.html?id=${a.id}">
+            const taken = Store.spotsTaken(a.id), need = Math.max(0, a.min - taken);
+            return `<a class="panel tight act-card" href="activity.html?id=${a.id}">
               <span class="num">${i + 1}</span>
               <div class="grow">
                 <div class="row-between"><span class="tag">${esc(a.type)}</span>
@@ -69,7 +70,7 @@
                 <div class="row-between small"><span>${taken} of ${a.max} going</span><span class="muted">Host: ${esc(UI.displayName(a.hostId))}</span></div>
                 <div class="capacity"><i style="width:${Math.min(100, (taken / a.max) * 100)}%"></i></div>
               </div></a>`;
-    }).join("") || `<div class="panel center"><p><b>Nothing matches those filters.</b></p><p class="muted small">Try widening the distance, or post your own.</p><a class="btn btn-primary" href="activity-new.html">Post an activity</a></div>`}
+          }).join("") || `<div class="panel center"><p><b>Nothing matches those filters.</b></p><p class="muted small">Try widening the distance, or post your own.</p><a class="btn btn-primary" href="activity-new.html">Post an activity</a></div>`}
         </section>
       </div>`;
 

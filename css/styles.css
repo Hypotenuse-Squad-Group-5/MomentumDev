@@ -414,12 +414,18 @@ details.form-section[open] .form-section-chevron {
   align-items: center;
   gap: 8px;
 }
-.time-control .time-text-input {
+.time-control .time-select {
   flex: 1;
   min-width: 0;
   font-weight: 600;
   font-size: .95rem;
   text-align: center;
+  text-align-last: center;
+  cursor: pointer;
+}
+/* Phones: stack Starts above Ends so each dropdown has room */
+@media (max-width: 560px) {
+  .time-grid { grid-template-columns: 1fr; }
 }
 .ampm-toggle {
   display: inline-flex;
@@ -663,7 +669,16 @@ details.event[open] > summary { border-bottom: 1px solid var(--border); }
 .lesson-node .start { position: absolute; top: -30px; padding: 4px 10px; border-radius: 8px; background: #fff; color: var(--flame); font-size: .72rem; font-weight: 800; box-shadow: var(--shadow); }
 .lesson-path svg.trail { position: absolute; inset: 0; z-index: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
 @keyframes pulse { 50% { box-shadow: 0 7px 0 var(--orb-shadow), 0 0 0 10px oklch(0.68 0.17 50 / 18%); } }
-@media (prefers-reduced-motion: reduce) { .lesson-node.current .orb, .page, .modal, .toast { animation: none; } }
+/* ---------- Page loading ---------- */
+/* Centered "M" that fades in only if loading takes longer than ~1/4 second, so fast loads show nothing. */
+.page-loader { min-height: 55vh; display: grid; place-items: center; opacity: 0; animation: loader-in 0s ease 0s forwards; }
+.loader-mark { width: 54px; height: 54px; border-radius: 15px; font-size: 1.6rem; animation: loader-beat 1s ease-in-out infinite; }
+@keyframes loader-in { to { opacity: 1; } }
+@keyframes loader-beat {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 oklch(0.58 0.12 181 / 55%); }
+  50% { transform: scale(1.18); box-shadow: 0 0 0 24px oklch(0.58 0.12 181 / 0%); }
+}
+@media (prefers-reduced-motion: reduce) { .lesson-node.current .orb, .page, .modal, .toast, .loader-mark { animation: none; } .page-loader { animation-duration: 0s; } }
 
 .lesson-body p { max-width: 68ch; }
 .lesson-body h2 { margin-top: 26px; }

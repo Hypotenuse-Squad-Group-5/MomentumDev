@@ -1,33 +1,32 @@
 /* =====================================================================
    Momentum: data layer ("Store")
 
-   Every page reads and writes data ONLY through this file. That's what
-   lets us move one feature at a time from the browser to Supabase:
-     - Activities: Supabase when js/config.js has keys (THE VERTICAL SLICE),
-                   otherwise this browser.
-     - Accounts, habits, check-ins, lesson goals/progress, and posts also
-       sync to Supabase. Demo mode stays in this browser.
+   Every page reads and writes data ONLY through this file.
+   Supabase is required: js/config.js must have the project URL and
+   publishable key. There is no demo mode.
 
-   Points ("the single tracking unit"), mirroring the point_events table:
+   Stored in Supabase: accounts, profiles, interests, habits + check-ins,
+   lessons, activities, friendships, messages, posts, points for habits
+   and lessons.
+   Still browser-only (one device) until moved to Supabase: RSVPs/+1s,
+   attended check-ins + reports, post likes + later visibility changes,
+   general settings, and RSVP/post points. See claude/momentum-status.md.
+
+   Points mirror the point_values table (loaded at sign-in):
      habit +10 · lesson +25 · rsvp +15 · attended +25 · first post of the day +5
      cancelled rsvp -15
    ===================================================================== */
 (function () {
-  let KEY = "momentum.v1"; // demo mode key; signed-in users get "momentum.v1.user.<profile id>"
-  // Defaults for demo mode. When signed in, these are replaced by the point_values table (migration 002).
-  const POINTS = { habit: 10, lesson: 25, rsvp: 15, attended: 25, post: 5, rsvp_cancelled: -15 };
+  let KEY = null; // this user's browser data: "momentum.v1.user.<profile id>" (set in init)
+  // Point amounts + labels come from the point_values table (filled at sign-in by loadPointValues).
+  // To change a reward, edit that table in Supabase. No code change needed.
+  const POINTS = {};        // kind -> points, e.g. habit -> 10
+  const POINT_LABELS = {};  // kind -> label, e.g. habit -> "Habit checked"
+  const POINT_KINDS = [];   // kinds, biggest reward first
   const CANCELS_PER_MONTH = 2;
   const BUFFER_MIN = 30;
 
-  // Fixed IDs that match the seed rows in database/schema.sql
-  const P = {
-    chase: "aaaaaaaa-0000-4000-8000-000000000001", mia: "aaaaaaaa-0000-4000-8000-000000000002",
-    jake: "aaaaaaaa-0000-4000-8000-000000000003", taylor: "aaaaaaaa-0000-4000-8000-000000000004",
-    alex: "aaaaaaaa-0000-4000-8000-000000000005", jordan: "aaaaaaaa-0000-4000-8000-000000000006",
-    riley: "aaaaaaaa-0000-4000-8000-000000000007", sam: "aaaaaaaa-0000-4000-8000-000000000008",
-  };
-  const A = (n) => "bbbbbbbb-0000-4000-8000-0000000000" + String(n).padStart(2, "0");
-  let ME = P.chase; // demo user; replaced by the signed-in user's profile id in Store.init()
+  let ME = null; // the signed-in user's profile id (set in init)
 
   // ---------- small helpers ----------
   const uid = () => (crypto.randomUUID ? crypto.randomUUID() : "id-" + Date.now() + "-" + Math.random().toString(16).slice(2));
@@ -35,118 +34,24 @@
   const dayKey = (d) => { const x = new Date(d); return x.getFullYear() + "-" + String(x.getMonth() + 1).padStart(2, "0") + "-" + String(x.getDate()).padStart(2, "0"); };
   const today = () => dayKey(new Date());
   const addDays = (key, n) => { const [y, m, d] = key.split("-").map(Number); return dayKey(new Date(y, m - 1, d + n)); };
-  function at(days, hhmm) { const [h, m] = hhmm.split(":").map(Number); const d = new Date(); d.setHours(h, m, 0, 0); d.setDate(d.getDate() + days); return d.toISOString(); }
-  function ago(days, hours = 0) { return new Date(Date.now() - days * 864e5 - hours * 36e5).toISOString(); }
 
   // =====================================================================
-  // SEED (demo content). Everything here is placeholder user content.
+  // A brand-new account's browser data (everything else loads from Supabase)
   // =====================================================================
-  function seed() {
-    const profiles = {};
-    // Everyone measures distance from central Provo (no one's home location is stored).
-    const addP = (key, first, last, bio, interests, extra = {}) =>
-      (profiles[P[key]] = { id: P[key], username: key, first, last, lat: 40.2338, lng: -111.6585, bio: bio || "", interests: interests || [], attendeeDisplay: "first_name", ...extra });
-    addP("chase", "Chase", "Example", "Student in Provo. Trying to swap scrolling for actually doing things.", ["Pickleball", "Reading", "Hiking"],
-      { email: "chase@example.com", sex: "male", ageConfirmedAt: "2026-10-01T12:00:00Z" });
-    addP("mia", "Mia", "Thompson", "Board game collector, amateur puzzle champion, always hosting something.", ["Board games", "Puzzles", "Cooking"]);
-    addP("jake", "Jake", "Rivera", "Trying to spend more weekends outside than on my couch.", ["Hiking", "Climbing", "Volleyball"]);
-    addP("taylor", "Taylor", "Brooks", "Climber. Will teach you to fall safely.", ["Climbing"]);
-    addP("alex", "Alex", "Park");
-    addP("jordan", "Jordan", "Kim");
-    addP("riley", "Riley", "Shaw", "", [], { attendeeDisplay: "hidden" });
-    addP("sam", "Sam", "Lee");
-
-    const act = (n, host, type, title, name, desc, bring, days, from, to, loc, city, lat, lng, min, max, createdDaysAgo) => ({
-      id: A(n), hostId: P[host], type, title, activityName: name, description: desc, bring,
-      startsAt: at(days, from), endsAt: at(days, to), location: loc, city, lat, lng, min, max,
-      visibility: "public", createdAt: ago(createdDaysAgo),
-    });
-    const activities = [
-      act(1, "mia", "Indoors · Relaxed", "Board Game Night", "board games", "Codenames, Ticket to Ride, and whatever you bring. Snacks provided, competitiveness optional.", "A snack to share", 2, "19:00", "21:30", "Downtown Provo", "Provo", 40.235, -111.659, 4, 12, 3),
-      act(2, "alex", "Outdoors · Relaxed", "Sunset picnic at Kiwanis Park", "picnic", "Blankets, sandwiches, and watching the sun go down over the lake. Come hungry.", "Something to sit on", 1, "18:30", "20:00", "Kiwanis Park, Provo", "Provo", 40.248, -111.643, 3, 10, 2),
-      act(3, "jordan", "Outdoors · Active", "Pickup volleyball", "volleyball", "Sand courts, rotating teams, all skill levels. We keep score loosely.", "", 7, "20:00", "22:00", "Provo sand courts", "Provo", 40.256, -111.65, 6, 20, 4),
-      act(4, "taylor", "Indoors · Active", "Beginner rock climbing", "rock climbing", "Never climbed before? Good, neither have most of us. We'll rent shoes, learn the basics from the front desk, and spend a couple hours on the easy walls.", "About $15 for a day pass", 5, "19:00", "21:00", "Climbing gym, Orem", "Orem", 40.297, -111.695, 4, 8, 6),
-      act(5, "jake", "Outdoors · Active", "Bridal Veil Falls hike", "hiking", "Easy to moderate hike, then breakfast burritos after. Beginners welcome. We go at the slowest person's pace.", "Water, good shoes, a jacket", 9, "09:00", "12:00", "Provo Canyon", "Provo Canyon", 40.335, -111.601, 3, 15, 5),
-      act(6, "riley", "Indoors · Relaxed", "Journaling & hot cocoa", "journaling", "Quiet hour of writing with a few prompts if you want them, then cocoa and conversation.", "A notebook", 4, "19:00", "20:30", "Springville library area", "Springville", 40.165, -111.611, 3, 8, 3),
-      act(7, "sam", "Learning & creative", "Coffee & sketching", "sketching", "Bring a notebook or borrow supplies. No talent required, just show up and draw what's in front of you.", "", 6, "11:00", "12:30", "Cafe near Center Street", "Provo", 40.234, -111.661, 3, 6, 1),
-      act(8, "jordan", "Food & social", "Late-night ice cream run", "ice cream", "Quick ice cream run after the evening winds down. In and out in 45 minutes.", "", 2, "21:45", "22:30", "University Ave, Provo", "Provo", 40.242, -111.658, 3, 10, 1),
-      act(9, "mia", "Food & social", "Potluck & card games", "potluck", "Bring a dish, stay for cards.", "A dish to share", -5, "18:00", "21:00", "North Provo", "Provo", 40.258, -111.66, 3, 15, 10),
-      act(10, "chase", "Outdoors · Active", "Pickleball in the park", "pickleball", "Casual doubles. Extra paddles available.", "Paddle if you have one", -12, "10:00", "12:00", "Provo city park", "Provo", 40.23, -111.652, 4, 8, 16),
-    ];
-    const addresses = {};
-    activities.forEach((a) => (addresses[a.id] = "123 Example St, " + a.city + ", UT"));
-
-    const r = (n, who, extra = {}) => ({ id: uid(), activityId: A(n), profileId: P[who], status: "committed", createdAt: ago(2), cancelledAt: null, attended: null, ...extra });
-    const rsvps = [
-      r(1, "chase"), r(5, "chase"), r(9, "chase", { attended: true, createdAt: ago(8) }), r(10, "chase", { createdAt: ago(16) }),
-      r(1, "jake"), r(1, "sam"), r(1, "riley"), r(4, "alex"), r(5, "mia"), r(2, "sam"), r(3, "jake"), r(3, "mia"), r(9, "jake"), r(9, "sam"),
-    ];
-    const rsvpOf = (n, who) => rsvps.find((x) => x.activityId === A(n) && x.profileId === P[who]).id;
-    const guests = [
-      { id: uid(), rsvpId: rsvpOf(1, "jake"), guestProfileId: null, guestFirstName: "Alex", status: "accepted", createdAt: ago(2) },
-      // An incoming +1 invite for Chase (shows the "accept a +1" side)
-      { id: uid(), rsvpId: rsvpOf(3, "jake"), guestProfileId: ME, guestFirstName: null, status: "pending", createdAt: ago(0, 5) },
-    ];
-
-    const friendships = [
-      { id: uid(), requesterId: ME, addresseeId: P.mia, status: "accepted", metAt: A(9), since: ago(40) },
-      { id: uid(), requesterId: P.jake, addresseeId: ME, status: "accepted", metAt: A(10), since: ago(12) },
-      { id: uid(), requesterId: P.sam, addresseeId: ME, status: "pending", metAt: null, since: ago(1) },
-    ];
-
-    const posts = [
-      { id: uid(), authorId: P.mia, caption: "Hosting game night this weekend and there are still spots. Bring a snack, leave your phone in your pocket.", photos: 1, activityId: A(1), visibility: "friends", createdAt: ago(0, 3) },
-      { id: uid(), authorId: P.mia, caption: "Finished the 1,000-piece puzzle from game night. Three weeks, zero screens. Weirdly proud of this one.", photos: 1, activityId: null, visibility: "friends", createdAt: ago(1) },
-      { id: uid(), authorId: ME, caption: "One week of charging my phone in the kitchen overnight. Sleeping better, and I finished my first book in months.", photos: 2, activityId: null, visibility: "friends", createdAt: ago(2) },
-      { id: uid(), authorId: P.jake, caption: "First time bouldering outdoors. Fell off the same route about fifteen times. Would fall again.", photos: 3, activityId: null, visibility: "friends", createdAt: ago(4) },
-    ];
-    const reports = [
-      { id: uid(), activityId: A(9), authorId: P.mia, body: "Twelve people showed up, double what I expected. Someone's homemade salsa started a full debate. Doing this again next month.", createdAt: ago(4) },
-    ];
-
-    const msg = (who, body, hoursAgo) => ({ id: uid(), senderId: who, body, at: ago(0, hoursAgo) });
-    const conversations = [
-      {
-        id: uid(), kind: "direct", activityId: A(1), members: [{ id: ME, status: "active" }, { id: P.mia, status: "active" }], lastRead: { [ME]: ago(1) },
-        messages: [msg(P.mia, "Hey! Glad you're coming to game night", 26), msg(ME, "Wouldn't miss it", 25), msg(P.mia, "Are you bringing Codenames?", 2)]
-      },
-      {
-        id: uid(), kind: "activity_group", activityId: A(1), members: [ME, P.mia, P.jake, P.sam, P.riley].map((id) => ({ id, status: "active" })), lastRead: { [ME]: ago(1) },
-        messages: [msg(P.jake, "Parking is on the north side", 9), msg(P.mia, "I'll have chips and salsa", 5)]
-      },
-      {
-        id: uid(), kind: "direct", activityId: null, members: [{ id: ME, status: "active" }, { id: P.jake, status: "active" }], lastRead: { [ME]: nowIso() },
-        messages: [msg(P.jake, "You in for the hike?", 70), msg(ME, "See you at the trailhead", 69)]
-      },
-      {
-        id: uid(), kind: "direct", activityId: null, members: [{ id: P.sam, status: "active" }, { id: ME, status: "requested" }], lastRead: {},
-        messages: [msg(P.sam, "Hey, I think we were both at the potluck. Want to grab a spot at sketching on Thursday?", 20)]
-      },
-    ];
-
-    const habits = [
-      { id: "cccccccc-0000-4000-8000-000000000001", title: "Phone charges across the room by 10:30 PM", goalText: null, lessonNumber: null, active: true, createdAt: ago(20) },
-      { id: "cccccccc-0000-4000-8000-000000000002", title: "No phone for the first 30 minutes after waking up", goalText: null, lessonNumber: null, active: true, createdAt: ago(20) },
-    ];
-    const checkins = [];
-    const points = [];
-    for (let i = 1; i <= 6; i++) { const d = addDays(today(), -i); checkins.push({ habitId: habits[0].id, date: d }); points.push({ id: uid(), kind: "habit", points: POINTS.habit, ref: habits[0].id, date: d, at: ago(i) }); }
-    for (let i = 1; i <= 3; i++) { const d = addDays(today(), -i); checkins.push({ habitId: habits[1].id, date: d }); points.push({ id: uid(), kind: "habit", points: POINTS.habit, ref: habits[1].id, date: d, at: ago(i) }); }
-    rsvps.filter((x) => x.profileId === ME).forEach((x) => points.push({ id: uid(), kind: "rsvp", points: POINTS.rsvp, ref: x.id, date: dayKey(x.createdAt), at: x.createdAt }));
-    points.push({ id: uid(), kind: "attended", points: POINTS.attended, ref: rsvpOf(9, "chase"), date: addDays(today(), -4), at: ago(4) });
-    points.push({ id: uid(), kind: "post", points: POINTS.post, ref: posts[2].id, date: addDays(today(), -2), at: ago(2) });
-
+  function defaultSettings() {
     return {
-      version: 1, seededAt: nowIso(), meId: ME, signedIn: false,
-      profiles, friendships, activityTypes: ["Outdoors · Relaxed", "Outdoors · Active", "Indoors · Relaxed", "Indoors · Active", "Food & social", "Learning & creative", "Wellness & Mindfulness", "Volunteering & Service", "Gaming & Esports", "Professional & Tech", "Other"],
-      activities, addresses, rsvps, guests, reports, posts, encouragements: [], conversations,
-      lessonsDone: [], habits, checkins, points,
-      settings: {
-        postVisibility: "friends", activityVisibility: "public", friendsListVisibility: "friends",
-        attendeeDisplay: "first_name",
-        notifyActivity: true, notifyHabits: true, notifyFriends: true, notifyMessages: true,
-        remindersByEmail: false, checkinTime: "21:30", pauseBeforeOpen: false, weeklySummary: true,
-      },
+      postVisibility: "friends", activityVisibility: "public", friendsListVisibility: "friends",
+      attendeeDisplay: "first_name",
+      notifyActivity: true, notifyHabits: true, notifyFriends: true, notifyMessages: true,
+      remindersByEmail: false, checkinTime: "21:30", pauseBeforeOpen: false, weeklySummary: true,
+    };
+  }
+  function blankState(me) {
+    return {
+      version: 1, meId: me.id, signedIn: true, profiles: { [me.id]: me },
+      friendships: [], activities: [], addresses: {}, rsvps: [], guests: [], reports: [], posts: [],
+      encouragements: [], conversations: [], lessonsDone: [], habits: [], checkins: [], points: [],
+      settings: defaultSettings(),
     };
   }
 
@@ -154,26 +59,24 @@
   // State, persistence, live updates
   // =====================================================================
   let state;
-  function load() {
-    try { state = JSON.parse(localStorage.getItem(KEY)); } catch (e) { state = null; }
-    if (!state || state.version !== 1) { state = seed(); persist(); }
+  function load() { // another tab changed this user's browser data
+    try { const saved = JSON.parse(localStorage.getItem(KEY)); if (saved && saved.version === 1) state = saved; } catch (e) { /* keep what we have */ }
   }
-  function persist() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { /* private mode: keep in memory */ } }
+  function persist() { if (!KEY) return; try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { /* private mode: keep in memory */ } }
   const listeners = new Set();
   function emit() { listeners.forEach((fn) => { try { fn(); } catch (e) { console.error(e); } }); }
   function save() { persist(); emit(); }
   // Another tab changed something: reload and re-render (keeps every open page in sync)
-  window.addEventListener("storage", (e) => { if (e.key === KEY) { load(); emit(); } });
+  window.addEventListener("storage", (e) => { if (KEY && e.key === KEY) { load(); emit(); } });
 
   // =====================================================================
-  // Supabase (the vertical slice: activities only, for now)
+  // Supabase connection (required)
   // =====================================================================
   const cfg = window.MOMENTUM_CONFIG || {};
-  const live = !!(cfg.SUPABASE_URL && cfg.SUPABASE_ANON_KEY && window.supabase);
-  const sb = live ? window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY) : null;
+  const configured = !!(cfg.SUPABASE_URL && cfg.SUPABASE_ANON_KEY && window.supabase);
+  const sb = configured ? window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY) : null;
   let actCache = null, postCache = null, typeCache = null, loadError = null;
   const remoteProfiles = {}; // public profile cards of other users, learned from the activities they host
-  if (!live) load();         // demo mode loads right away; signed-in mode loads in init()
 
   function cacheRemoteProfile(p) {
     if (!p || !p.id || p.id === ME) return;
@@ -208,24 +111,20 @@
   async function loadActivities(force) {
     if (actCache && !force) return actCache;
     loadError = null;
-    if (live) {
-      let { data, error } = await sb.from("activities")
-        .select("*, host:profiles!activities_host_id_fkey(first_name,avatar_url,created_at), type:activity_types(name)")
+    let { data, error } = await sb.from("activities")
+      .select("*, host:profiles!activities_host_id_fkey(first_name,avatar_url,created_at), type:activity_types(name)")
+      .order("starts_at");
+    if (error) {
+      const alt = await sb.from("activities")
+        .select("*, host:profiles!activities_host_id_fkey(first_name,created_at), type:activity_types(name)")
         .order("starts_at");
-      if (error) {
-        const alt = await sb.from("activities")
-          .select("*, host:profiles!activities_host_id_fkey(first_name,created_at), type:activity_types(name)")
-          .order("starts_at");
-        if (!alt.error) {
-          data = alt.data;
-          error = null;
-        }
+      if (!alt.error) {
+        data = alt.data;
+        error = null;
       }
-      if (error) { loadError = error.message; console.error(error); actCache = []; }
-      else actCache = data.map(fromRow);
-    } else {
-      actCache = state.activities.map((a) => ({ ...a, source: "local" }));
     }
+    if (error) { loadError = error.message; console.error(error); actCache = []; }
+    else actCache = data.map(fromRow);
     return actCache;
   }
 
@@ -247,45 +146,71 @@
 
   async function loadPosts(force) {
     if (postCache && !force) return postCache;
-    if (live) {
-      let { data, error } = await sb.from("posts")
-        .select("id, author_id, caption, activity_id, visibility, created_at, author:profiles!posts_author_id_fkey(first_name,avatar_url,created_at)")
+    let { data, error } = await sb.from("posts")
+      .select("id, author_id, caption, activity_id, visibility, created_at, author:profiles!posts_author_id_fkey(first_name,avatar_url,created_at)")
+      .order("created_at", { ascending: false });
+    if (error) {
+      const alt = await sb.from("posts")
+        .select("id, author_id, caption, activity_id, visibility, created_at, author:profiles(first_name,created_at)")
         .order("created_at", { ascending: false });
-      if (error) {
-        const alt = await sb.from("posts")
-          .select("id, author_id, caption, activity_id, visibility, created_at, author:profiles(first_name,created_at)")
+      if (!alt.error) {
+        data = alt.data;
+        error = null;
+      } else {
+        const bare = await sb.from("posts")
+          .select("id, author_id, caption, activity_id, visibility, created_at")
           .order("created_at", { ascending: false });
-        if (!alt.error) {
-          data = alt.data;
+        if (!bare.error) {
+          data = bare.data;
           error = null;
-        } else {
-          const bare = await sb.from("posts")
-            .select("id, author_id, caption, activity_id, visibility, created_at")
-            .order("created_at", { ascending: false });
-          if (!bare.error) {
-            data = bare.data;
-            error = null;
-          }
         }
       }
-      if (error) {
-        console.error("Failed to load posts from Supabase:", error.message || error);
-        postCache = (state.posts || []).map((p) => ({ ...p, source: "local" }));
-      } else {
-        postCache = (data || []).map(fromPostRow);
-      }
-    } else {
+    }
+    if (error) {
+      console.error("Failed to load posts from Supabase:", error.message || error);
       postCache = (state.posts || []).map((p) => ({ ...p, source: "local" }));
+    } else {
+      postCache = (data || []).map(fromPostRow);
     }
     return postCache;
   }
 
+  // "Activity" box ideas: most-used names first (2+ different hosts), then starters from activity_suggestions (migration 014)
+  let suggestionCache = null;
+  async function loadSuggestions() {
+    if (suggestionCache) return suggestionCache;
+    const { data, error } = await sb.from("activity_suggestions").select("name")
+      .order("sort_order", { ascending: true, nullsFirst: false }).order("name");
+    suggestionCache = error || !data ? [] : data.map((r) => r.name);
+    return suggestionCache;
+  }
+  function activitySuggestions(limit = 10) {
+    const groups = new Map(); // "board games" -> who used it, how often, and how they spelled it
+    (actCache || []).forEach((a) => {
+      const name = String(a.activityName || "").trim().replace(/\s+/g, " ");
+      if (!name) return;
+      const key = name.toLowerCase();
+      const g = groups.get(key) || { hosts: new Set(), uses: 0, spellings: new Map() };
+      g.hosts.add(a.hostId); g.uses++; g.spellings.set(name, (g.spellings.get(name) || 0) + 1);
+      groups.set(key, g);
+    });
+    const popular = [...groups.values()]
+      .filter((g) => g.hosts.size >= 2)
+      .sort((x, y) => y.hosts.size - x.hosts.size || y.uses - x.uses)
+      .map((g) => { const s = [...g.spellings].sort((p, q) => q[1] - p[1])[0][0]; return s.charAt(0).toUpperCase() + s.slice(1); });
+    const out = [], seen = new Set();
+    for (const n of [...popular, ...(suggestionCache || [])]) {
+      if (out.length >= limit) break;
+      if (!seen.has(n.toLowerCase())) { seen.add(n.toLowerCase()); out.push(n); }
+    }
+    return out;
+  }
+
   async function loadTypes() {
     if (typeCache) return typeCache;
-    if (live) {
-      const { data, error } = await sb.from("activity_types").select("id,name").order("id");
-      typeCache = error ? [] : data;
-    } else typeCache = state.activityTypes.map((name, i) => ({ id: i + 1, name }));
+    const { data, error } = await sb.from("activity_types").select("id,name,emoji,sort_order")
+      .order("sort_order", { ascending: true, nullsFirst: false }).order("id");
+    typeCache = error ? [] : data;
     return typeCache;
   }
 
@@ -316,26 +241,16 @@
     const types = await loadTypes();
     const typeName = (types.find((t) => String(t.id) === String(f.typeId)) || {}).name || "";
     let id;
-    if (live) {
-      const { data, error } = await sb.from("activities").insert({
-        host_id: ME, type_id: Number(f.typeId), title: f.title.trim(), activity_name: f.activityName.trim(),
-        description: f.description.trim(), what_to_bring: f.bring.trim() || null, starts_at: starts, ends_at: ends,
-        general_location: f.location.trim(), city: f.city.trim(), latitude: me.lat, longitude: me.lng,
-        min_participants: Number(f.min), max_participants: Number(f.max), visibility: f.visibility,
-      }).select("id").single();
-      if (error) return { ok: false, message: error.message };
-      id = data.id;
-      const addr = await sb.from("activity_addresses").insert({ activity_id: id, exact_address: f.address.trim() });
-      if (addr.error) console.warn("Address not saved:", addr.error.message);
-    } else {
-      id = uid();
-      state.activities.push({
-        id, hostId: ME, type: typeName, title: f.title.trim(), activityName: f.activityName.trim(), description: f.description.trim(),
-        bring: f.bring.trim(), startsAt: starts, endsAt: ends, location: f.location.trim(), city: f.city.trim(),
-        lat: me.lat + (Math.random() - 0.5) * 0.01, lng: me.lng + (Math.random() - 0.5) * 0.01,
-        min: Number(f.min), max: Number(f.max), visibility: f.visibility, createdAt: nowIso(),
-      });
-    }
+    const { data, error } = await sb.from("activities").insert({
+      host_id: ME, type_id: Number(f.typeId), title: f.title.trim(), activity_name: f.activityName.trim(),
+      description: f.description.trim(), what_to_bring: f.bring.trim() || null, starts_at: starts, ends_at: ends,
+      general_location: f.location.trim(), city: f.city.trim(), latitude: me.lat, longitude: me.lng,
+      min_participants: Number(f.min), max_participants: Number(f.max), visibility: f.visibility,
+    }).select("id").single();
+    if (error) return { ok: false, message: error.message };
+    id = data.id;
+    const addr = await sb.from("activity_addresses").insert({ activity_id: id, exact_address: f.address.trim() });
+    if (addr.error) console.warn("Address not saved:", addr.error.message);
     state.addresses[id] = f.address.trim(); // host can always see their own address
     actCache = null;
     save();
@@ -358,7 +273,7 @@
     return theirs.find((id) => mine.has(id)) || null;
   }
   async function loadFriendships(force) {
-    if (!live || !ME) return state.friendships || [];
+    if (!ME) return state.friendships || [];
     try {
       const q = sb.from("friendships")
         .select("id, requester_id, addressee_id, status, met_at_activity_id, created_at, accepted_at, requester:profiles!friendships_requester_id_fkey(id,first_name,bio,avatar_url,created_at), addressee:profiles!friendships_addressee_id_fkey(id,first_name,bio,avatar_url,created_at)");
@@ -395,7 +310,6 @@
 
   async function loadProfile(id) {
     if (!id) return { ok: false, message: "Missing profile ID", profile: null };
-    if (!live) return { ok: true, profile: state.profiles[id] || null };
     if (id === ME) return { ok: true, profile: state.profiles[ME] || null };
     try {
       const { data, error } = await sb.from("profiles")
@@ -416,31 +330,27 @@
     if (friendshipWith(id)) return { ok: false, message: "Already requested or friends" };
     const shared = sharedActivityId(id);
     const sharedAct = shared && activity(shared);
-    const metAt = (!live || (sharedAct && sharedAct.source === "supabase")) ? (shared || null) : null;
-    if (live) {
-      const { data, error } = await sb.from("friendships")
-        .insert({ requester_id: ME, addressee_id: id, status: "pending", met_at_activity_id: metAt })
-        .select("id, created_at")
-        .single();
-      if (error) {
-        if (error.code === "23505" || /duplicate|unique/i.test(error.message || "")) {
-          await loadFriendships(true);
-          save();
-          const existing = friendshipWith(id);
-          if (existing && existing.status === "accepted") {
-            return { ok: false, code: "exists", message: "You're already friends." };
-          }
-          if (existing && existing.addresseeId === ME) {
-            return { ok: false, code: "exists", message: "They already sent you a friend request — you can accept it now." };
-          }
-          return { ok: false, code: "exists", message: "A friend request is already pending." };
+    const metAt = (sharedAct && sharedAct.source === "supabase") ? (shared || null) : null;
+    const { data, error } = await sb.from("friendships")
+      .insert({ requester_id: ME, addressee_id: id, status: "pending", met_at_activity_id: metAt })
+      .select("id, created_at")
+      .single();
+    if (error) {
+      if (error.code === "23505" || /duplicate|unique/i.test(error.message || "")) {
+        await loadFriendships(true);
+        save();
+        const existing = friendshipWith(id);
+        if (existing && existing.status === "accepted") {
+          return { ok: false, code: "exists", message: "You're already friends." };
         }
-        return { ok: false, message: error.message };
+        if (existing && existing.addresseeId === ME) {
+          return { ok: false, code: "exists", message: "They already sent you a friend request — you can accept it now." };
+        }
+        return { ok: false, code: "exists", message: "A friend request is already pending." };
       }
-      state.friendships.push({ id: data.id, requesterId: ME, addresseeId: id, status: "pending", metAt, since: data.created_at });
-    } else {
-      state.friendships.push({ id: uid(), requesterId: ME, addresseeId: id, status: "pending", metAt, since: nowIso() });
+      return { ok: false, message: error.message };
     }
+    state.friendships.push({ id: data.id, requesterId: ME, addresseeId: id, status: "pending", metAt, since: data.created_at });
     save();
     return { ok: true };
   }
@@ -448,10 +358,8 @@
   async function cancelFriendRequest(idOrFid) {
     const f = state.friendships.find((x) => x.status === "pending" && x.requesterId === ME && (x.id === idOrFid || x.addresseeId === idOrFid));
     if (!f) return { ok: false, message: "Request not found" };
-    if (live) {
-      const { error } = await sb.from("friendships").delete().eq("id", f.id);
-      if (error) return { ok: false, message: error.message };
-    }
+    const { error } = await sb.from("friendships").delete().eq("id", f.id);
+    if (error) return { ok: false, message: error.message };
     state.friendships = state.friendships.filter((x) => x !== f);
     save();
     return { ok: true };
@@ -461,18 +369,16 @@
     const f = state.friendships.find((x) => x.id === fid && x.status === "pending" && x.addresseeId === ME);
     if (!f) return { ok: false, message: "Friend request not found" };
     const now = nowIso();
-    if (live) {
-      const { data, error } = await sb.from("friendships")
-        .update({ status: "accepted", accepted_at: now })
-        .eq("id", fid)
-        .select("id")
-        .maybeSingle();
-      if (error) return { ok: false, message: error.message };
-      if (!data) {
-        await loadFriendships(true);
-        save();
-        return { ok: false, message: "That friend request is no longer pending." };
-      }
+    const { data, error } = await sb.from("friendships")
+      .update({ status: "accepted", accepted_at: now })
+      .eq("id", fid)
+      .select("id")
+      .maybeSingle();
+    if (error) return { ok: false, message: error.message };
+    if (!data) {
+      await loadFriendships(true);
+      save();
+      return { ok: false, message: "That friend request is no longer pending." };
     }
     f.status = "accepted";
     f.since = now;
@@ -485,10 +391,8 @@
   async function declineFriend(fid) {
     const f = state.friendships.find((x) => x.id === fid && x.status === "pending" && x.addresseeId === ME);
     if (!f) return { ok: false, message: "Request not found" };
-    if (live) {
-      const { error } = await sb.from("friendships").delete().eq("id", fid);
-      if (error) return { ok: false, message: error.message };
-    }
+    const { error } = await sb.from("friendships").delete().eq("id", fid);
+    if (error) return { ok: false, message: error.message };
     state.friendships = state.friendships.filter((x) => x !== f);
     save();
     return { ok: true };
@@ -497,10 +401,8 @@
   async function removeFriend(id) {
     const f = friendshipWith(id);
     if (!f || f.status !== "accepted") return { ok: false, message: "Friend not found" };
-    if (live) {
-      const { error } = await sb.from("friendships").delete().eq("id", f.id);
-      if (error) return { ok: false, message: error.message };
-    }
+    const { error } = await sb.from("friendships").delete().eq("id", f.id);
+    if (error) return { ok: false, message: error.message };
     state.friendships = state.friendships.filter((x) => x !== f);
     save();
     return { ok: true };
@@ -509,25 +411,23 @@
   async function searchProfiles(query) {
     if (!query || !query.trim()) return { ok: true, ids: [] };
     const q = query.trim();
-    if (live) {
-      try {
-        const escaped = q.replace(/[\\%_]/g, "\\$&");
-        const { data, error } = await sb.from("profiles")
-          .select("id, first_name, bio, avatar_url, created_at")
-          .ilike("first_name", `%${escaped}%`)
-          .neq("id", ME)
-          .order("first_name")
-          .limit(20);
-        if (error) {
-          console.warn("searchProfiles error:", error.message);
-          return { ok: false, message: error.message || "Could not search profiles.", ids: [] };
-        }
-        (data || []).forEach(cacheRemoteProfile);
-        return { ok: true, ids: (data || []).map((p) => p.id) };
-      } catch (e) {
-        console.warn("searchProfiles error:", e);
-        return { ok: false, message: e.message || "Could not search profiles.", ids: [] };
+    try {
+      const escaped = q.replace(/[\\%_]/g, "\\$&");
+      const { data, error } = await sb.from("profiles")
+        .select("id, first_name, bio, avatar_url, created_at")
+        .ilike("first_name", `%${escaped}%`)
+        .neq("id", ME)
+        .order("first_name")
+        .limit(20);
+      if (error) {
+        console.warn("searchProfiles error:", error.message);
+        return { ok: false, message: error.message || "Could not search profiles.", ids: [] };
       }
+      (data || []).forEach(cacheRemoteProfile);
+      return { ok: true, ids: (data || []).map((p) => p.id) };
+    } catch (e) {
+      console.warn("searchProfiles error:", e);
+      return { ok: false, message: e.message || "Could not search profiles.", ids: [] };
     }
     const ql = q.toLowerCase();
     return {
@@ -592,7 +492,7 @@
     return myCommitments().find((o) => o.id !== a.id && s < new Date(o.endsAt).getTime() + buf && e > new Date(o.startsAt).getTime() - buf) || null;
   }
 
-  function addPoints(kind, ref) { const p = { id: uid(), kind, points: POINTS[kind], ref, date: today(), at: nowIso() }; state.points.push(p); return p.points; }
+  function addPoints(kind, ref) { const p = { id: uid(), kind, points: POINTS[kind] ?? 0, ref, date: today(), at: nowIso() }; state.points.push(p); return p.points; }
 
   function commit(activityId, plusOne) {
     const a = activity(activityId);
@@ -675,7 +575,7 @@
     if (isHabitDone(habitId, d)) {
       state.checkins = state.checkins.filter((c) => !(c.habitId === habitId && c.date === d));
       state.points = state.points.filter((p) => !(p.kind === "habit" && p.ref === habitId && p.date === d));
-      save(); return { done: false, points: -POINTS.habit };
+      save(); return { done: false, points: -(POINTS.habit ?? 0) };
     }
     const streakBefore = streak().current;
     state.checkins.push({ habitId, date: d });
@@ -686,53 +586,72 @@
   // Signed in: the screen updates instantly, then the change is saved to Supabase.
   // If the save fails, the change is undone and the reason is shown.
   function syncFailed(message) { save(); if (window.UI) window.UI.toast(message); }
+  // One save at a time per habit. Fast clicking only changes what the user WANTS;
+  // when the current save finishes, one more save is sent if the database doesn't match yet.
+  // (Sending every click at once let a "check" overtake an "uncheck", and the database
+  // rightly rejected the second +10 for the same day.)
+  const habitSaves = new Map(); // habitId -> { want, saved }
+  let habitClicks = 0;          // goes up on every click, so a refresh can tell it's out of date
   function toggleHabit(habitId) {
     const r = toggleHabitLocal(habitId);
-    if (live) {
-      const write = r.done
-        ? sb.from("habit_checkins").insert({ habit_id: habitId }) // the database fills in today's date
-        : sb.from("habit_checkins").delete().eq("habit_id", habitId).eq("check_date", today());
-      write.then(({ error }) => {
-        if (error) { toggleHabitLocal(habitId); syncFailed("Couldn't save: " + error.message); }
-        else loadHabitData().then(save); // pick up the points the database awarded
-      });
-    }
+    habitClicks++;
+    let s = habitSaves.get(habitId);
+    if (s) { s.want = r.done; return r; } // a save is already running; it will pick this up
+    s = { want: r.done, saved: !r.done }; // before this click, the database had the opposite
+    habitSaves.set(habitId, s);
+    (async () => {
+      while (s.want !== s.saved) {
+        const target = s.want;
+        const { error } = target
+          ? await sb.from("habit_checkins").insert({ habit_id: habitId }) // the database fills in today's date
+          : await sb.from("habit_checkins").delete().eq("habit_id", habitId).eq("check_date", today());
+        if (error) {
+          if (isHabitDone(habitId) !== s.saved) toggleHabitLocal(habitId); // show what the database really has
+          syncFailed("Couldn't save: " + error.message);
+          break;
+        }
+        s.saved = target;
+      }
+      habitSaves.delete(habitId);
+      const clicksNow = habitClicks;
+      // Pick up the points the database awarded, unless the user clicked again meanwhile
+      // (that newer save refreshes when it finishes, so this answer would be stale).
+      loadHabitData(() => habitClicks === clicksNow && habitSaves.size === 0).then(save);
+    })();
     return r;
   }
   async function addHabit(title, extra = {}) {
     const clean = title.trim();
     if (!clean || clean.length > 80) throw new Error("Give your habit a name of 1 to 80 characters.");
     const h = { id: uid(), title: clean, goalText: null, lessonNumber: null, active: true, createdAt: nowIso(), sortOrder: nextSortOrder(), ...extra };
-    if (live) {
-      const { error } = await sb.from("habits").insert({ id: h.id, profile_id: ME, title: h.title, goal_text: h.goalText, source_lesson_id: h.lessonId || null, sort_order: h.sortOrder });
-      if (error) throw new Error("Couldn't save habit: " + error.message);
-    }
-    state.habits.push(h); save();
+    const { error } = await sb.from("habits").insert({ id: h.id, profile_id: ME, title: h.title, goal_text: h.goalText, source_lesson_id: h.lessonId || null, sort_order: h.sortOrder });
+    if (error) throw new Error("Couldn't save habit: " + error.message);
+    state.habits.push(h);save();
     return h;
   }
   // Archive = hide the habit but keep its check-ins and points (streak history stays true).
   function removeHabit(habitId) {
-    const h = state.habits.find((x) => x.id === habitId); if (!h) return;
-    h.active = false; save();
-    if (live) sb.from("habits").update({ is_active: false }).eq("id", habitId)
+    const h = state.habits.find((x) => x.id === habitId);if (!h) return;
+    h.active = false;save();
+    sb.from("habits").update({ is_active: false }).eq("id", habitId)
       .then(({ error }) => { if (error) { h.active = true; syncFailed("Couldn't archive habit: " + error.message); } });
   }
   // Restore from the Archived list → bottom of the list. Undo right after archiving → back in its old spot.
   function restoreHabit(habitId, { keepPlace = false } = {}) {
-    const h = state.habits.find((x) => x.id === habitId); if (!h) return;
+    const h = state.habits.find((x) => x.id === habitId);if (!h) return;
     const before = h.sortOrder;
-    h.active = true; if (!keepPlace) h.sortOrder = nextSortOrder(); save();
-    if (live) sb.from("habits").update({ is_active: true, sort_order: h.sortOrder }).eq("id", habitId)
+    h.active = true;if (!keepPlace) h.sortOrder = nextSortOrder();save();
+    sb.from("habits").update({ is_active: true, sort_order: h.sortOrder }).eq("id", habitId)
       .then(({ error }) => { if (error) { h.active = false; h.sortOrder = before; syncFailed("Couldn't restore habit: " + error.message); } });
   }
   function editHabit(habitId, title) {
-    const h = state.habits.find((x) => x.id === habitId); if (!h) return { ok: false, message: "Habit not found." };
+    const h = state.habits.find((x) => x.id === habitId);if (!h) return { ok: false, message: "Habit not found." };
     const t = title.trim();
     if (!t) return { ok: false, message: "Give the habit a name." };
     if (t.length > 80) return { ok: false, message: "Keep it under 80 characters." };
     const before = h.title;
-    h.title = t; save();
-    if (live) sb.from("habits").update({ title: t }).eq("id", habitId)
+    h.title = t;save();
+    sb.from("habits").update({ title: t }).eq("id", habitId)
       .then(({ error }) => { if (error) { h.title = before; syncFailed("Couldn't rename habit: " + error.message); } });
     return { ok: true };
   }
@@ -742,7 +661,7 @@
     ids.forEach((id, i) => { const h = state.habits.find((x) => x.id === id); if (h && h.sortOrder !== i + 1) { h.sortOrder = i + 1; changed.push(h); } });
     if (!changed.length) return;
     save();
-    if (live) Promise.all(changed.map((h) => sb.from("habits").update({ sort_order: h.sortOrder }).eq("id", h.id)))
+    Promise.all(changed.map((h) => sb.from("habits").update({ sort_order: h.sortOrder }).eq("id", h.id)))
       .then((results) => { const bad = results.find((r) => r.error); if (bad) loadHabitData().then(() => syncFailed("Couldn't save the new order: " + bad.error.message)); });
   }
 
@@ -766,17 +685,15 @@
     const goal = goalText.trim(), title = habitTitle.trim();
     if (!goal || goal.length > 1000) return { ok: false, message: "Add a brief reflection of up to 1,000 characters." };
     if (!title || title.length > 80) return { ok: false, message: "Give your daily habit a name of 1 to 80 characters." };
-    if (live) {
-      try {
-        const { data, error } = await sb.rpc("complete_momentum_lesson", { p_number: n, p_goal: goal, p_habit_title: title });
-        if (error) return { ok: false, message: error.message };
-        if (!data || !data.ok) return { ok: false, message: "The lesson could not be saved. Please try again." };
-        const refreshed = await Promise.all([loadLessonData(), loadHabitData()]);
-        if (!refreshed.every(Boolean)) return { ok: false, message: "Your lesson was saved, but we couldn't refresh your progress. Reload this page; retrying won't create another habit." };
-        save();
-        return data;
-      } catch (error) { return { ok: false, message: error.message || "Couldn't reach the server. Your reflection is still here; please try again." }; }
-    }
+    try {
+      const { data, error } = await sb.rpc("complete_momentum_lesson", { p_number: n, p_goal: goal, p_habit_title: title });
+      if (error) return { ok: false, message: error.message };
+      if (!data || !data.ok) return { ok: false, message: "The lesson could not be saved. Please try again." };
+      const refreshed = await Promise.all([loadLessonData(), loadHabitData()]);
+      if (!refreshed.every(Boolean)) return { ok: false, message: "Your lesson was saved, but we couldn't refresh your progress. Reload this page; retrying won't create another habit." };
+      save();
+      return data;
+    } catch (error) { return { ok: false, message: error.message || "Couldn't reach the server. Your reflection is still here; please try again." }; }
     const habit = await addHabit(title, { goalText: goal, lessonNumber: n });
     state.lessonsDone.push({ n, at: nowIso(), goal, habitId: habit.id });
     const pts = addPoints("lesson", "lesson-" + n);
@@ -786,7 +703,7 @@
   function lessonHabit(n) {
     const completed = state.lessonsDone.find(l => l.n === n);
     const lesson = lessonCatalog.find(l => l.number === n);
-    return state.habits.find(h => (completed && completed.habitId === h.id) || (lesson && h.lessonId === lesson.id) || (!live && h.lessonNumber === n)) || null;
+    return state.habits.find(h => (completed && completed.habitId === h.id) || (lesson && h.lessonId === lesson.id)) || null;
   }
   async function loadLessonData() {
     try {
@@ -844,35 +761,22 @@
     if (!caption || !caption.trim()) return { ok: false, message: "Add a caption." };
     if (caption.trim().length > 500) return { ok: false, message: "Captions can be up to 500 characters." };
     let post;
-    if (live) {
-      let res = await sb.from("posts").insert({
+    let res = await sb.from("posts").insert({
+      author_id: ME,
+      caption: caption.trim(),
+      activity_id: activityId || null,
+      visibility: "public",
+    }).select("id, author_id, caption, activity_id, visibility, created_at, author:profiles!posts_author_id_fkey(first_name,avatar_url,created_at)").single();
+    if (res.error) {
+      res = await sb.from("posts").insert({
         author_id: ME,
         caption: caption.trim(),
         activity_id: activityId || null,
         visibility: "public",
-      }).select("id, author_id, caption, activity_id, visibility, created_at, author:profiles!posts_author_id_fkey(first_name,avatar_url,created_at)").single();
-      if (res.error) {
-        res = await sb.from("posts").insert({
-          author_id: ME,
-          caption: caption.trim(),
-          activity_id: activityId || null,
-          visibility: "public",
-        }).select().single();
-      }
-      if (res.error) return { ok: false, message: res.error.message };
-      post = fromPostRow(res.data);
-    } else {
-      post = {
-        id: uid(),
-        authorId: ME,
-        caption: caption.trim(),
-        photos: 0,
-        activityId: activityId || null,
-        visibility: "public",
-        createdAt: nowIso(),
-        source: "local",
-      };
+      }).select().single();
     }
+    if (res.error) return { ok: false, message: res.error.message };
+    post = fromPostRow(res.data);
     if (!state.posts) state.posts = [];
     state.posts.unshift(post);
     if (postCache && !postCache.some((p) => p.id === post.id)) postCache.unshift(post);
@@ -883,10 +787,8 @@
   }
 
   async function deletePost(id) {
-    if (live) {
-      const { error } = await sb.from("posts").delete().eq("id", id);
-      if (error) return { ok: false, message: error.message };
-    }
+    const { error } = await sb.from("posts").delete().eq("id", id);
+    if (error) return { ok: false, message: error.message };
     state.posts = (state.posts || []).filter((p) => p.id !== id);
     if (postCache) postCache = postCache.filter((p) => p.id !== id);
     save();
@@ -961,7 +863,7 @@
     };
   }
   async function loadConversations() {
-    if (!live || !ME) return conversations();
+    if (!ME) return conversations();
     try {
       const q = sb.from("conversations")
         .select("id, kind, activity_id, created_at, archived_at, members:conversation_members(profile_id, status, joined_at, last_read_at, profile:profiles(id, first_name, bio, avatar_url, created_at)), messages(id, sender_id, body, created_at)");
@@ -1012,7 +914,7 @@
     if (meM) meM.lastReadAt = ts;
     if (silent) persist();
     else save();
-    if (live && c.source === "supabase") {
+    if (c.source === "supabase") {
       sb.from("conversation_members")
         .update({ last_read_at: ts })
         .eq("conversation_id", id)
@@ -1069,41 +971,39 @@
       return { ok: false, message: "You've already sent your follow-up message. Wait for them to accept." };
     }
 
-    if (live) {
-      const linkedAct = activityId && activity(activityId)?.source === "supabase" ? activityId : null;
-      const { data, error } = await sb.rpc("send_direct_message", {
-        p_recipient_id: recipientId,
-        p_body: clean,
-        p_activity_id: linkedAct,
-      });
-      if (error || !data || !data.ok) {
-        return { ok: false, message: (error && error.message) || "Could not send message." };
-      }
-      const existing = conversation(data.conversationId);
-      const members = (data.members || []).map((m) => ({ id: m.id, status: m.status, lastReadAt: m.lastReadAt || null }));
-      const lastRead = {};
-      members.forEach((m) => { if (m.lastReadAt) lastRead[m.id] = m.lastReadAt; });
-      if (existing) {
-        existing.activityId = existing.activityId || data.activityId || null;
-        existing.members = members;
-        existing.lastRead = lastRead;
-        if (!existing.messages.some((m) => m.id === data.message.id)) existing.messages.push(data.message);
-      } else {
-        if (!Array.isArray(state.conversations)) state.conversations = [];
-        state.conversations.push({
-          id: data.conversationId,
-          kind: "direct",
-          activityId: data.activityId || null,
-          createdAt: data.createdAt || nowIso(),
-          members,
-          lastRead,
-          messages: [data.message],
-          source: "supabase",
-        });
-      }
-      save();
-      return { ok: true, conversationId: data.conversationId, message: data.message };
+    const linkedAct = activityId && activity(activityId)?.source === "supabase" ? activityId : null;
+    const { data, error } = await sb.rpc("send_direct_message", {
+      p_recipient_id: recipientId,
+      p_body: clean,
+      p_activity_id: linkedAct,
+    });
+    if (error || !data || !data.ok) {
+      return { ok: false, message: (error && error.message) || "Could not send message." };
     }
+    const existing = conversation(data.conversationId);
+    const members = (data.members || []).map((m) => ({ id: m.id, status: m.status, lastReadAt: m.lastReadAt || null }));
+    const lastRead = {};
+    members.forEach((m) => { if (m.lastReadAt) lastRead[m.id] = m.lastReadAt; });
+    if (existing) {
+      existing.activityId = existing.activityId || data.activityId || null;
+      existing.members = members;
+      existing.lastRead = lastRead;
+      if (!existing.messages.some((m) => m.id === data.message.id)) existing.messages.push(data.message);
+    } else {
+      if (!Array.isArray(state.conversations)) state.conversations = [];
+      state.conversations.push({
+        id: data.conversationId,
+        kind: "direct",
+        activityId: data.activityId || null,
+        createdAt: data.createdAt || nowIso(),
+        members,
+        lastRead,
+        messages: [data.message],
+        source: "supabase",
+      });
+    }
+    save();
+    return { ok: true, conversationId: data.conversationId, message: data.message };
 
     let c = findDirect(recipientId);
     const ts = nowIso();
@@ -1142,11 +1042,9 @@
   async function respondRequest(convoId, accept) {
     const c = conversation(convoId);
     if (!c) return { ok: false, message: "Message request not found." };
-    if (live) {
-      const { data, error } = await sb.rpc("respond_message_request", { p_conversation_id: convoId, p_accept: !!accept });
-      if (error || !data || !data.ok) {
-        return { ok: false, message: (error && error.message) || "Could not update message request." };
-      }
+    const { data, error } = await sb.rpc("respond_message_request", { p_conversation_id: convoId, p_accept: !!accept });
+    if (error || !data || !data.ok) {
+      return { ok: false, message: (error && error.message) || "Could not update message request." };
     }
     const ts = nowIso();
     const m = c.members.find((x) => x.id === ME);
@@ -1174,30 +1072,28 @@
   function setSetting(k, v) { state.settings[k] = v; if (k === "attendeeDisplay") state.profiles[ME].attendeeDisplay = v; save(); }
   // Signed in: saves to Supabase (public fields → profiles, private → profile_private).
   async function updateProfile(fields) {
-    if (live) {
-      const pub = await sb.from("profiles").update({ first_name: fields.first, bio: fields.bio || null }).eq("id", ME);
-      if (pub.error) return { ok: false, message: pub.error.message };
-      const priv = await sb.from("profile_private").update({ last_name: fields.last, sex: fields.sex }).eq("profile_id", ME);
-      if (priv.error) return { ok: false, message: priv.error.message };
-      if (Array.isArray(fields.interests)) {
-        const idOf = {}; (interestCache || []).forEach((i) => (idOf[i.name] = i.id));
-        const before = Object.keys(myInterestIds);
-        const add = fields.interests.filter((n) => !(n in myInterestIds) && idOf[n] != null);
-        const remove = before.filter((n) => !fields.interests.includes(n));
-        if (remove.length) {
-          const r = await sb.from("profile_interests").delete().eq("profile_id", ME).in("interest_id", remove.map((n) => myInterestIds[n]));
-          if (r.error) return { ok: false, message: r.error.message };
-          remove.forEach((n) => delete myInterestIds[n]);
-        }
-        if (add.length) {
-          const r = await sb.from("profile_interests").insert(add.map((n) => ({ profile_id: ME, interest_id: idOf[n] })));
-          if (r.error) return { ok: false, message: r.error.message };
-          add.forEach((n) => (myInterestIds[n] = idOf[n]));
-        }
-        fields = { ...fields, interests: Object.keys(myInterestIds) };
+    const pub = await sb.from("profiles").update({ first_name: fields.first, bio: fields.bio || null }).eq("id", ME);
+    if (pub.error) return { ok: false, message: pub.error.message };
+    const priv = await sb.from("profile_private").update({ last_name: fields.last, sex: fields.sex }).eq("profile_id", ME);
+    if (priv.error) return { ok: false, message: priv.error.message };
+    if (Array.isArray(fields.interests)) {
+      const idOf = {}; (interestCache || []).forEach((i) => (idOf[i.name] = i.id));
+      const before = Object.keys(myInterestIds);
+      const add = fields.interests.filter((n) => !(n in myInterestIds) && idOf[n] != null);
+      const remove = before.filter((n) => !fields.interests.includes(n));
+      if (remove.length) {
+        const r = await sb.from("profile_interests").delete().eq("profile_id", ME).in("interest_id", remove.map((n) => myInterestIds[n]));
+        if (r.error) return { ok: false, message: r.error.message };
+        remove.forEach((n) => delete myInterestIds[n]);
       }
+      if (add.length) {
+        const r = await sb.from("profile_interests").insert(add.map((n) => ({ profile_id: ME, interest_id: idOf[n] })));
+        if (r.error) return { ok: false, message: r.error.message };
+        add.forEach((n) => (myInterestIds[n] = idOf[n]));
+      }
+      fields = { ...fields, interests: Object.keys(myInterestIds) };
     }
-    Object.assign(state.profiles[ME], fields); save();
+    Object.assign(state.profiles[ME], fields);save();
     return { ok: true };
   }
 
@@ -1244,21 +1140,6 @@
   async function uploadAvatar(file) {
     try {
       const blob = await resizeImageToBlob(file, 300, 0.85);
-      if (!live) {
-        return new Promise((resolve) => {
-          const reader = new FileReader();
-          reader.onload = () => {
-            const dataUrl = reader.result;
-            if (state && state.profiles[ME]) {
-              state.profiles[ME].avatarUrl = dataUrl;
-              save();
-              emit();
-            }
-            resolve({ ok: true, url: dataUrl });
-          };
-          reader.readAsDataURL(blob);
-        });
-      }
 
       const filePath = `${ME}/avatar.jpg`;
       const { error: uploadError } = await sb.storage
@@ -1301,15 +1182,6 @@
 
   async function deleteAvatar() {
     try {
-      if (!live) {
-        if (state && state.profiles[ME]) {
-          state.profiles[ME].avatarUrl = null;
-          save();
-          emit();
-        }
-        return { ok: true };
-      }
-
       const filePath = `${ME}/avatar.jpg`;
       const { error: removeError } = await sb.storage.from("avatars").remove([filePath]);
       if (removeError) {
@@ -1336,32 +1208,12 @@
       return { ok: false, message: err.message || "Failed to remove photo." };
     }
   }
-  function signIn() { if (state) { state.signedIn = true; save(); } }
-  function signOut() { if (state) { state.signedIn = false; save(); } }
-  function reset() { state = seed(); actCache = null; postCache = null; persist(); loadActivities().then(() => loadPosts().then(() => loadFriendships().then(emit))); }
-  // The opposite of reset: keep only your own account, clear every demo row.
-  // Use it to preview empty states. (Activities in Supabase are unaffected.)
-  function clearDemo() {
-    const full = seed();
-    const me = live ? state.profiles[ME] : { ...full.profiles[ME], bio: "", interests: [] };
-    state = {
-      ...full, empty: true, signedIn: true, profiles: { [ME]: me }, friendships: [], activities: [], addresses: {},
-      rsvps: [], guests: [], reports: [], posts: [], encouragements: [], conversations: [], lessonsDone: [], habits: [], checkins: [], points: []
-    };
-    actCache = null; persist(); loadActivities().then(emit);
-  }
 
   // =====================================================================
   // Signed-in user. Every page calls Store.init() first (via UI.mount).
-  // Returns true (ready), false (not signed in), or "noprofile".
+  // Returns true (ready), false (not signed in), "noprofile", or "syncerror".
   // =====================================================================
   const PROVO = { lat: 40.2338, lng: -111.6585 }; // map/distance fallback until we geocode addresses
-  function emptyStateFor(me) {
-    return {
-      ...seed(), empty: true, signedIn: true, meId: me.id, profiles: { [me.id]: me }, friendships: [], activities: [], addresses: {},
-      rsvps: [], guests: [], reports: [], posts: [], encouragements: [], conversations: [], lessonsDone: [], habits: [], checkins: [], points: []
-    };
-  }
   function profileFromRows(p, pp) {
     pp = pp || {};
     return {
@@ -1376,10 +1228,14 @@
   // Other point kinds stay local until their own integrations.
   const DB_POINT_KINDS = ["habit", "lesson"];
   async function loadPointValues() {
-    const { data, error } = await sb.from("point_values").select("kind,points");
-    if (!error && data) data.forEach((r) => (POINTS[r.kind] = r.points));
+    const { data, error } = await sb.from("point_values").select("kind,points,label");
+    if (error || !data) return false;
+    data.sort((a, b) => b.points - a.points || String(a.label).localeCompare(String(b.label)));
+    POINT_KINDS.length = 0;
+    data.forEach((r) => { POINTS[r.kind] = r.points; POINT_LABELS[r.kind] = r.label || r.kind; POINT_KINDS.push(r.kind); });
+    return true;
   }
-  async function loadHabitData() {
+  async function loadHabitData(stillCurrent) {
     const [h, c, p] = await Promise.all([
       sb.from("habits").select("id,title,goal_text,source_lesson_id,is_active,created_at,sort_order").order("sort_order"),
       sb.from("habit_checkins").select("habit_id,check_date"),
@@ -1387,6 +1243,7 @@
     ]);
     const err = h.error || c.error || p.error;
     if (err || !h.data || !c.data || !p.data) { if (err) console.error(err); return false; }
+    if (stillCurrent && !stillCurrent()) return true; // newer clicks are still saving; their refresh will follow
     state.habits = h.data.map((r) => ({ id: r.id, title: r.title, goalText: r.goal_text, lessonId: r.source_lesson_id, active: r.is_active, createdAt: r.created_at, sortOrder: r.sort_order }));
     state.checkins = c.data.map((r) => ({ habitId: r.habit_id, date: r.check_date }));
     state.points = state.points.filter((x) => !DB_POINT_KINDS.includes(x.kind))
@@ -1395,8 +1252,7 @@
   }
 
   // Interests: the list comes from the `interests` table (admins edit it in Supabase → Table Editor).
-  // Each user's picks live in `profile_interests` (migration 005). Demo mode uses this short list.
-  const DEMO_INTERESTS = ["Art", "Board games", "Climbing", "Cooking", "Hiking", "Music", "Pickleball", "Puzzles", "Reading", "Volleyball"];
+  // Each user's picks live in `profile_interests` (migration 005).
   let interestCache = null;  // active interests: [{ id, name }] in admin-chosen order
   let myInterestIds = {};    // my picks: { name: interest_id }
   async function loadInterests() {
@@ -1417,7 +1273,7 @@
   // Someone else's interests (readable by signed-in members since migration 012). Loaded once per profile.
   const interestsLoadedFor = {};
   function loadInterestsFor(id) {
-    if (!live || !id || id === ME || interestsLoadedFor[id]) return;
+    if (!id || id === ME || interestsLoadedFor[id]) return;
     interestsLoadedFor[id] = true;
     sb.from("profile_interests").select("interest:interests(name)").eq("profile_id", id).then(({ data, error }) => {
       if (error || !data) return;
@@ -1428,7 +1284,6 @@
     });
   }
   function interestOptions() {
-    if (!live) return DEMO_INTERESTS;
     const active = (interestCache || []).map((i) => i.name);
     const mine = (state.profiles[ME].interests || []).filter((n) => !active.includes(n));
     return active.concat(mine);
@@ -1436,8 +1291,11 @@
 
   let ready = null;
   function init() {
-    if (!live) return Promise.resolve(true);
     if (ready) return ready;
+    if (!configured) { // no keys in js/config.js
+      loadError = "Momentum isn't connected to Supabase. Add the project URL and publishable key to js/config.js.";
+      return (ready = Promise.resolve("syncerror"));
+    }
     ready = (async () => {
       const { data } = await sb.auth.getSession();
       const session = data.session;
@@ -1454,14 +1312,15 @@
       let saved = null;
       try { saved = JSON.parse(localStorage.getItem(KEY)); } catch (e) { /* ignore */ }
       const me = profileFromRows(p, pp);
-      state = saved && saved.version === 1 ? saved : emptyStateFor({ ...me, interests: [], attendeeDisplay: "first_name" });
+      state = saved && saved.version === 1 ? saved : blankState({ ...me, interests: [], attendeeDisplay: "first_name" });
       const old = { ...(state.profiles[ME] || {}) };
       ["phone", "address", "zip", "city", "state", "birthday"].forEach((k) => delete old[k]); // removed in migration 008: clear this browser's copy too
       state.profiles[ME] = { ...old, ...me, interests: old.interests || [], attendeeDisplay: state.settings.attendeeDisplay };
       if (state && state.settings) delete state.settings.messageRequestsFrom;
       state.meId = ME; state.signedIn = true;
-      const [, habitsLoaded, lessonsLoaded] = await Promise.all([loadPointValues(), loadHabitData(), loadLessonData(), loadPosts(), loadInterests(), loadFriendships(), loadConversations()]);
+      const [pointsLoaded, habitsLoaded, lessonsLoaded] = await Promise.all([loadPointValues(), loadHabitData(), loadLessonData(), loadPosts(), loadInterests(), loadFriendships(), loadConversations()]);
       if (!habitsLoaded || !lessonsLoaded) { loadError = "We couldn't load your saved habits and lesson progress. Please reload to try again."; return "syncerror"; }
+      if (!pointsLoaded) { loadError = "We couldn't load the point values. Please reload to try again."; return "syncerror"; }
       persist();
       return true;
     })().catch(() => { loadError = "We couldn't reach your saved account data. Please reload to try again."; return "syncerror"; });
@@ -1476,7 +1335,6 @@
   const siteBase = () => location.origin + location.pathname.replace(/[^/]*$/, ""); // where the email link lands
   const auth = {
     async session() {
-      if (!live) return null;
       const { data } = await sb.auth.getSession();
       return data.session;
     },
@@ -1490,22 +1348,34 @@
       return sb.auth.resend({ type: "signup", email, options: { emailRedirectTo: siteBase() } });
     },
     async signOut() {
-      if (!live) return;
       let failed = false;
       try { failed = !!(await sb.auth.signOut()).error; } catch (e) { failed = true; }
       // Offline or server error: still sign out on this device by clearing the saved session.
       if (failed) { try { localStorage.removeItem(sb.auth.storageKey); } catch (e) { /* ignore */ } }
+      try { Object.keys(localStorage).filter((k) => k.startsWith("momentum.shell.")).forEach((k) => localStorage.removeItem(k)); } catch (e) { /* ignore */ }
     },
   };
 
+  // Instant check, no network: is a login saved on this device, and whose?
+  // null = can't tell (not connected, or no session storage): fall back to Store.init()'s check;
+  // "" = nobody saved; otherwise the login's id. Store.init() still verifies the session with Supabase.
+  function savedLogin() {
+    if (!sb || !sb.auth || !sb.auth.storageKey) return null;
+    try {
+      const raw = localStorage.getItem(sb.auth.storageKey);
+      if (!raw) return "";
+      const s = JSON.parse(raw);
+      return (s && s.user && s.user.id) || "saved";
+    } catch (e) { return "saved"; }
+  }
+
   window.Store = {
-    get ME() { return ME; }, POINTS, LESSON_COUNT, CANCELS_PER_MONTH, auth, init,
-    get state() { return state; }, get live() { return live; }, get loadError() { return loadError; },
+    get ME() { return ME; }, POINTS, POINT_LABELS, POINT_KINDS, LESSON_COUNT, CANCELS_PER_MONTH, auth, init, savedLogin,
+    get state() { return state; }, get loadError() { return loadError; },
     subscribe: (fn) => { listeners.add(fn); return () => listeners.delete(fn); },
     today, dayKey, addDays,
     // activities
-    loadActivities, allActivities: () => actCache || [], loadTypes, validateActivity, createActivity, activity, isPast, attendees, spotsTaken,
-    myPastHosted: () => (actCache || []).filter((a) => a.hostId === ME).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)),
+    loadActivities, allActivities: () => actCache || [], loadTypes, types: () => typeCache || [], loadSuggestions, activitySuggestions, validateActivity, createActivity, activity, isPast, attendees, spotsTaken,
     myRsvp, myGuestInvite, isGoing, myCommitments, myCommitmentIds, hosting, conflictFor, commit, cancel, canCancel,
     cancellationsLeft, plusOneInvites, respondPlusOne, checkIn, needsCheckIn, address: (id) => state.addresses[id] || null,
     report, saveReport,
@@ -1522,6 +1392,6 @@
     isRequestToMe, isOutgoingPending, requestStatusFor, markRead, openDirect, sendDirectMessage, send, respondRequest,
     otherMember, memberStatus, shareActivityPeople,
     // settings
-    setSetting, updateProfile, uploadAvatar, deleteAvatar, interestOptions, loadInterestsFor, signIn, signOut, reset, clearDemo,
+    setSetting, updateProfile, uploadAvatar, deleteAvatar, interestOptions, loadInterestsFor,
   };
 })();

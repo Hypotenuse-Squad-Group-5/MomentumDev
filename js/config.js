@@ -7,7 +7,7 @@
      3. Save, reload the site. The "Saved to" badge on the Post-an-activity
         page will switch from "this browser" to "Supabase".
 
-   Leave them empty and the site runs in demo mode (saved in this browser only).
+   Both are required. Without them the app shows a "not connected to Supabase" message.
 
    NEVER paste the service_role / secret key here. It bypasses all security.
    ===================================================================== */

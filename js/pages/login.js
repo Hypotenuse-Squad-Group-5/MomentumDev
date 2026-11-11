@@ -1,17 +1,10 @@
-/* Sign in / sign up.
-   With Supabase keys in js/config.js: real accounts (Supabase Auth).
-   Without keys: demo mode, either button signs you in as the demo user. */
+/* Sign in / sign up with Supabase Auth (keys in js/config.js). */
 (async function () {
   const { esc } = UI;
   const main = document.getElementById("main");
 
-  // Already signed in (including arriving from the confirmation email link)? Go home.
-  if (Store.live) {
-    const session = await Store.auth.session();
-    if (session) { Store.signIn(); location.replace("home.html"); return; }
-  } else if (Store.state.signedIn && !location.search.includes("stay")) {
-    location.replace("home.html"); return;
-  }
+  const session = await Store.auth.session();
+  if (session) { location.replace("home.html"); return; }
 
   let mode = location.hash === "#signup" ? "signup" : "signin"; // "signin" | "signup" | "check-email" (#signup comes from the landing page)
   let pendingEmail = "";
@@ -51,8 +44,7 @@
             <span>I confirm I'm 18 or older and I've read the <a href="about.html" target="_blank" rel="noopener"><b>About &amp; Privacy</b></a> page.</span></label><div class="err" hidden></div></div>` : ""}
         <button class="btn btn-primary btn-block" id="submit">${signup ? "Create account" : "Sign in"}</button>
       </form>
-      <p class="center small mt">${signup ? "Already have an account?" : "New to Momentum?"} <a href="#" id="switch"><b>${signup ? "Sign in" : "Sign up"}</b></a></p>
-      ${Store.live ? "" : `<p class="hint center">Demo mode (no Supabase keys in js/config.js): either button signs you in as the demo user.</p>`}`;
+      <p class="center small mt">${signup ? "Already have an account?" : "New to Momentum?"} <a href="#" id="switch"><b>${signup ? "Sign in" : "Sign up"}</b></a></p>`;
   }
 
   function render() {
@@ -132,10 +124,8 @@
       form.querySelectorAll(".invalid").forEach((f) => { f.classList.remove("invalid"); f.querySelector(".err").hidden = true; });
       $("form-msg").hidden = true;
 
-      if (!Store.live) { Store.signIn(); location.href = "home.html"; return; } // demo mode
-
-      const v = {}; form.querySelectorAll("input, select").forEach((el) => (v[el.id] = el.type === "checkbox" ? el.checked : isPw(el.id) ? el.value : el.value.trim()));
-      const btn = $("submit"); const label = btn.textContent;
+      const v = {};form.querySelectorAll("input, select").forEach((el) => (v[el.id] = el.type === "checkbox" ? el.checked : isPw(el.id) ? el.value : el.value.trim()));
+      const btn = $("submit");const label = btn.textContent;
       const busy = (on) => { btn.disabled = on; btn.textContent = on ? "One moment…" : label; };
 
       if (mode === "signin") {
@@ -144,7 +134,7 @@
         const { error } = await Store.auth.signIn(v.email, v.password);
         busy(false);
         if (error) return showMsg(friendly(error));
-        Store.signIn(); location.href = "home.html";
+        location.href = "home.html";
         return;
       }
 
@@ -165,8 +155,8 @@
       if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
         return showMsg("An account with that email may already exist. Try signing in instead.");
       }
-      if (data.session) { Store.signIn(); location.href = "home.html"; return; } // confirmation turned off
-      pendingEmail = v.email; mode = "check-email"; render();
+      if (data.session) { location.href = "home.html"; return; } // confirmation turned off
+      pendingEmail = v.email;mode = "check-email";render();
     };
   }
 
