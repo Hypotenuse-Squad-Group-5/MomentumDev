@@ -3,9 +3,9 @@ UI.mount("home", function render() {
   const { icon, esc } = UI;
   const s = Store.stats();
   const days = Store.lastDays(28);
-  const LABEL = { habit: "Habit checked", lesson: "Lesson finished", rsvp: "Committed to an activity", attended: "Went to an activity", post: "First post of the day", rsvp_cancelled: "Cancelled a commitment" };
+  const LABEL = Store.POINT_LABELS; // labels + amounts come from the point_values table
   const history = Store.pointHistory(12);
-  const kinds = ["habit", "lesson", "rsvp", "attended", "post", "rsvp_cancelled"];
+  const kinds = Store.POINT_KINDS;
 
   document.getElementById("main").innerHTML = `
   <div style="max-width:820px">
@@ -24,7 +24,7 @@ UI.mount("home", function render() {
       <div class="big-stat"><b>${s.attended}</b><span>Activities attended</span></div>
       <div class="big-stat"><b>${s.upcoming}</b><span>Upcoming commitments</span></div>
       <div class="big-stat"><b>${s.habitsChecked}</b><span>Habits checked off</span></div>
-      <div class="big-stat"><b>${s.lessonsDone} / ${window.LESSONS ? window.LESSONS.length : 5}</b><span>Lessons complete</span></div>
+      <div class="big-stat"><b>${s.lessonsDone} / ${Store.LESSON_COUNT}</b><span>Lessons complete</span></div>
     </div>
 
     <section class="panel mt">
@@ -35,14 +35,14 @@ UI.mount("home", function render() {
     <div class="grid-2 mt" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr))">
       <section class="panel">
         <h2>How you earn points</h2>
-        ${kinds.map((k) => `<div class="ledger-row"><span>${LABEL[k]}</span><span class="p${Store.POINTS[k] < 0 ? " neg" : ""}">${Store.POINTS[k] > 0 ? "+" : ""}${Store.POINTS[k]}</span></div>`).join("")}
+        ${kinds.map((k) => `<div class="ledger-row"><span>${esc(LABEL[k])}</span><span class="p${Store.POINTS[k] < 0 ? " neg" : ""}">${Store.POINTS[k] > 0 ? "+" : ""}${Store.POINTS[k]}</span></div>`).join("")}
         <p class="hint mt mb0">Your streak counts the days you check off at least one habit. Posting only earns points once a day, so there's no reason to post more than you want to.</p>
       </section>
       <section class="panel">
         <h2>Where your points came from</h2>
-        ${kinds.filter((k) => s.byKind[k]).map((k) => `<div class="ledger-row"><span>${LABEL[k]} <span class="muted">×${s.byKind[k].count}</span></span><span class="p${s.byKind[k].points < 0 ? " neg" : ""}">${s.byKind[k].points}</span></div>`).join("")}
+        ${kinds.filter((k) => s.byKind[k]).map((k) => `<div class="ledger-row"><span>${esc(LABEL[k])} <span class="muted">×${s.byKind[k].count}</span></span><span class="p${s.byKind[k].points < 0 ? " neg" : ""}">${s.byKind[k].points}</span></div>`).join("")}
         <p class="label mt">Recent</p>
-        ${history.map((p) => `<div class="ledger-row"><span>${LABEL[p.kind]}<br><span class="tiny muted">${UI.fmtAgo(p.at)}</span></span><span class="p${p.points < 0 ? " neg" : ""}">${p.points > 0 ? "+" : ""}${p.points}</span></div>`).join("")}
+        ${history.map((p) => `<div class="ledger-row"><span>${esc(LABEL[p.kind] || p.kind)}<br><span class="tiny muted">${UI.fmtAgo(p.at)}</span></span><span class="p${p.points < 0 ? " neg" : ""}">${p.points > 0 ? "+" : ""}${p.points}</span></div>`).join("")}
       </section>
     </div>
   </div>`;

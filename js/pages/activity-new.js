@@ -3,7 +3,7 @@
    PL-6: missing/invalid fields block posting, are flagged, and everything typed stays put. */
 UI.mount("activities", async function render() {
   const { icon, esc } = UI;
-  const types = await Store.loadTypes();
+  const [types] = await Promise.all([Store.loadTypes(), Store.loadSuggestions()]);
   const s = Store.state.settings;
   const tomorrow = new Date(Date.now() + 864e5).toISOString().slice(0, 10);
 
@@ -52,19 +52,7 @@ UI.mount("activities", async function render() {
           <div class="field" data-f="activityName">
             <label for="activityName">Activity</label>
             <input id="activityName" type="text" maxlength="40" placeholder="e.g. board games, volleyball, mindfulness meditation" list="activity-name-suggestions">
-            <datalist id="activity-name-suggestions">
-              <option value="Board games"></option>
-              <option value="Pickup volleyball"></option>
-              <option value="Pickleball"></option>
-              <option value="Sunset picnic"></option>
-              <option value="Hiking"></option>
-              <option value="Potluck & snacks"></option>
-              <option value="Mindfulness meditation"></option>
-              <option value="Park cleanup"></option>
-              <option value="Smash Bros & Mario Kart"></option>
-              <option value="Co-working & study"></option>
-              <option value="Sketching & art"></option>
-            </datalist>
+            <datalist id="activity-name-suggestions">${Store.activitySuggestions().map((n) => `<option value="${esc(n)}"></option>`).join("")}</datalist>
             <div class="hint">Used for search and filters.</div>
             <div class="err" hidden></div>
           </div>

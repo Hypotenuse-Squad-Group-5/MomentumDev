@@ -18,8 +18,11 @@
    ===================================================================== */
 (function () {
   let KEY = null; // this user's browser data: "momentum.v1.user.<profile id>" (set in init)
-  // Fallback only: replaced at sign-in by the point_values table (migration 002), the real source.
-  const POINTS = { habit: 10, lesson: 25, rsvp: 15, attended: 25, post: 5, rsvp_cancelled: -15 };
+  // Point amounts + labels come from the point_values table (filled at sign-in by loadPointValues).
+  // To change a reward, edit that table in Supabase. No code change needed.
+  const POINTS = {};        // kind -> points, e.g. habit -> 10
+  const POINT_LABELS = {};  // kind -> label, e.g. habit -> "Habit checked"
+  const POINT_KINDS = [];   // kinds, biggest reward first
   const CANCELS_PER_MONTH = 2;
   const BUFFER_MIN = 30;
 
@@ -170,6 +173,37 @@
       postCache = (data || []).map(fromPostRow);
     }
     return postCache;
+  }
+
+  // "Activity" box ideas: most-used names first (2+ different hosts), then starters from activity_suggestions (migration 014)
+  let suggestionCache = null;
+  async function loadSuggestions() {
+    if (suggestionCache) return suggestionCache;
+    const { data, error } = await sb.from("activity_suggestions").select("name")
+      .order("sort_order", { ascending: true, nullsFirst: false }).order("name");
+    suggestionCache = error || !data ? [] : data.map((r) => r.name);
+    return suggestionCache;
+  }
+  function activitySuggestions(limit = 10) {
+    const groups = new Map(); // "board games" -> who used it, how often, and how they spelled it
+    (actCache || []).forEach((a) => {
+      const name = String(a.activityName || "").trim().replace(/\s+/g, " ");
+      if (!name) return;
+      const key = name.toLowerCase();
+      const g = groups.get(key) || { hosts: new Set(), uses: 0, spellings: new Map() };
+      g.hosts.add(a.hostId); g.uses++; g.spellings.set(name, (g.spellings.get(name) || 0) + 1);
+      groups.set(key, g);
+    });
+    const popular = [...groups.values()]
+      .filter((g) => g.hosts.size >= 2)
+      .sort((x, y) => y.hosts.size - x.hosts.size || y.uses - x.uses)
+      .map((g) => { const s = [...g.spellings].sort((p, q) => q[1] - p[1])[0][0]; return s.charAt(0).toUpperCase() + s.slice(1); });
+    const out = [], seen = new Set();
+    for (const n of [...popular, ...(suggestionCache || [])]) {
+      if (out.length >= limit) break;
+      if (!seen.has(n.toLowerCase())) { seen.add(n.toLowerCase()); out.push(n); }
+    }
+    return out;
   }
 
   async function loadTypes() {
@@ -458,7 +492,7 @@
     return myCommitments().find((o) => o.id !== a.id && s < new Date(o.endsAt).getTime() + buf && e > new Date(o.startsAt).getTime() - buf) || null;
   }
 
-  function addPoints(kind, ref) { const p = { id: uid(), kind, points: POINTS[kind], ref, date: today(), at: nowIso() }; state.points.push(p); return p.points; }
+  function addPoints(kind, ref) { const p = { id: uid(), kind, points: POINTS[kind] ?? 0, ref, date: today(), at: nowIso() }; state.points.push(p); return p.points; }
 
   function commit(activityId, plusOne) {
     const a = activity(activityId);
@@ -541,7 +575,7 @@
     if (isHabitDone(habitId, d)) {
       state.checkins = state.checkins.filter((c) => !(c.habitId === habitId && c.date === d));
       state.points = state.points.filter((p) => !(p.kind === "habit" && p.ref === habitId && p.date === d));
-      save(); return { done: false, points: -POINTS.habit };
+      save(); return { done: false, points: -(POINTS.habit ?? 0) };
     }
     const streakBefore = streak().current;
     state.checkins.push({ habitId, date: d });
@@ -1171,8 +1205,12 @@
   // Other point kinds stay local until their own integrations.
   const DB_POINT_KINDS = ["habit", "lesson"];
   async function loadPointValues() {
-    const { data, error } = await sb.from("point_values").select("kind,points");
-    if (!error && data) data.forEach((r) => (POINTS[r.kind] = r.points));
+    const { data, error } = await sb.from("point_values").select("kind,points,label");
+    if (error || !data) return false;
+    data.sort((a, b) => b.points - a.points || String(a.label).localeCompare(String(b.label)));
+    POINT_KINDS.length = 0;
+    data.forEach((r) => { POINTS[r.kind] = r.points; POINT_LABELS[r.kind] = r.label || r.kind; POINT_KINDS.push(r.kind); });
+    return true;
   }
   async function loadHabitData() {
     const [h, c, p] = await Promise.all([
@@ -1256,8 +1294,9 @@
       state.profiles[ME] = { ...old, ...me, interests: old.interests || [], attendeeDisplay: state.settings.attendeeDisplay };
       if (state && state.settings) delete state.settings.messageRequestsFrom;
       state.meId = ME; state.signedIn = true;
-      const [, habitsLoaded, lessonsLoaded] = await Promise.all([loadPointValues(), loadHabitData(), loadLessonData(), loadPosts(), loadInterests(), loadFriendships(), loadConversations()]);
+      const [pointsLoaded, habitsLoaded, lessonsLoaded] = await Promise.all([loadPointValues(), loadHabitData(), loadLessonData(), loadPosts(), loadInterests(), loadFriendships(), loadConversations()]);
       if (!habitsLoaded || !lessonsLoaded) { loadError = "We couldn't load your saved habits and lesson progress. Please reload to try again."; return "syncerror"; }
+      if (!pointsLoaded) { loadError = "We couldn't load the point values. Please reload to try again."; return "syncerror"; }
       persist();
       return true;
     })().catch(() => { loadError = "We couldn't reach your saved account data. Please reload to try again."; return "syncerror"; });
@@ -1293,12 +1332,12 @@
   };
 
   window.Store = {
-    get ME() { return ME; }, POINTS, LESSON_COUNT, CANCELS_PER_MONTH, auth, init,
+    get ME() { return ME; }, POINTS, POINT_LABELS, POINT_KINDS, LESSON_COUNT, CANCELS_PER_MONTH, auth, init,
     get state() { return state; }, get loadError() { return loadError; },
     subscribe: (fn) => { listeners.add(fn); return () => listeners.delete(fn); },
     today, dayKey, addDays,
     // activities
-    loadActivities, allActivities: () => actCache || [], loadTypes, types: () => typeCache || [], validateActivity, createActivity, activity, isPast, attendees, spotsTaken,
+    loadActivities, allActivities: () => actCache || [], loadTypes, types: () => typeCache || [], loadSuggestions, activitySuggestions, validateActivity, createActivity, activity, isPast, attendees, spotsTaken,
     myRsvp, myGuestInvite, isGoing, myCommitments, myCommitmentIds, hosting, conflictFor, commit, cancel, canCancel,
     cancellationsLeft, plusOneInvites, respondPlusOne, checkIn, needsCheckIn, address: (id) => state.addresses[id] || null,
     report, saveReport,
