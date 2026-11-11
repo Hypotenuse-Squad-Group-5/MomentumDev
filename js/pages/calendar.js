@@ -46,6 +46,7 @@
     if (month === e.m && day === e.d) return ['🐰', '🥚', '🐣', '✝️', '🌸'];
     if (month === 4 && day === nthDow(year, 4, 0, 2)) return ['💐', '💝', '👩', '🌸'];
     if (month === 4 && day === lastMonday(year, 4)) return ['🎆', '🎖️', '🗽', '🦅'];
+    if (month === 5 && day === nthDow(year, 5, 0, 3)) return ['👨', '👑', '👔', '🎁'];
     if (month === 8 && day === nthDow(year, 8, 1, 1)) return ['🛠️', '👷', '🍔'];
     if (month === 9 && day === nthDow(year, 9, 1, 2)) return ['⛵', '🌎', '🪵', '🏹'];
     if (month === 10 && day === nthDow(year, 10, 4, 4)) return ['🦃', '🍂', '🥧', '🍁', '🍗'];
