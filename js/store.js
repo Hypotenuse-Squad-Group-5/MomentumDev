@@ -458,6 +458,14 @@
   }
   function isGoing(activityId) { return myCommitmentIds().includes(activityId); }
   function myCommitments() { return myCommitmentIds().map(activity).filter(Boolean).sort((a, b) => new Date(a.startsAt) - new Date(b.startsAt)); }
+    // Exact address of an activity. Supabase only returns it to the host (and later, committed members).
+  async function loadAddress(id) {
+    if (state.addresses[id]) return state.addresses[id];
+    const { data, error } = await sb.from("activity_addresses").select("exact_address").eq("activity_id", id).maybeSingle();
+    if (error || !data) return null;
+    state.addresses[id] = data.exact_address;
+    return data.exact_address;
+  }
   function hosting() { return (actCache || []).filter((a) => a.hostId === ME); }
 
   // Who's going: committed people + their +1s (pending friend invites don't hold a spot)
@@ -1487,7 +1495,7 @@
     // activities
     loadActivities, allActivities: () => actCache || [], loadTypes, types: () => typeCache || [], loadSuggestions, activitySuggestions, validateActivity, createActivity, activity, isPast, attendees, spotsTaken,
     myRsvp, myGuestInvite, isGoing, myCommitments, myCommitmentIds, hosting, conflictFor, commit, cancel, canCancel,
-    cancellationsLeft, plusOneInvites, respondPlusOne, checkIn, needsCheckIn, address: (id) => state.addresses[id] || null,
+    cancellationsLeft, plusOneInvites, respondPlusOne, checkIn, needsCheckIn, address: (id) => state.addresses[id] || null, loadAddress,
     report, saveReport,
     // people
     profile, fullName, isFriend, friends, friendshipWith, incomingRequests, sentRequests, acceptFriend, declineFriend,
