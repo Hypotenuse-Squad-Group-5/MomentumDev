@@ -161,7 +161,15 @@
       '<a href="profile.html" class="avatar-btn" aria-label="My profile">' + avatar(Store.ME, "sm") + "</a>";
   }
 
-  let currentPageKey = null;
+  // The header + tabs from this device's last visit, so the next page can draw them instantly.
+  // Stored per login; cleared on sign-out.
+  const shellKey = () => { const id = Store.savedLogin(); return id && id !== "saved" ? "momentum.shell." + id : null; };
+  function readShell() { try { const k = shellKey(); return k ? JSON.parse(localStorage.getItem(k)) : null; } catch (e) { return null; } }
+  function saveShell(data) { try { const k = shellKey(); if (k) localStorage.setItem(k, JSON.stringify(data)); } catch (e) { /* ignore */ } }
+  const BRAND_ONLY = '<a href="home.html" class="brand" aria-label="Momentum home"><span class="brand-mark">M</span><span class="brand-name">Momentum</span></a>';
+  const LOADER = '<div class="page-loader" role="status" aria-label="Loading"><span class="brand-mark loader-mark">M</span></div>';
+
+  let currentPageKey = null, shellReady = false;
   function buildShell(pageKey) {
     currentPageKey = pageKey;
     const main = document.getElementById("main");
@@ -175,11 +183,14 @@
     document.body.appendChild(tabs);
     const panel = document.createElement("aside"); panel.className = "msg-panel"; panel.id = "msg-panel"; panel.hidden = true; panel.setAttribute("aria-label", "Messages");
     document.body.appendChild(panel);
-    renderHeader();
+    // Data isn't loaded yet: draw the last saved header (or just the logo) and the tabs.
+    const last = readShell();
+    header.innerHTML = last && last.header ? last.header : BRAND_ONLY;
+    renderNav(pageKey, last ? last.requests : 0);
   }
-  function renderNav(pageKey) {
+  function renderNav(pageKey, savedRequests) {
     if (!pageKey) return;
-    const reqCount = Store.incomingRequests ? Store.incomingRequests().length : 0;
+    const reqCount = shellReady ? Store.incomingRequests().length : savedRequests || 0;
     const socialBadge = reqCount > 0 ? ' <span class="badge" aria-label="' + reqCount + ' pending friend requests">' + reqCount + "</span>" : "";
     const side = document.getElementById("app-sidebar");
     if (side) {
@@ -196,6 +207,7 @@
     renderNav(currentPageKey);
     const h = document.getElementById("app-header"); if (!h) return;
     h.innerHTML = headerHtml();
+    saveShell({ header: h.innerHTML, requests: Store.incomingRequests().length });
     const btn = document.getElementById("msg-toggle");
     btn.classList.toggle("on", Messages.isOpen()); btn.setAttribute("aria-expanded", Messages.isOpen());
     btn.onclick = () => Messages.toggle();
@@ -577,8 +589,12 @@
   // (here or in another tab), so streaks/points/habits stay in sync everywhere.
   async function mount(pageKey, render, opts = {}) {
     const main = document.getElementById("main");
-    main.innerHTML = '<p class="muted">Loading…</p>';
-    // Auth guard: no session → sign-in page. Nothing below runs for signed-out visitors.
+    // No login saved on this device: go straight to sign-in without drawing the app.
+    if (Store.savedLogin() === "") { location.replace("login.html"); return; }
+    // Draw the frame right away; the loader only appears if loading takes more than a moment (CSS).
+    if (opts.shell !== false) buildShell(pageKey);
+    main.innerHTML = LOADER;
+    // Auth guard: the saved login must still be valid. Nothing below runs for signed-out visitors.
     const signedIn = await Store.init();
     if (signedIn === false) { location.replace("login.html"); return; }
     if (signedIn === "syncerror") {
@@ -591,7 +607,8 @@
       document.getElementById("np-out").onclick = async () => { await Store.auth.signOut(); location.replace("index.html"); };
       return;
     }
-    if (opts.shell !== false) buildShell(pageKey);
+    shellReady = true;
+    if (opts.shell !== false) renderHeader(); // swap in today's streak, messages and photo
     await Promise.all([Store.loadActivities(), Store.loadPosts(), Store.loadTypes()]);
     render();
     showFlash();

@@ -16,11 +16,20 @@
 <script>
   // Email confirmation links land on the site's front page. Hand them to the sign-in page,
   // which finishes signing the person in.
+  // Already signed in on this device? Skip the landing page and open the app.
+  // (Add ?landing to the address to see this page anyway.)
   (function () {
     var h = location.hash, s = location.search;
     if (/access_token=|error_description=/.test(h) || /[?&](code|error_description)=/.test(s)) {
       location.replace("login.html" + s + h);
+      return;
     }
+    if (/[?&]landing\b/.test(s)) return;
+    try {
+      for (var i = 0; i < localStorage.length; i++) {
+        if (/^sb-.+-auth-token$/.test(localStorage.key(i))) { location.replace("home.html"); return; }
+      }
+    } catch (e) {}
   })();
 </script>
 </head>

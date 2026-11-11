@@ -586,15 +586,38 @@
   // Signed in: the screen updates instantly, then the change is saved to Supabase.
   // If the save fails, the change is undone and the reason is shown.
   function syncFailed(message) { save(); if (window.UI) window.UI.toast(message); }
+  // One save at a time per habit. Fast clicking only changes what the user WANTS;
+  // when the current save finishes, one more save is sent if the database doesn't match yet.
+  // (Sending every click at once let a "check" overtake an "uncheck", and the database
+  // rightly rejected the second +10 for the same day.)
+  const habitSaves = new Map(); // habitId -> { want, saved }
+  let habitClicks = 0;          // goes up on every click, so a refresh can tell it's out of date
   function toggleHabit(habitId) {
     const r = toggleHabitLocal(habitId);
-    const write = r.done
-      ? sb.from("habit_checkins").insert({ habit_id: habitId }) // the database fills in today's date
-      : sb.from("habit_checkins").delete().eq("habit_id", habitId).eq("check_date", today());
-    write.then(({ error }) => {
-      if (error) { toggleHabitLocal(habitId); syncFailed("Couldn't save: " + error.message); }
-      else loadHabitData().then(save); // pick up the points the database awarded
-    });
+    habitClicks++;
+    let s = habitSaves.get(habitId);
+    if (s) { s.want = r.done; return r; } // a save is already running; it will pick this up
+    s = { want: r.done, saved: !r.done }; // before this click, the database had the opposite
+    habitSaves.set(habitId, s);
+    (async () => {
+      while (s.want !== s.saved) {
+        const target = s.want;
+        const { error } = target
+          ? await sb.from("habit_checkins").insert({ habit_id: habitId }) // the database fills in today's date
+          : await sb.from("habit_checkins").delete().eq("habit_id", habitId).eq("check_date", today());
+        if (error) {
+          if (isHabitDone(habitId) !== s.saved) toggleHabitLocal(habitId); // show what the database really has
+          syncFailed("Couldn't save: " + error.message);
+          break;
+        }
+        s.saved = target;
+      }
+      habitSaves.delete(habitId);
+      const clicksNow = habitClicks;
+      // Pick up the points the database awarded, unless the user clicked again meanwhile
+      // (that newer save refreshes when it finishes, so this answer would be stale).
+      loadHabitData(() => habitClicks === clicksNow && habitSaves.size === 0).then(save);
+    })();
     return r;
   }
   async function addHabit(title, extra = {}) {
@@ -1212,7 +1235,7 @@
     data.forEach((r) => { POINTS[r.kind] = r.points; POINT_LABELS[r.kind] = r.label || r.kind; POINT_KINDS.push(r.kind); });
     return true;
   }
-  async function loadHabitData() {
+  async function loadHabitData(stillCurrent) {
     const [h, c, p] = await Promise.all([
       sb.from("habits").select("id,title,goal_text,source_lesson_id,is_active,created_at,sort_order").order("sort_order"),
       sb.from("habit_checkins").select("habit_id,check_date"),
@@ -1220,6 +1243,7 @@
     ]);
     const err = h.error || c.error || p.error;
     if (err || !h.data || !c.data || !p.data) { if (err) console.error(err); return false; }
+    if (stillCurrent && !stillCurrent()) return true; // newer clicks are still saving; their refresh will follow
     state.habits = h.data.map((r) => ({ id: r.id, title: r.title, goalText: r.goal_text, lessonId: r.source_lesson_id, active: r.is_active, createdAt: r.created_at, sortOrder: r.sort_order }));
     state.checkins = c.data.map((r) => ({ habitId: r.habit_id, date: r.check_date }));
     state.points = state.points.filter((x) => !DB_POINT_KINDS.includes(x.kind))
@@ -1328,11 +1352,25 @@
       try { failed = !!(await sb.auth.signOut()).error; } catch (e) { failed = true; }
       // Offline or server error: still sign out on this device by clearing the saved session.
       if (failed) { try { localStorage.removeItem(sb.auth.storageKey); } catch (e) { /* ignore */ } }
+      try { Object.keys(localStorage).filter((k) => k.startsWith("momentum.shell.")).forEach((k) => localStorage.removeItem(k)); } catch (e) { /* ignore */ }
     },
   };
 
+  // Instant check, no network: is a login saved on this device, and whose?
+  // null = can't tell (not connected, or no session storage): fall back to Store.init()'s check;
+  // "" = nobody saved; otherwise the login's id. Store.init() still verifies the session with Supabase.
+  function savedLogin() {
+    if (!sb || !sb.auth || !sb.auth.storageKey) return null;
+    try {
+      const raw = localStorage.getItem(sb.auth.storageKey);
+      if (!raw) return "";
+      const s = JSON.parse(raw);
+      return (s && s.user && s.user.id) || "saved";
+    } catch (e) { return "saved"; }
+  }
+
   window.Store = {
-    get ME() { return ME; }, POINTS, POINT_LABELS, POINT_KINDS, LESSON_COUNT, CANCELS_PER_MONTH, auth, init,
+    get ME() { return ME; }, POINTS, POINT_LABELS, POINT_KINDS, LESSON_COUNT, CANCELS_PER_MONTH, auth, init, savedLogin,
     get state() { return state; }, get loadError() { return loadError; },
     subscribe: (fn) => { listeners.add(fn); return () => listeners.delete(fn); },
     today, dayKey, addDays,
