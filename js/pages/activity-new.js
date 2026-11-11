@@ -115,13 +115,12 @@ UI.mount("activities", async function render() {
         <summary>
           <div class="form-section-title">
             <span class="form-section-name">Logistics</span>
-            <span class="form-section-desc">Items to bring, cover photo & visibility</span>
+            <span class="form-section-desc">Items to bring &amp; visibility</span>
           </div>
           <span class="form-section-chevron"></span>
         </summary>
         <div class="form-section-body">
           <div class="field"><label for="bring">What to bring <span class="opt">(optional)</span></label><input id="bring" maxlength="80" type="text" placeholder="e.g. water, a snack to share"></div>
-          <div class="field"><span class="flabel">Cover photo <span class="opt">(optional)</span></span><div class="photo cover">${icon("camera", "lg")}</div><p class="hint">Photo upload comes in a later slice.</p></div>
           <fieldset class="field choice-list" style="border:0;padding:0">
             <legend class="flabel" style="font-weight:600;margin-bottom:6px">Who can see this activity?</legend>
             ${Object.entries(UI.VIS).map(([k, v]) => `<label><input type="radio" name="visibility" value="${k}"${k === s.activityVisibility ? " checked" : ""}><span><b>${v}</b>${k === "public" ? '<br><span class="small muted">Anyone on Momentum. The default.</span>' : k === "private" ? '<br><span class="small muted">Only people you invite.</span>' : ""}</span></label>`).join("")}

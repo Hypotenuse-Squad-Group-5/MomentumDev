@@ -136,7 +136,6 @@
       id: row.id,
       authorId: row.author_id,
       caption: row.caption,
-      photos: 0,
       activityId: row.activity_id || null,
       visibility: row.visibility || "public",
       createdAt: row.created_at,
@@ -757,9 +756,9 @@
   // =====================================================================
   // Posts + feed
   // =====================================================================
-  async function createPost({ caption, photos, activityId, visibility }) {
-    if (!caption || !caption.trim()) return { ok: false, message: "Add a caption." };
-    if (caption.trim().length > 500) return { ok: false, message: "Captions can be up to 500 characters." };
+  async function createPost({ caption, activityId, visibility }) {
+    if (!caption || !caption.trim()) return { ok: false, message: "Write something before posting." };
+    if (caption.trim().length > 500) return { ok: false, message: "Posts can be up to 500 characters." };
     let post;
     let res = await sb.from("posts").insert({
       author_id: ME,
