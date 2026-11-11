@@ -49,7 +49,7 @@
   function blankState(me) {
     return {
       version: 1, meId: me.id, signedIn: true, profiles: { [me.id]: me },
-      friendships: [], activities: [], addresses: {}, rsvps: [], guests: [], reports: [], posts: [],
+      friendships: [], blocks: [], activities: [], addresses: {}, rsvps: [], guests: [], reports: [], posts: [],
       encouragements: [], conversations: [], lessonsDone: [], habits: [], checkins: [], points: [],
       settings: defaultSettings(),
     };
@@ -136,7 +136,6 @@
       id: row.id,
       authorId: row.author_id,
       caption: row.caption,
-      photos: 0,
       activityId: row.activity_id || null,
       visibility: row.visibility || "public",
       createdAt: row.created_at,
@@ -459,6 +458,14 @@
   }
   function isGoing(activityId) { return myCommitmentIds().includes(activityId); }
   function myCommitments() { return myCommitmentIds().map(activity).filter(Boolean).sort((a, b) => new Date(a.startsAt) - new Date(b.startsAt)); }
+    // Exact address of an activity. Supabase only returns it to the host (and later, committed members).
+  async function loadAddress(id) {
+    if (state.addresses[id]) return state.addresses[id];
+    const { data, error } = await sb.from("activity_addresses").select("exact_address").eq("activity_id", id).maybeSingle();
+    if (error || !data) return null;
+    state.addresses[id] = data.exact_address;
+    return data.exact_address;
+  }
   function hosting() { return (actCache || []).filter((a) => a.hostId === ME); }
 
   // Who's going: committed people + their +1s (pending friend invites don't hold a spot)
@@ -757,9 +764,9 @@
   // =====================================================================
   // Posts + feed
   // =====================================================================
-  async function createPost({ caption, photos, activityId, visibility }) {
-    if (!caption || !caption.trim()) return { ok: false, message: "Add a caption." };
-    if (caption.trim().length > 500) return { ok: false, message: "Captions can be up to 500 characters." };
+  async function createPost({ caption, activityId, visibility }) {
+    if (!caption || !caption.trim()) return { ok: false, message: "Write something before posting." };
+    if (caption.trim().length > 500) return { ok: false, message: "Posts can be up to 500 characters." };
     let post;
     let res = await sb.from("posts").insert({
       author_id: ME,
@@ -882,9 +889,98 @@
       return conversations();
     }
   }
+  function hasBlocked(id) {
+    return !!id && (state?.blocks || []).some((b) => b.blockerId === ME && b.blockedId === id);
+  }
+  function isBlockedBy(id) {
+    return !!id && (state?.blocks || []).some((b) => b.blockerId === id && b.blockedId === ME);
+  }
+  function isBlockedBetween(id) {
+    return hasBlocked(id) || isBlockedBy(id);
+  }
+  function blockedUsers() {
+    return (state?.blocks || [])
+      .filter((b) => b.blockerId === ME)
+      .slice()
+      .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
+      .map((b) => ({ id: b.blockedId, createdAt: b.createdAt }));
+  }
+  async function loadBlocks() {
+    if (!ME) return (state && state.blocks) || [];
+    try {
+      const q = sb.from("user_blocks")
+        .select("blocker_id, blocked_id, created_at, blocker:profiles!user_blocks_blocker_id_fkey(id, first_name, bio, avatar_url, created_at), blocked:profiles!user_blocks_blocked_id_fkey(id, first_name, bio, avatar_url, created_at)");
+      if (typeof q.or !== "function") return (state && state.blocks) || [];
+      const { data, error } = await q.or(`blocker_id.eq.${ME},blocked_id.eq.${ME}`);
+      if (error) {
+        console.warn("Could not load user_blocks from Supabase (has migration 015 been run?):", error.message);
+        return (state && state.blocks) || [];
+      }
+      if (Array.isArray(data)) {
+        data.forEach((r) => {
+          if (r.blocker && r.blocker_id !== ME) cacheRemoteProfile({ id: r.blocker_id, ...r.blocker });
+          if (r.blocked && r.blocked_id !== ME) cacheRemoteProfile({ id: r.blocked_id, ...r.blocked });
+        });
+        state.blocks = data.map((r) => ({
+          blockerId: r.blocker_id,
+          blockedId: r.blocked_id,
+          createdAt: r.created_at,
+        }));
+        persist();
+      }
+      return state.blocks || [];
+    } catch (e) {
+      console.warn("loadBlocks error:", e);
+      return (state && state.blocks) || [];
+    }
+  }
+  async function blockUser(otherId) {
+    if (!otherId || otherId === ME) return { ok: false, message: "Choose someone else to block." };
+    const { data, error } = await sb.from("user_blocks")
+      .insert({ blocker_id: ME, blocked_id: otherId })
+      .select("blocker_id, blocked_id, created_at")
+      .single();
+    if (error) {
+      if (error.code === "23505" || /duplicate|unique/i.test(error.message || "")) {
+        await loadBlocks();
+        save();
+        return { ok: true, alreadyBlocked: true };
+      }
+      return { ok: false, message: error.message || "Could not block this user." };
+    }
+    if (!Array.isArray(state.blocks)) state.blocks = [];
+    if (!hasBlocked(otherId)) {
+      state.blocks.push({
+        blockerId: data ? data.blocker_id : ME,
+        blockedId: data ? data.blocked_id : otherId,
+        createdAt: (data && data.created_at) || nowIso(),
+      });
+    }
+    save();
+    return { ok: true };
+  }
+  async function unblockUser(otherId) {
+    if (!otherId || otherId === ME) return { ok: false, message: "Invalid user." };
+    const { error } = await sb.from("user_blocks")
+      .delete()
+      .eq("blocker_id", ME)
+      .eq("blocked_id", otherId);
+    if (error) return { ok: false, message: error.message || "Could not unblock this user." };
+    state.blocks = (state.blocks || []).filter((b) => !(b.blockerId === ME && b.blockedId === otherId));
+    save();
+    return { ok: true };
+  }
+
   function conversations() {
     return (state.conversations || [])
-      .filter((c) => c.kind === "direct" && c.members.some((m) => m.id === ME) && c.members.some((m) => m.id !== ME) && memberStatus(c, ME) !== "declined")
+      .filter((c) => {
+        if (c.kind !== "direct" || !c.members.some((m) => m.id === ME) || !c.members.some((m) => m.id !== ME)) return false;
+        if (memberStatus(c, ME) === "declined") return false;
+        const other = otherMember(c);
+        if (hasBlocked(other)) return false;
+        if (memberStatus(c, ME) === "requested" && isBlockedBy(other)) return false;
+        return true;
+      })
       .sort((a, b) => new Date(last(b).at || b.createdAt || 0) - new Date(last(a).at || a.createdAt || 0));
   }
   function findDirect(otherId) {
@@ -892,14 +988,20 @@
     return (state.conversations || []).find((x) => x.kind === "direct" && x.members.length === 2 && x.members.some((m) => m.id === ME) && x.members.some((m) => m.id === otherId)) || null;
   }
   function isRequestToMe(c) {
-    return !!c && c.kind === "direct" && memberStatus(c, ME) === "requested" && !isFriend(otherMember(c));
+    const other = otherMember(c);
+    return !!c && c.kind === "direct" && memberStatus(c, ME) === "requested" && !isFriend(other) && !isBlockedBetween(other);
   }
   function isOutgoingPending(c) {
     if (!c || c.kind !== "direct" || isRequestToMe(c)) return false;
     const other = otherMember(c);
+    if (isBlockedBetween(other)) return false;
     return !isFriend(other) && memberStatus(c, other) === "requested";
   }
-  function unread(c) { const l = last(c); return !!l.at && l.senderId !== ME && (!c.lastRead || !c.lastRead[ME] || new Date(l.at) > new Date(c.lastRead[ME])); }
+  function unread(c) {
+    if (!c || isBlockedBetween(otherMember(c))) return false;
+    const l = last(c);
+    return !!l.at && l.senderId !== ME && (!c.lastRead || !c.lastRead[ME] || new Date(l.at) > new Date(c.lastRead[ME]));
+  }
   function unreadConversationsCount() { return conversations().filter((c) => !isRequestToMe(c) && unread(c)).length; }
   function incomingMessageRequests() { return conversations().filter((c) => isRequestToMe(c)); }
   function unreadCount() { return conversations().filter((c) => unread(c) || isRequestToMe(c)).length; }
@@ -923,6 +1025,12 @@
     }
   }
   function requestStatusFor(otherId) {
+    if (hasBlocked(otherId)) {
+      return { kind: "blocked_by_me", canSend: false, isRequest: false, messagesLeft: 0, retryAt: null };
+    }
+    if (isBlockedBy(otherId)) {
+      return { kind: "blocked_by_other", canSend: false, isRequest: false, messagesLeft: 0, retryAt: null };
+    }
     const c = findDirect(otherId);
     const friends = isFriend(otherId);
     if (!c) {
@@ -964,6 +1072,8 @@
 
     const st = requestStatusFor(recipientId);
     if (!st.canSend) {
+      if (st.kind === "blocked_by_me") return { ok: false, message: "Unblock this person to send messages." };
+      if (st.kind === "blocked_by_other") return { ok: false, message: "Messaging this person is currently unavailable." };
       if (st.kind === "incoming_request") return { ok: false, message: "Accept this message request before replying." };
       if (st.kind === "declined_by_me") return { ok: false, message: "Accept this message request to reply." };
       if (st.kind === "declined_by_other") return { ok: false, message: "Follow-up messages aren't available for this request." };
@@ -978,6 +1088,8 @@
       p_activity_id: linkedAct,
     });
     if (error || !data || !data.ok) {
+      await loadBlocks();
+      save();
       return { ok: false, message: (error && error.message) || "Could not send message." };
     }
     const existing = conversation(data.conversationId);
@@ -1042,8 +1154,13 @@
   async function respondRequest(convoId, accept) {
     const c = conversation(convoId);
     if (!c) return { ok: false, message: "Message request not found." };
+    if (isBlockedBetween(otherMember(c))) {
+      return { ok: false, message: "Messaging this person is currently unavailable." };
+    }
     const { data, error } = await sb.rpc("respond_message_request", { p_conversation_id: convoId, p_accept: !!accept });
     if (error || !data || !data.ok) {
+      await loadBlocks();
+      save();
       return { ok: false, message: (error && error.message) || "Could not update message request." };
     }
     const ts = nowIso();
@@ -1317,8 +1434,9 @@
       ["phone", "address", "zip", "city", "state", "birthday"].forEach((k) => delete old[k]); // removed in migration 008: clear this browser's copy too
       state.profiles[ME] = { ...old, ...me, interests: old.interests || [], attendeeDisplay: state.settings.attendeeDisplay };
       if (state && state.settings) delete state.settings.messageRequestsFrom;
+      if (!Array.isArray(state.blocks)) state.blocks = [];
       state.meId = ME; state.signedIn = true;
-      const [pointsLoaded, habitsLoaded, lessonsLoaded] = await Promise.all([loadPointValues(), loadHabitData(), loadLessonData(), loadPosts(), loadInterests(), loadFriendships(), loadConversations()]);
+      const [pointsLoaded, habitsLoaded, lessonsLoaded] = await Promise.all([loadPointValues(), loadHabitData(), loadLessonData(), loadPosts(), loadInterests(), loadFriendships(), loadConversations(), loadBlocks()]);
       if (!habitsLoaded || !lessonsLoaded) { loadError = "We couldn't load your saved habits and lesson progress. Please reload to try again."; return "syncerror"; }
       if (!pointsLoaded) { loadError = "We couldn't load the point values. Please reload to try again."; return "syncerror"; }
       persist();
@@ -1377,7 +1495,7 @@
     // activities
     loadActivities, allActivities: () => actCache || [], loadTypes, types: () => typeCache || [], loadSuggestions, activitySuggestions, validateActivity, createActivity, activity, isPast, attendees, spotsTaken,
     myRsvp, myGuestInvite, isGoing, myCommitments, myCommitmentIds, hosting, conflictFor, commit, cancel, canCancel,
-    cancellationsLeft, plusOneInvites, respondPlusOne, checkIn, needsCheckIn, address: (id) => state.addresses[id] || null,
+    cancellationsLeft, plusOneInvites, respondPlusOne, checkIn, needsCheckIn, address: (id) => state.addresses[id] || null, loadAddress,
     report, saveReport,
     // people
     profile, fullName, isFriend, friends, friendshipWith, incomingRequests, sentRequests, acceptFriend, declineFriend,
@@ -1391,6 +1509,7 @@
     loadConversations, conversations, conversation, findDirect, unread, unreadCount, unreadConversationsCount, incomingMessageRequests,
     isRequestToMe, isOutgoingPending, requestStatusFor, markRead, openDirect, sendDirectMessage, send, respondRequest,
     otherMember, memberStatus, shareActivityPeople,
+    loadBlocks, blockUser, unblockUser, hasBlocked, isBlockedBy, isBlockedBetween, blockedUsers,
     // settings
     setSetting, updateProfile, uploadAvatar, deleteAvatar, interestOptions, loadInterestsFor,
   };

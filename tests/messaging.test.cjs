@@ -62,6 +62,7 @@ function makeMiniDom() {
       this.dataset = {};
       this._text = '';
       this._value = '';
+      this._listeners = {};
       this.hidden = false;
       this.disabled = false;
       this.scrollTop = 0;
@@ -132,9 +133,24 @@ function makeMiniDom() {
     }
     focus() { document.activeElement = this; }
     setSelectionRange() {}
+    addEventListener(ev, fn) {
+      if (!this._listeners[ev]) this._listeners[ev] = [];
+      this._listeners[ev].push(fn);
+    }
+    removeEventListener(ev, fn) {
+      if (this._listeners[ev]) this._listeners[ev] = this._listeners[ev].filter((f) => f !== fn);
+    }
     click() {
-      const e = { preventDefault() {}, target: this };
-      if (typeof this.onclick === 'function') return this.onclick(e);
+      let stopped = false;
+      const e = { preventDefault() {}, stopPropagation() { stopped = true; }, target: this };
+      let ret;
+      if (typeof this.onclick === 'function') ret = this.onclick(e);
+      let cur = this;
+      while (cur && !stopped) {
+        if (cur._listeners.click) cur._listeners.click.forEach((fn) => fn(e));
+        cur = cur.parentNode;
+      }
+      return ret;
     }
     querySelectorAll(sel) {
       const out = [];
@@ -285,6 +301,22 @@ function makeLiveMessagingApp(db, opts = {}) {
       (f) => f.status === 'accepted' && ((f.requester_id === a && f.addressee_id === b) || (f.requester_id === b && f.addressee_id === a))
     );
 
+  const isBlockedInDb = (a, b) =>
+    (db.user_blocks || []).some(
+      (ub) => (ub.blocker_id === a && ub.blocked_id === b) || (ub.blocker_id === b && ub.blocked_id === a)
+    );
+
+  const hydrateBlocks = (rows) =>
+    rows.map((r) => {
+      const blk = (db.profiles || []).find((p) => p.id === r.blocker_id) || null;
+      const bkd = (db.profiles || []).find((p) => p.id === r.blocked_id) || null;
+      return {
+        ...r,
+        blocker: blk ? { id: blk.id, first_name: blk.first_name, bio: blk.bio, avatar_url: blk.avatar_url, created_at: blk.created_at } : null,
+        blocked: bkd ? { id: bkd.id, first_name: bkd.first_name, bio: bkd.bio, avatar_url: bkd.avatar_url, created_at: bkd.created_at } : null,
+      };
+    });
+
   const promoteOnFriendship = (a, b) => {
     for (const c of db.conversations || []) {
       if (c.kind !== 'direct') continue;
@@ -297,12 +329,28 @@ function makeLiveMessagingApp(db, opts = {}) {
 
   const builder = (table) => {
     const filters = [];
+    let inserted = null;
     let updated = null;
     let deleting = false;
     let wantSingle = false;
     let wantMaybeSingle = false;
 
     const execute = () => {
+      if (inserted) {
+        if (table === 'user_blocks') {
+          db.user_blocks = db.user_blocks || [];
+          const dup = db.user_blocks.find((r) => r.blocker_id === inserted.blocker_id && r.blocked_id === inserted.blocked_id);
+          if (dup) {
+            return { data: null, error: { code: '23505', message: 'duplicate key value violates unique constraint' } };
+          }
+          const row = { created_at: new Date().toISOString(), ...inserted };
+          db.user_blocks.push(row);
+          return { data: wantSingle || wantMaybeSingle ? row : [row], error: null };
+        }
+        db[table] = db[table] || [];
+        db[table].push(inserted);
+        return { data: wantSingle || wantMaybeSingle ? inserted : [inserted], error: null };
+      }
       if (updated) {
         const matched = applyFilters(db[table] || [], filters);
         if (!matched.length) return { data: wantMaybeSingle ? null : [], error: null };
@@ -323,6 +371,7 @@ function makeLiveMessagingApp(db, opts = {}) {
       }
       if (table === 'friendships') data = hydrateFriendships(data);
       if (table === 'conversations') data = hydrateConversations(data);
+      if (table === 'user_blocks') data = hydrateBlocks(data);
       if (wantMaybeSingle) return { data: data[0] || null, error: null };
       if (wantSingle) return data[0] ? { data: data[0], error: null } : { data: null, error: { message: 'Not found' } };
       return { data, error: null };
@@ -337,6 +386,7 @@ function makeLiveMessagingApp(db, opts = {}) {
       or: (v) => { filters.push(['or', 'or', v]); return b; },
       order: () => b,
       limit: () => b,
+      insert: (row) => { inserted = row; return b; },
       update: (patch) => { updated = patch; return b; },
       delete: () => { deleting = true; return b; },
       single: async () => { wantSingle = true; return execute(); },
@@ -355,6 +405,9 @@ function makeLiveMessagingApp(db, opts = {}) {
           const recip = args.p_recipient_id;
           const body = String(args.p_body || '').trim();
           if (!body || body.length > 2000) return { data: null, error: { message: 'Invalid body' } };
+          if (isBlockedInDb(uid, recip)) {
+            return { data: null, error: { message: 'Messaging this person is currently unavailable.' } };
+          }
           const friends = areFriendsInDb(uid, recip);
           let convo = (db.conversations || []).find((c) => {
             if (c.kind !== 'direct') return false;
@@ -410,6 +463,10 @@ function makeLiveMessagingApp(db, opts = {}) {
         if (name === 'respond_message_request') {
           const m = (db.conversation_members || []).find((x) => x.conversation_id === args.p_conversation_id && x.profile_id === uid);
           if (!m) return { data: null, error: { message: 'Message request not found.' } };
+          const other = (db.conversation_members || []).find((x) => x.conversation_id === args.p_conversation_id && x.profile_id !== uid);
+          if (other && isBlockedInDb(uid, other.profile_id)) {
+            return { data: null, error: { message: 'Messaging this person is currently unavailable.' } };
+          }
           m.status = args.p_accept ? 'active' : 'declined';
           m.last_read_at = new Date().toISOString();
           return { data: { ok: true, conversationId: args.p_conversation_id, status: m.status }, error: null };
@@ -454,6 +511,7 @@ function seedMessagingDb() {
     conversations: [],
     conversation_members: [],
     messages: [],
+    user_blocks: [],
   };
 }
 
@@ -736,4 +794,250 @@ test('UI.Messages end-to-end: tabs, incoming request preview/accept/decline, fri
   await reqForm.onsubmit({ preventDefault() {} });
   assert.equal(panel.querySelector('.composer'), null);
   assert.match(panel.querySelector('.msg-locked').textContent, /1 follow-up on/i);
+});
+
+test('blocking locks messaging both ways without notifying blocked user, preserves state on unblock, and enforces server-side', async () => {
+  const db = seedMessagingDb();
+  const alice = makeLiveMessagingApp(db, { user: 'user-a' });
+  const bob = makeLiveMessagingApp(db, { user: 'user-b' });
+  const clara = makeLiveMessagingApp(db, { user: 'user-c' });
+  await Promise.all([alice.Store.init(), bob.Store.init(), clara.Store.init()]);
+
+  // Alice and Bob (friends) exchange a message; Clara sends Alice a message request.
+  await alice.Store.sendDirectMessage({ recipientId: 'user-b', body: 'Hey Bob!' });
+  await clara.Store.sendDirectMessage({ recipientId: 'user-a', body: 'Hi Alice!' });
+
+  await alice.Store.loadConversations();
+  await bob.Store.loadConversations();
+  assert.equal(alice.Store.conversations().length, 2);
+  assert.equal(alice.Store.incomingMessageRequests().length, 1);
+  assert.equal(bob.Store.unreadCount(), 1);
+
+  // Alice blocks Bob (friend) -> hidden from Alice's inbox; friendship stays intact unless unfriended
+  const blkBob = await alice.Store.blockUser('user-b');
+  assert.equal(blkBob.ok, true);
+  assert.equal(alice.Store.hasBlocked('user-b'), true);
+  assert.equal(alice.Store.isFriend('user-b'), true);
+  assert.equal(alice.Store.requestStatusFor('user-b').kind, 'blocked_by_me');
+  assert.equal(alice.Store.requestStatusFor('user-b').canSend, false);
+  assert.equal(alice.Store.conversations().some((c) => alice.Store.otherMember(c) === 'user-b'), false);
+
+  // Bob refreshes (or tries sending directly): no unread badge notification, chat stays in Conversations, locked as blocked_by_other
+  await bob.Store.loadBlocks();
+  assert.equal(bob.Store.isBlockedBy('user-a'), true);
+  assert.equal(bob.Store.unreadCount(), 0);
+  assert.equal(bob.Store.conversations().length, 1);
+  assert.equal(bob.Store.requestStatusFor('user-a').kind, 'blocked_by_other');
+  assert.equal(bob.Store.requestStatusFor('user-a').canSend, false);
+  const bobBlockedSend = await bob.Store.sendDirectMessage({ recipientId: 'user-a', body: 'Hello?' });
+  assert.equal(bobBlockedSend.ok, false);
+  assert.equal(bobBlockedSend.message, 'Messaging this person is currently unavailable.');
+
+  // Alice blocks Clara (incoming message request) -> hidden from Message requests and unread count drops to 0
+  const blkClara = await alice.Store.blockUser('user-c');
+  assert.equal(blkClara.ok, true);
+  assert.equal(alice.Store.incomingMessageRequests().length, 0);
+  assert.equal(alice.Store.unreadCount(), 0);
+
+  // Clara sees the thread in Conversations as blocked_by_other and cannot send
+  await clara.Store.loadBlocks();
+  assert.equal(clara.Store.conversations().length, 1);
+  assert.equal(clara.Store.requestStatusFor('user-a').kind, 'blocked_by_other');
+
+  // Unblocking Clara restores the exact prior state (pending incoming request returns to Message requests)
+  const unblkClara = await alice.Store.unblockUser('user-c');
+  assert.equal(unblkClara.ok, true);
+  assert.equal(alice.Store.incomingMessageRequests().length, 1);
+  assert.equal(alice.Store.requestStatusFor('user-c').kind, 'incoming_request');
+
+  // Mutual blocking: Bob blocks Alice, Alice unblocks Bob -> Alice transitions to blocked_by_other
+  await bob.Store.blockUser('user-a');
+  await alice.Store.loadBlocks();
+  assert.equal(alice.Store.requestStatusFor('user-b').kind, 'blocked_by_me');
+  await alice.Store.unblockUser('user-b');
+  assert.equal(alice.Store.requestStatusFor('user-b').kind, 'blocked_by_other');
+});
+
+test('UI blocking flow: confirmation + optional unfriend modal for friends, locked bar for blocked user, and unblock across Settings/Profile', async () => {
+  const db = seedMessagingDb();
+
+  // Clara sends a non-friend message request to Alice; Alice and Bob are friends with an existing chat
+  const bobInit = makeLiveMessagingApp(db, { user: 'user-b' });
+  const claraInit = makeLiveMessagingApp(db, { user: 'user-c' });
+  await Promise.all([bobInit.Store.init(), claraInit.Store.init()]);
+  await bobInit.Store.sendDirectMessage({ recipientId: 'user-a', body: 'See you Saturday!' });
+  await claraInit.Store.sendDirectMessage({ recipientId: 'user-a', body: 'Hey Alice, quick question' });
+
+  function mountUiFor(userId, { page = 'home', search = '' } = {}) {
+    const dom = makeMiniDom();
+    const memory = new Map();
+    const helpers = makeLiveMessagingApp(db, { user: userId });
+    const ctx = vm.createContext({
+      console,
+      Date,
+      Math,
+      URLSearchParams,
+      setTimeout,
+      clearTimeout,
+      crypto: webcrypto,
+      location: { origin: 'http://test', pathname: '/' + page + '.html', search, hash: '' },
+      localStorage: {
+        getItem: (k) => memory.get(k) || null,
+        setItem: (k, v) => memory.set(k, v),
+        removeItem: (k) => memory.delete(k),
+      },
+      sessionStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} },
+      document: dom.document,
+      MOMENTUM_CONFIG: {},
+    });
+    ctx.window = ctx;
+    ctx.addEventListener = () => {};
+    ctx.Store = helpers.Store;
+    vm.runInContext(fs.readFileSync('js/ui.js', 'utf8'), ctx);
+    return { ctx, dom, Store: helpers.Store };
+  }
+
+  // 1. Alice opens Messages: Bob (friend) chat has header Block icon; Clara (incoming request) has Block button
+  const aliceUi = mountUiFor('user-a');
+  await aliceUi.ctx.UI.mount('home', () => {});
+  aliceUi.dom.document.getElementById('msg-toggle').click();
+  await new Promise((r) => setTimeout(r, 20));
+
+  const panel = aliceUi.dom.document.getElementById('msg-panel');
+  const bobConvo = aliceUi.Store.findDirect('user-b');
+  panel.querySelector('[data-open="' + bobConvo.id + '"]').click();
+
+  const headerBlockBtn = panel.querySelector('.msg-head [data-block]');
+  assert.ok(headerBlockBtn);
+  headerBlockBtn.click();
+
+  // First modal: confirm block
+  const modal1 = aliceUi.dom.body.querySelector('.modal');
+  assert.match(modal1.textContent, /Block Bob\?/);
+  await modal1.querySelector('#do-block').onclick();
+
+  // Second modal appears for friends: tells user they can no longer message you + option to unfriend
+  const modal2 = aliceUi.dom.body.querySelector('.modal');
+  assert.ok(modal2);
+  assert.match(modal2.textContent, /can no longer message you/i);
+  assert.ok(modal2.querySelector('#do-block-unfriend'));
+  await modal2.querySelector('#do-block-unfriend').onclick();
+  assert.equal(aliceUi.Store.isFriend('user-b'), false);
+  assert.equal(aliceUi.Store.hasBlocked('user-b'), true);
+
+  // Switch to Message requests tab and block Clara (non-friend) via the incoming request Block button -> no follow-up modal
+  panel.querySelector('[data-tab="requests"]').click();
+  const claraConvo = aliceUi.Store.findDirect('user-c');
+  panel.querySelector('[data-open="' + claraConvo.id + '"]').click();
+  const reqBlockBtn = panel.querySelector('.msg-request-actions [data-block]');
+  assert.ok(reqBlockBtn);
+  reqBlockBtn.click();
+  const modalClara = aliceUi.dom.body.querySelector('.modal');
+  assert.match(modalClara.textContent, /Block Clara\?/);
+  await modalClara.querySelector('#do-block').onclick();
+  assert.equal(aliceUi.dom.body.querySelector('.modal'), null);
+  assert.equal(aliceUi.Store.hasBlocked('user-c'), true);
+  assert.equal(aliceUi.dom.document.getElementById('msg-toggle').querySelector('.badge'), null);
+
+  // 2. Bob (blocked user) opens his conversation with Alice: old message visible, no text input, .msg-locked message shown
+  const bobUi = mountUiFor('user-b');
+  await bobUi.ctx.UI.mount('home', () => {});
+  assert.equal(bobUi.dom.document.getElementById('msg-toggle').querySelector('.badge'), null);
+  bobUi.dom.document.getElementById('msg-toggle').click();
+  await new Promise((r) => setTimeout(r, 20));
+  const bobPanel = bobUi.dom.document.getElementById('msg-panel');
+  bobPanel.querySelector('[data-open="' + bobConvo.id + '"]').click();
+  assert.match(bobPanel.textContent, /See you Saturday!/);
+  assert.equal(bobPanel.querySelector('.composer'), null);
+  assert.equal(bobPanel.querySelector('.msg-locked').textContent, 'Messaging this person is currently unavailable.');
+
+  // 3. Alice can reopen Bob via New chat (shows past message + Unblock button) and confirm unblock
+  panel.querySelector('[data-new]').click();
+  const pq = panel.querySelector('[data-pq]');
+  pq.value = 'Bob';
+  pq.oninput();
+  await new Promise((r) => setTimeout(r, 260));
+  assert.match(panel.querySelector('#msg-new-results').textContent, /Blocked/);
+  panel.querySelector('[data-person="user-b"]').click();
+  assert.match(panel.textContent, /See you Saturday!/);
+  assert.match(panel.querySelector('.msg-locked').textContent, /You blocked Bob/);
+  panel.querySelector('[data-unblock]').click();
+  const unbModal = aliceUi.dom.body.querySelector('.modal');
+  assert.match(unbModal.textContent, /Unblock Bob\?/);
+  await unbModal.querySelector('#do-unblock').onclick();
+  assert.equal(aliceUi.Store.hasBlocked('user-b'), false);
+  assert.ok(panel.querySelector('.composer input'));
+
+  // 4. Settings page lists remaining blocked user (Clara) with Unblock + confirmation modal
+  const settingsUi = mountUiFor('user-a', { page: 'settings' });
+  vm.runInContext(fs.readFileSync('js/pages/settings.js', 'utf8'), settingsUi.ctx);
+  await new Promise((r) => setTimeout(r, 20));
+  const blockedSection = settingsUi.dom.document.getElementById('blocked-users-section');
+  assert.ok(blockedSection);
+  assert.match(blockedSection.textContent, /Clara/);
+  const settingsUnblock = blockedSection.querySelector('[data-unblock="user-c"]');
+  assert.ok(settingsUnblock);
+  settingsUnblock.click();
+  const settingsModal = settingsUi.dom.body.querySelector('.modal');
+  assert.match(settingsModal.textContent, /Unblock Clara\?/);
+  await settingsModal.querySelector('#do-unblock').onclick();
+  assert.equal(settingsUi.Store.hasBlocked('user-c'), false);
+  assert.match(settingsUi.dom.document.getElementById('blocked-users-section').textContent, /haven't blocked anyone/i);
+
+  // 5. Profile page shows Unblock (no Message button and no Block button) when blocked
+  await aliceUi.Store.blockUser('user-c');
+  const profileUi = mountUiFor('user-a', { page: 'profile', search: '?id=user-c' });
+  profileUi.ctx.Social = { subnav: () => '', postCard: () => '', activityCard: () => '', bind: () => {} };
+  vm.runInContext(fs.readFileSync('js/pages/profile.js', 'utf8'), profileUi.ctx);
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal(profileUi.dom.document.getElementById('msg'), null);
+  assert.equal(profileUi.dom.document.querySelector('[data-block]'), null);
+  const profUnblock = profileUi.dom.document.getElementById('unblock-user');
+  assert.ok(profUnblock);
+  profUnblock.click();
+  const profModal = profileUi.dom.body.querySelector('.modal');
+  assert.match(profModal.textContent, /Unblock Clara\?/);
+  await profModal.querySelector('#do-unblock').onclick();
+  assert.equal(profileUi.Store.hasBlocked('user-c'), false);
+  assert.ok(profileUi.dom.document.getElementById('msg'));
+
+  // 6. Blocking does not remove pending friend requests, and a blocked user opening a brand-new draft sees "No messages yet." + locked bar
+  await aliceUi.Store.blockUser('user-d');
+  assert.equal(aliceUi.Store.incomingRequests().some((f) => f.requesterId === 'user-d'), true);
+  const danUi = mountUiFor('user-d');
+  await danUi.ctx.UI.mount('home', () => {});
+  danUi.ctx.UI.Messages.openChat('user-a');
+  await new Promise((r) => setTimeout(r, 20));
+  const danPanel = danUi.dom.document.getElementById('msg-panel');
+  assert.equal(danPanel.querySelector('.composer'), null);
+  assert.equal(danPanel.querySelector('.msg-locked').textContent, 'Messaging this person is currently unavailable.');
+  assert.match(danPanel.textContent, /No messages yet\./);
+  assert.doesNotMatch(danPanel.textContent, /Say hi to/);
+
+  // 7. Blocking a friend then clicking "Keep as friend" preserves the friendship while locking messaging
+  db.friendships.push({ id: 'f-ab-keep', requester_id: 'user-a', addressee_id: 'user-b', status: 'accepted', met_at_activity_id: null, created_at: '2026-11-02T00:00:00Z', accepted_at: '2026-11-02T01:00:00Z' });
+  const keepUi = mountUiFor('user-a');
+  await keepUi.ctx.UI.mount('home', () => {});
+  keepUi.ctx.UI.Messages.openChat('user-b');
+  await new Promise((r) => setTimeout(r, 20));
+  const keepPanel = keepUi.dom.document.getElementById('msg-panel');
+  keepPanel.querySelector('.msg-head [data-block]').click();
+  await keepUi.dom.body.querySelector('#do-block').onclick();
+  const keepModal = keepUi.dom.body.querySelector('.modal');
+  assert.match(keepModal.textContent, /Keep as friend/);
+  const keepBtns = keepModal.querySelectorAll('[data-close]');
+  keepBtns[keepBtns.length - 1].click();
+  assert.equal(keepUi.dom.body.querySelector('.modal'), null);
+  assert.equal(keepUi.Store.isFriend('user-b'), true);
+  assert.equal(keepUi.Store.hasBlocked('user-b'), true);
+  assert.equal(keepUi.Store.requestStatusFor('user-b').kind, 'blocked_by_me');
+
+  // Verify blocked profile shows Blocked + Unblock AND Remove friend when still friends
+  const friendBlockedProfile = mountUiFor('user-a', { page: 'profile', search: '?id=user-b' });
+  friendBlockedProfile.ctx.Social = { subnav: () => '', postCard: () => '', activityCard: () => '', bind: () => {} };
+  vm.runInContext(fs.readFileSync('js/pages/profile.js', 'utf8'), friendBlockedProfile.ctx);
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal(friendBlockedProfile.dom.document.getElementById('msg'), null);
+  assert.ok(friendBlockedProfile.dom.document.getElementById('unblock-user'));
+  assert.ok(friendBlockedProfile.dom.document.getElementById('remove-friend'));
 });

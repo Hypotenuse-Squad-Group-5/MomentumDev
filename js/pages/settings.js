@@ -8,6 +8,7 @@ UI.mount("settings", function render() {
   const sel = (k, title, sub, opts) => `<label class="setting-row"><span class="grow">${title}${sub ? `<br><span class="small muted">${sub}</span>` : ""}</span><select data-k="${k}">${opts.map(([v, l]) => `<option value="${v}"${s[k] === v ? " selected" : ""}>${l}</option>`).join("")}</select></label>`;
   const vis = Object.entries(UI.VIS);
   const INTERESTS = Store.interestOptions(); // from the `interests` table (Supabase → Table Editor → interests)
+  const blockedList = Store.blockedUsers ? Store.blockedUsers() : [];
   if (!interestPicks) interestPicks = (p.interests || []).slice(); // unsaved picks survive a re-render
   const picked = interestPicks;
   document.getElementById("main").innerHTML = `
@@ -21,6 +22,16 @@ UI.mount("settings", function render() {
       ${sel("activityVisibility", "Activities", "Default for new activities", vis)}
       ${sel("friendsListVisibility", "Friends list", "Who can see your friends", vis)}
       ${sel("attendeeDisplay", "On \"Who's going\" lists", "How people who aren't your friends see you", [["first_name", "Show my first name"], ["hidden", "Hide me from non-friends"]])}
+    </section>
+    <section class="panel mt" id="blocked-users-section">
+      <h2>Blocked users</h2>
+      <p class="small muted">People you block can't message you and aren't notified.</p>
+      ${blockedList.length
+        ? blockedList.map((b) => {
+            const name = Store.isFriend(b.id) ? Store.fullName(b.id) : Store.profile(b.id).first;
+            return `<div class="setting-row" data-blocked-id="${b.id}"><div class="person grow">${UI.avatar(b.id, "sm", true)}<span><a href="profile.html?id=${b.id}" style="text-decoration:none"><b>${esc(name)}</b></a></span></div><button type="button" class="btn btn-sm" data-unblock="${b.id}">Unblock</button></div>`;
+          }).join("")
+        : `<p class="muted small mb0">You haven't blocked anyone from messaging you.</p>`}
     </section>
     <section class="panel mt">
       <h2>Notifications</h2>
@@ -72,6 +83,7 @@ UI.mount("settings", function render() {
   </div>`;
 
   document.querySelectorAll("[data-k]").forEach((el) => (el.onchange = () => { Store.setSetting(el.dataset.k, el.type === "checkbox" ? el.checked : el.value); UI.toast("Saved"); }));
+  document.querySelectorAll("[data-unblock]").forEach((b) => (b.onclick = () => UI.confirmUnblock(b.dataset.unblock)));
   const so = document.getElementById("sign-out"); if (so) so.onclick = async (e) => { e.preventDefault(); await Store.auth.signOut(); location.href = "index.html"; };
   interestPicker(INTERESTS, picked, esc, icon, () => refreshSave());
 

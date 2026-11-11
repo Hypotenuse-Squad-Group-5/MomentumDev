@@ -6,6 +6,9 @@ UI.mount("activities", async function render() {
   const [types] = await Promise.all([Store.loadTypes(), Store.loadSuggestions()]);
   const s = Store.state.settings;
   const tomorrow = new Date(Date.now() + 864e5).toISOString().slice(0, 10);
+  // "Use info from a previous activity": everything you've hosted, newest first
+  const pastHosted = Store.hosting().slice().sort((a, b) => new Date(b.startsAt) - new Date(a.startsAt));
+  const typeEmoji = (typeName) => (types.find((t) => t.name === typeName) || {}).emoji || "📋";
 
   // Activity categories come from the activity_types table (name, emoji, sort_order).
   // To add, rename, reorder or change an emoji, edit that table in Supabase. No code change needed.
@@ -22,6 +25,26 @@ UI.mount("activities", async function render() {
 
     <form class="panel" id="post-form" novalidate>
       <div class="alert" id="form-error" hidden></div>
+
+      ${pastHosted.length ? `
+      <!-- Re-use a previous activity -->
+      <div class="field reuse-field" style="margin-bottom:16px">
+        <label class="reuse-toggle" style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:600">
+          <input type="checkbox" id="reuse-check"> Use info from a previous activity
+        </label>
+        <div id="reuse-picker" hidden style="margin-top:10px">
+          <p class="small muted mb0" style="margin-bottom:6px">Select an activity to pre-fill everything except the date:</p>
+          <div class="stack" id="reuse-list" style="max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;padding:6px">
+            ${pastHosted.map((a) => `
+              <button type="button" class="reuse-item" data-reuse-id="${esc(a.id)}" aria-pressed="false" style="display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:8px 10px;border:0;background:none;border-radius:8px;cursor:pointer;font-size:.88rem;color:inherit">
+                <span style="font-size:1.1rem" aria-hidden="true">${esc(typeEmoji(a.type))}</span>
+                <span class="grow"><b>${esc(a.title)}</b><br><span class="small muted">${esc(a.activityName || "")} · ${esc(a.location || "")} · ${esc(new Date(a.startsAt).toLocaleDateString())}</span></span>
+              </button>
+            `).join("")}
+          </div>
+        </div>
+      </div>
+      ` : ""}
 
       <!-- Section 1: Details & Location -->
       <details class="form-section" name="post-section" open>
@@ -115,13 +138,12 @@ UI.mount("activities", async function render() {
         <summary>
           <div class="form-section-title">
             <span class="form-section-name">Logistics</span>
-            <span class="form-section-desc">Items to bring, cover photo & visibility</span>
+            <span class="form-section-desc">Items to bring &amp; visibility</span>
           </div>
           <span class="form-section-chevron"></span>
         </summary>
         <div class="form-section-body">
           <div class="field"><label for="bring">What to bring <span class="opt">(optional)</span></label><input id="bring" maxlength="80" type="text" placeholder="e.g. water, a snack to share"></div>
-          <div class="field"><span class="flabel">Cover photo <span class="opt">(optional)</span></span><div class="photo cover">${icon("camera", "lg")}</div><p class="hint">Photo upload comes in a later slice.</p></div>
           <fieldset class="field choice-list" style="border:0;padding:0">
             <legend class="flabel" style="font-weight:600;margin-bottom:6px">Who can see this activity?</legend>
             ${Object.entries(UI.VIS).map(([k, v]) => `<label><input type="radio" name="visibility" value="${k}"${k === s.activityVisibility ? " checked" : ""}><span><b>${v}</b>${k === "public" ? '<br><span class="small muted">Anyone on Momentum. The default.</span>' : k === "private" ? '<br><span class="small muted">Only people you invite.</span>' : ""}</span></label>`).join("")}
@@ -214,7 +236,7 @@ UI.mount("activities", async function render() {
     return { setTime };
   }
 
-  initTimeControl("start", "PM");
+  const startTimeCtrl = initTimeControl("start", "PM");
   const endTimeCtrl = initTimeControl("end", "PM");
 
   // Auto-fill end time to exactly 1 hour after start time
@@ -257,6 +279,76 @@ UI.mount("activities", async function render() {
     };
 
     startSelect.addEventListener("change", handleStartChange);
+  }
+
+  // Re-use a previous activity: show the list, then pre-fill everything except the date
+  const reuseCheck = document.getElementById("reuse-check");
+  const reusePicker = document.getElementById("reuse-picker");
+  if (reuseCheck && reusePicker) {
+    reuseCheck.addEventListener("change", () => { reusePicker.hidden = !reuseCheck.checked; });
+
+    let pickedId = null;
+    form.querySelectorAll(".reuse-item").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const a = Store.activity(btn.dataset.reuseId);
+        if (!a) return;
+        pickedId = a.id;
+
+        // Highlight the chosen activity
+        form.querySelectorAll(".reuse-item").forEach((b) => { b.style.background = "none"; b.setAttribute("aria-pressed", "false"); });
+        btn.style.background = "var(--primary-soft)";
+        btn.setAttribute("aria-pressed", "true");
+
+        // Text and number fields
+        const setVal = (id, v) => { const el = form.querySelector("#" + id); if (el) el.value = v ?? ""; };
+        setVal("title", a.title);
+        setVal("activityName", a.activityName);
+        setVal("location", a.location);
+        setVal("city", a.city);
+        setVal("description", a.description);
+        setVal("bring", a.bring);
+        setVal("min", a.min);
+        setVal("max", a.max);
+
+        // Exact address: from this browser if we have it, otherwise ask Supabase (hosts can read their own)
+        setVal("address", Store.address(a.id) || "");
+        if (!Store.address(a.id) && Store.loadAddress) {
+          Store.loadAddress(a.id).then((addr) => {
+            const el = form.querySelector("#address");
+            if (addr && pickedId === a.id && el && !el.value) el.value = addr; // don't overwrite a newer pick or typing
+          });
+        }
+
+        // Category chip
+        const matchedType = types.find((t) => t.name === a.type);
+        hiddenTypeId.value = matchedType ? matchedType.id : "";
+        typeChips.forEach((c) => c.classList.toggle("active", !!matchedType && String(c.dataset.id) === String(matchedType.id)));
+
+        // Times: the dropdowns go in 15-minute steps, so round to the nearest one (6:10 PM -> 6:15 PM)
+        const to12 = (iso) => {
+          const d = new Date(iso);
+          const mins = (Math.round((d.getHours() * 60 + d.getMinutes()) / 15) * 15) % 1440;
+          const h24 = Math.floor(mins / 60);
+          return { h: h24 % 12 || 12, m: mins % 60, ampm: h24 >= 12 ? "PM" : "AM" };
+        };
+        const sT = to12(a.startsAt), eT = to12(a.endsAt);
+        startTimeCtrl.setTime(sT.h, sT.m, sT.ampm);
+        endTimeCtrl.setTime(eT.h, eT.m, eT.ampm);
+
+        // Visibility
+        const radio = a.visibility && form.querySelector(`input[name=visibility][value="${a.visibility}"]`);
+        if (radio) radio.checked = true;
+
+        // Clear old errors and open the first section to review
+        form.querySelectorAll("[data-f]").forEach((f) => { f.classList.remove("invalid"); const err = f.querySelector(".err"); if (err) err.hidden = true; });
+        form.querySelectorAll("details.form-section").forEach((sec) => sec.classList.remove("has-error"));
+        const banner = document.getElementById("form-error"); if (banner) banner.hidden = true;
+        const firstSec = form.querySelector("details.form-section");
+        if (firstSec) firstSec.open = true;
+
+        UI.toast(`Pre-filled from "${a.title}". Just pick a new date!`);
+      });
+    });
   }
 
   // Force strict maxlength enforcement in case pasting or browser quirks bypass it

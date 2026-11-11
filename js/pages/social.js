@@ -10,13 +10,11 @@ window.Social = {
   postCard(p, { own } = {}) {
     const { icon, esc } = UI;
     const a = p.activityId ? Store.activity(p.activityId) : null;
-    const n = Math.min(p.photos || 0, 5);
     const isOwner = own || p.authorId === Store.ME;
     return `<article class="panel">
       <div class="post-head">${UI.avatar(p.authorId, "", true)}<div class="who"><a class="name" href="profile.html?id=${p.authorId}">${esc(p.authorId === Store.ME ? Store.fullName(Store.ME) : UI.displayName(p.authorId))}</a><div class="tiny muted">${UI.fmtAgo(p.createdAt)} · Post</div></div>
         ${isOwner ? '<span class="tag ok">Public</span>' : `<span class="tag grey">${UI.VIS[p.visibility] || "Public"}</span>`}</div>
-      ${n > 0 ? `<div class="photo-grid n${n}">${Array.from({ length: n }, () => `<div class="photo">${icon("image")}</div>`).join("")}</div>` : ""}
-      <p class="mt mb0" style="white-space:pre-wrap">${esc(p.caption)}</p>
+      <p class="mb0" style="white-space:pre-wrap">${esc(p.caption)}</p>
       ${a ? `<a class="linked-activity" href="activity.html?id=${a.id}">${icon("activity")}<span class="grow"><span class="tiny muted">Activity</span><br><b>${esc(a.title)}</b> · <span class="small">${esc(UI.fmtDay(a.startsAt))}</span></span>${icon("right", "sm")}</a>` : ""}
       <div class="post-actions">
         ${isOwner
@@ -40,8 +38,7 @@ window.Social = {
     }
     return `<article class="panel">
       <div class="post-head">${UI.avatar(a.hostId, "", true)}<div class="who"><span class="name">${UI.nameLink(a.hostId)}</span><div class="tiny muted">${UI.fmtAgo(a.createdAt)} · Posted an activity</div></div><span class="tag ok">Active</span></div>
-      <div class="photo cover">${icon("camera", "lg")}</div>
-      <h3 class="mt">${esc(a.title)}</h3>
+      <h3>${esc(a.title)}</h3>
       <div class="meta"><span>${icon("clock", "sm")}${esc(UI.fmtRange(a))}</span><span>${icon("activity", "sm")}${esc(a.location)}</span><span>${icon("users", "sm")}${Store.spotsTaken(a.id)} of ${a.max} going</span></div>
       <p class="mb0">${esc(a.description)}</p>
       <div class="post-actions"><a class="btn btn-sm btn-primary" href="activity.html?id=${a.id}">${Store.isGoing(a.id) ? "You're going" : "View & commit"}</a>${a.hostId !== Store.ME ? `<button class="btn btn-sm btn-ghost" data-msg="${a.hostId}" data-act="${a.id}">${icon("message", "sm")}Message host</button>` : ""}</div>

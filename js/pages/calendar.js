@@ -6,15 +6,15 @@
 
   /* ---- Holiday emoji lookup ---- */
   const HOLIDAYS_FIXED = {
-    '1-1': ['🎆', '🥂', '🍾', '🎈', '🥳', '🕛'],
-    '2-14': ['❤️', '💖', '💘', '💝', '💕', '🌹', '💐', '🍫', '🎁'],
+    '1-1': ['🎆', '🍾', '🎈', '🥳', '🕛'],
+    '2-14': ['❤️', '💖','💝', '💕', '🌹', '💐', '🍫', '🎁'],
     '3-17': ['☘️', '🍀', '🎩', '🌈', '🪙'],
-    '6-19': ['🖤', '✊🏾', '🗽', '⛓️‍💥', '✨'],
+    '6-19': ['🖤','🗽', '✨'],
     '7-4': ['🎆', '🎖️', '🗽', '🦅'],
     '10-31': ['🎃', '👻', '🧛', '🍬', '🕸️'],
     '11-11': ['🎆', '🎖️', '🗽', '🦅'],
     '12-25': ['🎄', '🎅', '🤶', '🎁', '❄️'],
-    '12-31': ['🎆', '🥂', '🍾', '🎈', '🥳', '🕛']
+    '12-31': ['🎆','🍾', '🎈', '🥳', '🕛']
   };
 
   function nthDow(year, month, dow, n) {
@@ -40,12 +40,13 @@
   function holidayEmojis(year, month, day) {
     var key = (month + 1) + '-' + day;
     if (HOLIDAYS_FIXED[key]) return HOLIDAYS_FIXED[key];
-    if (month === 0 && day === nthDow(year, 0, 1, 3)) return ['🕊️', '✊🏾', '🤝', '📜'];
+    if (month === 0 && day === nthDow(year, 0, 1, 3)) return ['🕊️', '🤝', '📜'];
     if (month === 1 && day === nthDow(year, 1, 1, 3)) return ['🦅', '🏛️', '🎩'];
     var e = easterDay(year);
     if (month === e.m && day === e.d) return ['🐰', '🥚', '🐣', '✝️', '🌸'];
     if (month === 4 && day === nthDow(year, 4, 0, 2)) return ['💐', '💝', '👩', '🌸'];
     if (month === 4 && day === lastMonday(year, 4)) return ['🎆', '🎖️', '🗽', '🦅'];
+    if (month === 5 && day === nthDow(year, 5, 0, 3)) return ['👨', '👑', '👔', '🎁'];
     if (month === 8 && day === nthDow(year, 8, 1, 1)) return ['🛠️', '👷', '🍔'];
     if (month === 9 && day === nthDow(year, 9, 1, 2)) return ['⛵', '🌎', '🪵', '🏹'];
     if (month === 10 && day === nthDow(year, 10, 4, 4)) return ['🦃', '🍂', '🥧', '🍁', '🍗'];
