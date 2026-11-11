@@ -42,7 +42,7 @@ UI.mount("home", function render() {
 
         <div class="quick-actions">
           <a class="btn btn-primary" href="activity-new.html">${icon("plus")}Post an activity</a>
-          <a class="btn" href="profile.html?compose=1">${icon("camera")}Share a post</a>
+          <a class="btn" href="profile.html?compose=1">${icon("post")}Share a post</a>
         </div>
 
         ${invites.map(({ guest, rsvp, activity: a }) => `
