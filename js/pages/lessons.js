@@ -7,7 +7,7 @@ UI.mount("lessons", function render() {
   document.getElementById("main").innerHTML = `
     <div style="max-width:720px">
       <div class="page-head"><div><h1>Lessons</h1><p class="muted mb0">Six practical lessons to build intentional phone habits and make more room for life offline.</p></div></div>
-      <div class="panel tight"><div class="row-between small"><b>Your progress</b><span>${done} of ${window.LESSONS.length} complete · +${Store.POINTS.lesson} points each</span></div>
+      <div class="panel tight"><div class="row-between small"><b>Your progress</b><span>${Math.round(done / window.LESSONS.length * 100)}% complete</span></div>
         <div class="capacity" style="height:10px"><i style="width:${(done / window.LESSONS.length) * 100}%"></i></div></div>
       <div class="lesson-path" id="path">
         <svg class="trail" id="trail"></svg>

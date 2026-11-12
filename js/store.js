@@ -6,23 +6,11 @@
    publishable key. There is no demo mode.
 
    Stored in Supabase: accounts, profiles, interests, habits + check-ins,
-   lessons, activities, friendships, messages, posts, points for habits
-   and lessons.
-   Still browser-only (one device) until moved to Supabase: RSVPs/+1s,
-   attended check-ins + reports, post likes + later visibility changes,
-   general settings, and RSVP/post points. See claude/momentum-status.md.
-
-   Points mirror the point_values table (loaded at sign-in):
-     habit +10 · lesson +25 · rsvp +15 · attended +25 · first post of the day +5
-     cancelled rsvp -15
+   lessons, activities, friendships, messages, and posts.
+   RSVPs/+1s, attendance, reports, likes, and general settings stay browser-local.
    ===================================================================== */
 (function () {
   let KEY = null; // this user's browser data: "momentum.v1.user.<profile id>" (set in init)
-  // Point amounts + labels come from the point_values table (filled at sign-in by loadPointValues).
-  // To change a reward, edit that table in Supabase. No code change needed.
-  const POINTS = {};        // kind -> points, e.g. habit -> 10
-  const POINT_LABELS = {};  // kind -> label, e.g. habit -> "Habit checked"
-  const POINT_KINDS = [];   // kinds, biggest reward first
   const CANCELS_PER_MONTH = 2;
   const BUFFER_MIN = 30;
 
@@ -50,9 +38,19 @@
     return {
       version: 1, meId: me.id, signedIn: true, profiles: { [me.id]: me },
       friendships: [], blocks: [], activities: [], addresses: {}, rsvps: [], guests: [], reports: [], posts: [],
-      encouragements: [], conversations: [], lessonsDone: [], habits: [], checkins: [], points: [],
+      encouragements: [], conversations: [], lessonsDone: [], habits: [], checkins: [],
       settings: defaultSettings(),
     };
+  }
+
+  // Restore only supported fields so old browser data cannot reintroduce retired features.
+  function restoreState(saved, me) {
+    const restored = blankState(me);
+    if (saved && saved.version === 1) {
+      Object.keys(restored).forEach((key) => { if (key in saved) restored[key] = saved[key]; });
+      restored.settings = { ...defaultSettings(), ...restored.settings };
+    }
+    return restored;
   }
 
   // =====================================================================
@@ -60,7 +58,7 @@
   // =====================================================================
   let state;
   function load() { // another tab changed this user's browser data
-    try { const saved = JSON.parse(localStorage.getItem(KEY)); if (saved && saved.version === 1) state = saved; } catch (e) { /* keep what we have */ }
+    try { const saved = JSON.parse(localStorage.getItem(KEY)); if (saved && saved.version === 1) state = restoreState(saved, state.profiles[ME]); } catch (e) { /* keep what we have */ }
   }
   function persist() { if (!KEY) return; try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { /* private mode: keep in memory */ } }
   const listeners = new Set();
@@ -499,8 +497,6 @@
     return myCommitments().find((o) => o.id !== a.id && s < new Date(o.endsAt).getTime() + buf && e > new Date(o.startsAt).getTime() - buf) || null;
   }
 
-  function addPoints(kind, ref) { const p = { id: uid(), kind, points: POINTS[kind] ?? 0, ref, date: today(), at: nowIso() }; state.points.push(p); return p.points; }
-
   function commit(activityId, plusOne) {
     const a = activity(activityId);
     if (!a) return { ok: false, message: "That activity couldn't be found." };
@@ -518,9 +514,8 @@
     state.guests = state.guests.filter((g) => g.rsvpId !== r.id);
     if (plusOne && plusOne.type === "friend") state.guests.push({ id: uid(), rsvpId: r.id, guestProfileId: plusOne.profileId, guestFirstName: null, status: "pending", createdAt: nowIso() });
     if (plusOne && plusOne.type === "guest") state.guests.push({ id: uid(), rsvpId: r.id, guestProfileId: null, guestFirstName: plusOne.name.trim(), status: "accepted", createdAt: nowIso() });
-    const pts = addPoints("rsvp", r.id);
     save();
-    return { ok: true, points: pts };
+    return { ok: true };
   }
 
   function cancel(activityId) {
@@ -528,9 +523,8 @@
     const r = myRsvp(activityId);
     r.status = "cancelled"; r.cancelledAt = nowIso();
     state.guests = state.guests.filter((g) => g.rsvpId !== r.id);
-    const pts = addPoints("rsvp_cancelled", r.id);
     save();
-    return { ok: true, points: pts, left: cancellationsLeft() };
+    return { ok: true, left: cancellationsLeft() };
   }
 
   // Incoming +1 invites (a friend asked me along)
@@ -547,17 +541,15 @@
     if (conflict) return { ok: false, message: "This overlaps or starts within 30 minutes of " + conflict.title + "." };
     if (spotsTaken(a.id) + 1 > a.max) { g.status = "expired"; save(); return { ok: false, message: "The activity filled up before you accepted. Committed people get priority." }; }
     g.status = "accepted";
-    const pts = addPoints("rsvp", g.id);
     save();
-    return { ok: true, points: pts };
+    return { ok: true };
   }
 
   function checkIn(activityId, attended) {
     const r = myRsvp(activityId); if (!r || r.attended !== null) return { ok: false };
     r.attended = !!attended;
-    const pts = attended ? addPoints("attended", r.id) : 0;
     save();
-    return { ok: true, points: pts };
+    return { ok: true };
   }
   function needsCheckIn() { return myCommitments().filter((a) => isPast(a) && myRsvp(a.id) && myRsvp(a.id).attended === null); }
 
@@ -569,7 +561,7 @@
   }
 
   // =====================================================================
-  // Habits, lessons, streaks, points
+  // Habits, lessons, streaks
   // =====================================================================
   // Active habits in the user's chosen order (sortOrder), oldest first as a tiebreaker.
   const byOrder = (a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || new Date(a.createdAt) - new Date(b.createdAt);
@@ -581,14 +573,12 @@
     const d = today();
     if (isHabitDone(habitId, d)) {
       state.checkins = state.checkins.filter((c) => !(c.habitId === habitId && c.date === d));
-      state.points = state.points.filter((p) => !(p.kind === "habit" && p.ref === habitId && p.date === d));
-      save(); return { done: false, points: -(POINTS.habit ?? 0) };
+      save(); return { done: false };
     }
     const streakBefore = streak().current;
     state.checkins.push({ habitId, date: d });
-    const pts = addPoints("habit", habitId);
     save();
-    return { done: true, points: pts, streakUp: streak().current > streakBefore };
+    return { done: true, streakUp: streak().current > streakBefore };
   }
   // Signed in: the screen updates instantly, then the change is saved to Supabase.
   // If the save fails, the change is undone and the reason is shown.
@@ -596,7 +586,7 @@
   // One save at a time per habit. Fast clicking only changes what the user WANTS;
   // when the current save finishes, one more save is sent if the database doesn't match yet.
   // (Sending every click at once let a "check" overtake an "uncheck", and the database
-  // rightly rejected the second +10 for the same day.)
+  // rightly rejected the duplicate check-in for the same day.)
   const habitSaves = new Map(); // habitId -> { want, saved }
   let habitClicks = 0;          // goes up on every click, so a refresh can tell it's out of date
   function toggleHabit(habitId) {
@@ -621,7 +611,7 @@
       }
       habitSaves.delete(habitId);
       const clicksNow = habitClicks;
-      // Pick up the points the database awarded, unless the user clicked again meanwhile
+      // Refresh saved check-ins, unless the user clicked again meanwhile
       // (that newer save refreshes when it finishes, so this answer would be stale).
       loadHabitData(() => habitClicks === clicksNow && habitSaves.size === 0).then(save);
     })();
@@ -636,7 +626,7 @@
     state.habits.push(h);save();
     return h;
   }
-  // Archive = hide the habit but keep its check-ins and points (streak history stays true).
+  // Archive = hide the habit but keep its check-ins (streak history stays true).
   function removeHabit(habitId) {
     const h = state.habits.find((x) => x.id === habitId);if (!h) return;
     h.active = false;save();
@@ -701,11 +691,7 @@
       save();
       return data;
     } catch (error) { return { ok: false, message: error.message || "Couldn't reach the server. Your reflection is still here; please try again." }; }
-    const habit = await addHabit(title, { goalText: goal, lessonNumber: n });
-    state.lessonsDone.push({ n, at: nowIso(), goal, habitId: habit.id });
-    const pts = addPoints("lesson", "lesson-" + n);
-    save();
-    return { ok: true, points: pts };
+
   }
   function lessonHabit(n) {
     const completed = state.lessonsDone.find(l => l.n === n);
@@ -745,21 +731,16 @@
   }
   function stats() {
     const s = streak();
-    const total = state.points.reduce((t, p) => t + p.points, 0);
-    const weekStart = addDays(today(), -6);
-    const week = state.points.filter((p) => p.date >= weekStart).reduce((t, p) => t + p.points, 0);
-    const byKind = {}; state.points.forEach((p) => { byKind[p.kind] = byKind[p.kind] || { count: 0, points: 0 }; byKind[p.kind].count++; byKind[p.kind].points += p.points; });
     const countsByDay = {}; state.checkins.forEach((c) => (countsByDay[c.date] = (countsByDay[c.date] || 0) + 1));
     const goalsMetDays = Object.values(countsByDay).filter((n) => n >= Math.max(1, habits().length)).length;
     return {
-      streak: s.current, longest: s.longest, doneToday: s.doneToday, points: total, weekPoints: week, byKind,
+      streak: s.current, longest: s.longest, doneToday: s.doneToday, lessonPercent: Math.round(state.lessonsDone.length / LESSON_COUNT * 100),
       habitsChecked: state.checkins.length, goalsMetDays, lessonsDone: state.lessonsDone.length,
       attended: state.rsvps.filter((r) => r.profileId === ME && r.attended === true).length,
       upcoming: myCommitments().filter((a) => !isPast(a)).length,
       posts: ((postCache !== null ? postCache : state.posts) || []).filter((p) => p.authorId === ME).length,
     };
   }
-  function pointHistory(limit = 12) { return [...state.points].sort((a, b) => new Date(b.at) - new Date(a.at)).slice(0, limit); }
 
   // =====================================================================
   // Posts + feed
@@ -787,10 +768,8 @@
     if (!state.posts) state.posts = [];
     state.posts.unshift(post);
     if (postCache && !postCache.some((p) => p.id === post.id)) postCache.unshift(post);
-    const firstToday = !state.points.some((x) => x.kind === "post" && x.date === today());
-    const pts = firstToday ? addPoints("post", post.id) : 0;
     save();
-    return { ok: true, points: pts, post };
+    return { ok: true, post };
   }
 
   async function deletePost(id) {
@@ -1341,30 +1320,17 @@
       lat: PROVO.lat, lng: PROVO.lng, // distances are measured from central Provo; no home location is stored
     };
   }
-  // Habits, check-ins, and habit/lesson points come from the database.
-  // Other point kinds stay local until their own integrations.
-  const DB_POINT_KINDS = ["habit", "lesson"];
-  async function loadPointValues() {
-    const { data, error } = await sb.from("point_values").select("kind,points,label");
-    if (error || !data) return false;
-    data.sort((a, b) => b.points - a.points || String(a.label).localeCompare(String(b.label)));
-    POINT_KINDS.length = 0;
-    data.forEach((r) => { POINTS[r.kind] = r.points; POINT_LABELS[r.kind] = r.label || r.kind; POINT_KINDS.push(r.kind); });
-    return true;
-  }
+  // Habits and check-ins are restored from the database.
   async function loadHabitData(stillCurrent) {
-    const [h, c, p] = await Promise.all([
+    const [h, c] = await Promise.all([
       sb.from("habits").select("id,title,goal_text,source_lesson_id,is_active,created_at,sort_order").order("sort_order"),
       sb.from("habit_checkins").select("habit_id,check_date"),
-      sb.from("point_events").select("id,kind,points,habit_id,occurred_on,created_at").in("kind", DB_POINT_KINDS),
     ]);
-    const err = h.error || c.error || p.error;
-    if (err || !h.data || !c.data || !p.data) { if (err) console.error(err); return false; }
+    const err = h.error || c.error;
+    if (err || !h.data || !c.data) { if (err) console.error(err); return false; }
     if (stillCurrent && !stillCurrent()) return true; // newer clicks are still saving; their refresh will follow
     state.habits = h.data.map((r) => ({ id: r.id, title: r.title, goalText: r.goal_text, lessonId: r.source_lesson_id, active: r.is_active, createdAt: r.created_at, sortOrder: r.sort_order }));
     state.checkins = c.data.map((r) => ({ habitId: r.habit_id, date: r.check_date }));
-    state.points = state.points.filter((x) => !DB_POINT_KINDS.includes(x.kind))
-      .concat(p.data.map((r) => ({ id: r.id, kind: r.kind, points: r.points, ref: r.habit_id, date: r.occurred_on, at: r.created_at })));
     return true;
   }
 
@@ -1429,16 +1395,15 @@
       let saved = null;
       try { saved = JSON.parse(localStorage.getItem(KEY)); } catch (e) { /* ignore */ }
       const me = profileFromRows(p, pp);
-      state = saved && saved.version === 1 ? saved : blankState({ ...me, interests: [], attendeeDisplay: "first_name" });
+      state = restoreState(saved, { ...me, interests: [], attendeeDisplay: "first_name" });
       const old = { ...(state.profiles[ME] || {}) };
       ["phone", "address", "zip", "city", "state", "birthday"].forEach((k) => delete old[k]); // removed in migration 008: clear this browser's copy too
       state.profiles[ME] = { ...old, ...me, interests: old.interests || [], attendeeDisplay: state.settings.attendeeDisplay };
       if (state && state.settings) delete state.settings.messageRequestsFrom;
       if (!Array.isArray(state.blocks)) state.blocks = [];
       state.meId = ME; state.signedIn = true;
-      const [pointsLoaded, habitsLoaded, lessonsLoaded] = await Promise.all([loadPointValues(), loadHabitData(), loadLessonData(), loadPosts(), loadInterests(), loadFriendships(), loadConversations(), loadBlocks()]);
+      const [habitsLoaded, lessonsLoaded] = await Promise.all([loadHabitData(), loadLessonData(), loadPosts(), loadInterests(), loadFriendships(), loadConversations(), loadBlocks()]);
       if (!habitsLoaded || !lessonsLoaded) { loadError = "We couldn't load your saved habits and lesson progress. Please reload to try again."; return "syncerror"; }
-      if (!pointsLoaded) { loadError = "We couldn't load the point values. Please reload to try again."; return "syncerror"; }
       persist();
       return true;
     })().catch(() => { loadError = "We couldn't reach your saved account data. Please reload to try again."; return "syncerror"; });
@@ -1488,7 +1453,7 @@
   }
 
   window.Store = {
-    get ME() { return ME; }, POINTS, POINT_LABELS, POINT_KINDS, LESSON_COUNT, CANCELS_PER_MONTH, auth, init, savedLogin,
+    get ME() { return ME; }, LESSON_COUNT, CANCELS_PER_MONTH, auth, init, savedLogin,
     get state() { return state; }, get loadError() { return loadError; },
     subscribe: (fn) => { listeners.add(fn); return () => listeners.delete(fn); },
     today, dayKey, addDays,
@@ -1502,7 +1467,7 @@
     removeFriend, sendFriendRequest, cancelFriendRequest, loadFriendships, loadProfile, searchProfiles, sharedActivityId,
     // growth
     habits, archivedHabits, isHabitDone, toggleHabit, addHabit, removeHabit, archiveHabit: removeHabit, restoreHabit, editHabit, reorderHabits, isLessonDone, isLessonUnlocked, currentLesson,
-    completeLesson, lessonGoal, lessonHabit, streak, lastDays, stats, pointHistory,
+    completeLesson, lessonGoal, lessonHabit, streak, lastDays, stats,
     // social
     loadPosts, createPost, deletePost, setPostVisibility, encouraged, toggleEncourage, feed, historyFor,
     // messages

@@ -13,7 +13,7 @@ The site includes curriculum version 2:
 5. Build Real Connection
 6. Make Plans That Stick
 
-Each unfinished lesson ends with a reflection (no word minimum, 1,000 characters maximum; a nonblank response is required), a daily habit name (1–80 characters), and Finish lesson. Finishing while signed in saves the reflection, completion, linked habit, and lesson points in one database transaction. Retrying does not create another habit or award points twice. The app waits for confirmation and preserves typed answers on failure.
+Each unfinished lesson ends with a reflection (no word minimum, 1,000 characters maximum; a nonblank response is required), a daily habit name (1–80 characters), and Finish lesson. Finishing while signed in saves the reflection, completion and linked habit in one database transaction. Retrying does not create another habit. The app waits for confirmation and preserves typed answers on failure.
 
 Lesson 1 is available first. Each later lesson unlocks after the previous lesson is completed; Supabase independently rejects completion if any earlier lesson is unfinished.
 
@@ -54,7 +54,7 @@ The SQL in this repository follows the team's numbered-file convention. Supabase
 
 ## Other existing features
 
-The merged site preserves the public landing and About & Privacy pages, current account forms, profile-photo upload/removal, activities, text posts, interests, habit check-ins and points, and habit ordering/archiving. Other screens still include browser-local behavior; do not assume messaging, RSVP flows, or all social features are fully synchronized. Posts and activity features have their own migrations and permissions. Their behavior is outside this lesson migration.
+The merged site preserves the public landing and About & Privacy pages, current account forms, profile-photo upload/removal, activities, text posts, interests, habit check-ins, and habit ordering/archiving. Other screens still include browser-local behavior; do not assume messaging, RSVP flows, or all social features are fully synchronized. Posts and activity features have their own migrations and permissions. Their behavior is outside this lesson migration.
 
 ## Team handoff
 
@@ -69,3 +69,7 @@ The interactive lesson slice is integrated into `main` while preserving its newe
 
 ## Level 1 Diagram
 <img width="2555" height="1774" alt="Sprint Retrospective (Team 2-5) (1)" src="https://github.com/user-attachments/assets/c736f8a3-dc73-46a6-ab38-5f302c60eac0" />
+
+## Current progress tracking
+
+Lessons show percent complete. Habits keep daily check-ins and streaks. Deploy this frontend before applying `database/016_remove_points.sql`; the migration removes reward tables and replaces the habit validator and lesson completion function without deleting activity, post, habit, check-in, or lesson records. Historical SQL files describe earlier deployments and must not be replayed on the live database.

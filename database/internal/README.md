@@ -78,3 +78,23 @@ retry protection, and cross-account isolation. It uses two existing accounts
 internally, requires accounts without v2 progress, and rolls every test write
 back. Do not remove the transaction or rollback. See `../README.md` for migration
 and rollback details. Existing event-tracker verification above remains historical.
+
+## Isolated removal regression
+
+`verify_remove_points.cjs` creates a temporary in-memory PostgreSQL database with
+synthetic accounts and the historical habit/lesson schema. It applies
+`016_remove_points.sql`, confirms all non-reward records are unchanged, then runs
+the lesson and check-in regressions. It never connects to Supabase.
+
+Install `@electric-sql/pglite@0.3.14` in a temporary folder, then run:
+
+```sh
+PGLITE_MODULE=/absolute/path/to/node_modules/@electric-sql/pglite node database/internal/verify_remove_points.cjs
+```
+
+The supported checks cover all six lessons, percentage progress in frontend tests,
+retries, atomic failure, ownership, check/uncheck, historical date protection,
+and removal of reward tables/functions. The full frontend test suite currently
+has three pre-existing failures in tests for the retired demo mode; the same
+three fail on the original branch. The live integration test must only be used
+after migration 016, and always keeps its rollback.

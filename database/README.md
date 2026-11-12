@@ -1,3 +1,7 @@
+## Current deployment: progress tracking
+
+Publish the compatible frontend before applying `016_remove_points.sql`. It preserves all lessons, completions, habits, check-ins, activities, and posts while removing the reward tables, award triggers, and reward configuration. Lesson completion still saves its linked habit atomically and remains safe to retry. The new habit validator retains the today-only rules and existing ownership policies. Historical numbered files below are retained for deployment history; do not replay them on the live project.
+
 # Database operations
 
 Project: Momentum DB. Treat the connected production database as live user data.

@@ -1,5 +1,7 @@
 # Momentum: database + ERD guide
 
+This guide describes the original demo schema. Use the live schema and the current deployment instructions in `README.md` for current diagrams; do not rebuild a live database with `schema.sql`.
+
 ## 1. Create the database (5 minutes)
 
 1. Go to supabase.com, sign in, and click **New project**. Pick a name (e.g. `momentum`), a database password (save it somewhere), and the closest region (West US).
@@ -38,13 +40,12 @@ Lucidchart builds the ERD from your real database, so the diagram and the databa
 | Activities | activity_types, activities, activity_addresses, rsvps, rsvp_guests, activity_reports | PL-0 to PL-15, +1s, cancellations |
 | Social | posts, post_photos, encouragements | SN-2, SN-3, Encourage |
 | Messaging | conversations, conversation_members, messages | SN-4, Message host |
-| Growth | lessons, lesson_stats, lesson_completions, habits, habit_checkins, point_events | ED-0, ED-1, streaks + points |
+| Growth | lessons, lesson_stats, lesson_completions, habits, habit_checkins | ED-0, ED-1, streaks |
 | System | notifications | PL-13 reminders |
 
 Design decisions worth calling out:
 
 - **The exact address has its own table (`activity_addresses`)** so the database itself can lock it down (PL-2). The public feed literally cannot read it, even if the website code had a bug.
-- **`point_events` is the single tracking unit** for streaks and points. Every action (habit, lesson, RSVP, "I went", first post of the day) adds one row, and cancelling an RSVP adds a negative row. The total is a sum, and the history is auditable.
 - **The streak is calculated, not stored:** consecutive days with at least one `habit_checkins` row. Nothing can get out of sync.
 - **Cancellations are counted from `rsvps`**: rows with `status = 'cancelled'` this month. No extra table needed.
 - **A +1 (`rsvp_guests`) is either a friend's account or a typed first name, never both.** A database check enforces this.
@@ -55,7 +56,6 @@ Design decisions worth calling out:
   - activities can't overfill
   - max 2 cancellations a month, none within 24 hours of the start
   - one friendship per pair
-  - post points only once a day
 
 ## 4. Security note (read before you demo)
 

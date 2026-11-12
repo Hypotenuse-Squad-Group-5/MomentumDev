@@ -2,7 +2,7 @@
    Momentum: shared UI
    - Builds the header, sidebar (desktop), bottom tab bar (phone), and the
      messages panel on every page. Edit navigation HERE, once.
-   - Helpers for icons, dates, avatars, pop-ups, and point toasts.
+   - Helpers for icons, dates, avatars, pop-ups, and notifications.
    ===================================================================== */
 (function () {
   // ---------- Icons (Lucide-style, inline SVG) ----------
@@ -96,16 +96,16 @@
     : esc(Store.profile(id).first);
 
   // ---------- Toasts ----------
-  function toast(text, points) {
+  function toast(text) {
     let box = document.querySelector(".toasts");
     if (!box) { box = document.createElement("div"); box.className = "toasts"; box.setAttribute("role", "status"); document.body.appendChild(box); }
     const t = document.createElement("div"); t.className = "toast";
-    t.innerHTML = (points ? '<span class="pts">' + (points > 0 ? "+" : "") + points + "</span>" : "") + "<span>" + esc(text) + "</span>";
+    t.innerHTML = "<span>" + esc(text) + "</span>";
     box.appendChild(t); setTimeout(() => t.remove(), 3200);
   }
   // A one-time toast carried across a redirect (e.g. "Activity posted")
-  function flash(text, points) { sessionStorage.setItem("momentum.flash", JSON.stringify({ text, points })); }
-  function showFlash() { const f = sessionStorage.getItem("momentum.flash"); if (f) { sessionStorage.removeItem("momentum.flash"); const { text, points } = JSON.parse(f); setTimeout(() => toast(text, points), 250); } }
+  function flash(text) { sessionStorage.setItem("momentum.flash", JSON.stringify({ text })); }
+  function showFlash() { const f = sessionStorage.getItem("momentum.flash"); if (f) { sessionStorage.removeItem("momentum.flash"); const { text } = JSON.parse(f); setTimeout(() => toast(text), 250); } }
 
   // ---------- Modals ----------
   function modal(html, { onMount, wide } = {}) {
@@ -157,7 +157,7 @@
   function headerHtml() {
     const s = Store.stats(); const u = Store.unreadCount();
     return '<a href="home.html" class="brand" aria-label="Momentum home"><span class="brand-mark"><img src="img/logo.svg" alt=""></span><span class="brand-name">Momentum</span></a>' +
-      '<a href="streak.html" class="streak-chip" title="Your streak and points">' + icon("flame", "sm") + s.streak + "</a>" +
+      '<a href="streak.html" class="streak-chip" title="Your streak">' + icon("flame", "sm") + s.streak + "</a>" +
       '<button class="icon-btn" id="msg-toggle" aria-label="Messages" aria-expanded="false">' + icon("message") + (u ? '<span class="badge">' + u + "</span>" : "") + "</button>" +
       '<a href="settings.html" class="icon-btn" aria-label="Settings">' + icon("settings") + "</a>" +
       '<a href="profile.html" class="avatar-btn" aria-label="My profile">' + avatar(Store.ME, "sm") + "</a>";
@@ -662,7 +662,7 @@
   // ---------- Page mounting ----------
   // mount("home", render, { live: true }) builds the shell, loads activities,
   // then renders. With live:true the page re-renders whenever data changes
-  // (here or in another tab), so streaks/points/habits stay in sync everywhere.
+  // (here or in another tab), so streaks/habits stay in sync everywhere.
   async function mount(pageKey, render, opts = {}) {
     const main = document.getElementById("main");
     // No login saved on this device: go straight to sign-in without drawing the app.

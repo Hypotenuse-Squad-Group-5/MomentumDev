@@ -523,7 +523,6 @@ details.form-section[open] .form-section-chevron {
 .alert.warn { background: var(--warn-soft); color: oklch(0.4 0.09 60); }
 .toasts { position: fixed; left: 50%; bottom: calc(var(--tabbar-h) + 14px); z-index: 90; transform: translateX(-50%); display: grid; gap: 8px; width: max-content; max-width: calc(100vw - 32px); }
 .toast { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-radius: 12px; background: var(--fg); color: #fff; font-size: .88rem; font-weight: 500; box-shadow: 0 10px 30px rgba(0,0,0,.25); animation: rise .25s ease both; }
-.toast .pts { padding: 2px 8px; border-radius: 999px; background: var(--flame); font-weight: 700; }
 
 /* ---------- Messages panel ---------- */
 .msg-panel {
@@ -710,9 +709,6 @@ details.event[open] > summary { border-bottom: 1px solid var(--border); }
 .heat span.l1 { background: oklch(0.85 0.07 181); }
 .heat span.l2 { background: oklch(0.7 0.11 181); }
 .heat span.l3 { background: var(--primary); }
-.ledger-row { display: flex; justify-content: space-between; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: .88rem; }
-.ledger-row .p { font-weight: 700; color: var(--primary); }
-.ledger-row .p.neg { color: var(--danger); }
 
 /* ---------- Social ---------- */
 .subnav { display: flex; gap: 4px; margin-bottom: 16px; padding: 4px; border-radius: 12px; background: var(--glass); backdrop-filter: blur(10px); }

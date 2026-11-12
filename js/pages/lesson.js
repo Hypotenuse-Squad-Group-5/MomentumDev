@@ -36,7 +36,7 @@ UI.mount("lessons", function render() {
         <div class="field" data-f="habit"><label for="habit">Your daily habit</label>
           <input autocomplete="off" id="habit" type="text" maxlength="80" placeholder="${esc(l.habitPlaceholder)}" aria-describedby="habit-hint habit-error">
           <div class="hint" id="habit-hint">Name a small habit to practice. Finishing this lesson adds it to your habits on Home.</div><div class="err" id="habit-error" hidden></div></div>
-        <button class="btn btn-primary btn-block">Finish lesson (+${Store.POINTS.lesson})</button>
+        <button class="btn btn-primary btn-block">Finish lesson</button>
       </form>`}
   </div>`;
 
@@ -62,7 +62,7 @@ UI.mount("lessons", function render() {
     catch (_) { r = { ok: false, message: "Your lesson could not be saved. Your reflection is still here; please try again." }; }
     finally { button.disabled = false; }
     if (!r.ok) return UI.alertModal("Couldn't finish", esc(r.message), { error: true });
-    UI.flash("Lesson " + n + " complete. New habit added to Home.", r.points);
+    UI.flash("Lesson " + n + " complete. New habit added to Home.");
     location.href = "lessons.html";
   };
 }, { live: false });

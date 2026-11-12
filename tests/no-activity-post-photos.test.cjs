@@ -386,7 +386,7 @@ function makeLiveApp(db, opts = {}) {
         return { data: null, error: null };
       }
       let data = applyFilters(db[table] || [], filters);
-      if (['habits', 'lesson_completions', 'point_events'].includes(table)) {
+      if (['habits', 'lesson_completions'].includes(table)) {
         data = data.filter((r) => r.profile_id === uid);
       }
       if (table === 'friendships') data = hydrateFriendships(data);
@@ -461,8 +461,6 @@ function seedDb() {
     lesson_completions: [],
     habits: [],
     habit_checkins: [],
-    point_events: [],
-    point_values: [],
     posts: [
       { id: 'post-1', author_id: 'user-b', caption: 'Evening walk around Provo!', activity_id: null, visibility: 'public', created_at: '2026-11-10T10:00:00Z' },
     ],
@@ -706,11 +704,12 @@ test('HTML pages cache-bust all modified JS scripts', () => {
   for (const htmlFile of htmlFiles) {
     const html = fs.readFileSync(htmlFile, 'utf8');
     for (const script of editedScripts) {
+      const version = ["js/pages/social.js", "js/pages/activity-new.js"].includes(script) ? "no-post-photos-1" : "progress-2";
       if (html.includes(`src="${script}`)) {
         assert.equal(
-          html.includes(`src="${script}?v=no-post-photos-1"`),
+          html.includes(`src="${script}?v=${version}"`),
           true,
-          `${htmlFile} should load ${script}?v=no-post-photos-1`
+          `${htmlFile} should load ${script}?v=${version}`
         );
       }
     }

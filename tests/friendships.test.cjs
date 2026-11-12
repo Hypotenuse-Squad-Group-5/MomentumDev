@@ -114,7 +114,7 @@ function makeLiveApp(db, opts = {}) {
       }
 
       let data = applyFilters(db[table] || [], filters);
-      if (['habits', 'lesson_completions', 'point_events'].includes(table)) {
+      if (['habits', 'lesson_completions'].includes(table)) {
         data = data.filter((r) => r.profile_id === uid);
       }
       if (table === 'friendships') {
@@ -173,8 +173,6 @@ function seedDb() {
     lesson_completions: [],
     habits: [],
     habit_checkins: [],
-    point_events: [],
-    point_values: [],
     posts: [],
     interests: [],
     profile_interests: [],

@@ -78,7 +78,7 @@ UI.mount("activities", function render() {
   if ($("accept-invite")) $("accept-invite").onclick = () => {
     const r = Store.respondPlusOne(invite.id, true);
     if (!r.ok) return UI.alertModal("Couldn't accept", esc(r.message), { error: true });
-    UI.flash("You're going. It's on your calendar.", r.points); location.href = "calendar.html?added=" + a.id;
+    UI.flash("You're going. It's on your calendar."); location.href = "calendar.html?added=" + a.id;
   };
   if ($("decline-invite")) $("decline-invite").onclick = () => { Store.respondPlusOne(invite.id, false); UI.toast("Invite declined"); };
   if ($("cancel")) $("cancel").onclick = () => {
@@ -86,9 +86,9 @@ UI.mount("activities", function render() {
     if (!c.ok) return UI.alertModal("You can't cancel this one", esc(c.reason) + " You're still committed.", { error: true });
     UI.modal(`<h2>Cancel your commitment?</h2>
       <p>People are counting on you, and it may drop the group below the minimum.</p>
-      <div class="alert warn">${icon("alert", "sm")}<span>This uses 1 of your ${left} remaining cancellation${left === 1 ? "" : "s"} this month and removes the ${Store.POINTS.rsvp} points you earned for committing.${myGuest ? " Your +1 is removed too." : ""}</span></div>
+      <div class="alert warn">${icon("alert", "sm")}<span>This uses 1 of your ${left} remaining cancellation${left === 1 ? "" : "s"} this month.${myGuest ? " Your +1 is removed too." : ""}</span></div>
       <div class="modal-actions"><button class="btn" data-close>Keep my spot</button><button class="btn btn-danger" id="confirm-cancel">Cancel commitment</button></div>`,
-      { onMount: (m, close) => (m.querySelector("#confirm-cancel").onclick = () => { const r = Store.cancel(a.id); close(); if (r.ok) UI.toast("Commitment cancelled. " + r.left + " left this month.", r.points); else UI.alertModal("Couldn't cancel", esc(r.message), { error: true }); }) });
+      { onMount: (m, close) => (m.querySelector("#confirm-cancel").onclick = () => { const r = Store.cancel(a.id); close(); if (r.ok) UI.toast("Commitment cancelled. " + r.left + " left this month."); else UI.alertModal("Couldn't cancel", esc(r.message), { error: true }); }) });
   };
   if ($("commit")) $("commit").onclick = () => openCommit(a);
 });
@@ -127,7 +127,7 @@ function openCommit(a) {
           }
           if (!ack) return;
           const r = Store.commit(a.id, plus);
-          if (r.ok) { UI.flash("You're committed to " + a.title, r.points); location.href = "calendar.html?added=" + a.id; return; }
+          if (r.ok) { UI.flash("You're committed to " + a.title); location.href = "calendar.html?added=" + a.id; return; }
           close();
           if (r.code === "login") return UI.alertModal("Sign in to commit", "You need to be signed in to commit to an activity.", { error: true, actions: '<button class="btn" data-close>Back to activity</button><a class="btn btn-primary" href="login.html">Sign in</a>' });
           if (r.code === "conflict") return UI.alertModal("You can't commit to this one", `It overlaps or starts within 30 minutes of something you're already committed to:</p><div class="soft"><b>${esc(r.conflict.title)}</b><br><span class="small">${esc(UI.fmtRange(r.conflict))}</span></div><p class="hint mt">Committed activities need at least 30 minutes between one ending and the next starting.`, { error: true, actions: '<button class="btn btn-primary" data-close>Back to activity</button>' });

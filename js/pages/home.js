@@ -34,7 +34,7 @@ UI.mount("home", function render() {
           <span class="flame-badge">${icon("flame")}</span>
           <span class="grow">
             <span class="streak-num">${s.streak}</span> <b>day streak</b>
-            <span style="display:block;opacity:.85;font-size:.88rem">${s.points} points · ${streakMsg}</span>
+            <span style="display:block;opacity:.85;font-size:.88rem">${streakMsg}</span>
             <span class="week-dots">${days.map((d, i) => `<span class="${d.count ? "on" : ""}${i === 6 ? " today" : ""}" title="${d.date}">${"SMTWTFS"[new Date(d.date + "T12:00").getDay()]}</span>`).join("")}</span>
           </span>
           ${icon("right")}
@@ -57,7 +57,7 @@ UI.mount("home", function render() {
           <section class="panel tight">
             <p class="label">Did you go?</p>
             <p class="mb0"><b>${esc(a.title)}</b> · ${esc(UI.fmtDay(a.startsAt))}</p>
-            <p class="small muted">Showing up is the whole point. Checking in earns ${Store.POINTS.attended} points.</p>
+            <p class="small muted">Let us know whether you made it.</p>
             <div class="row"><button class="btn btn-sm btn-primary" data-checkin="${a.id}" data-yes>Yes, I went</button><button class="btn btn-sm" data-checkin="${a.id}">I didn't make it</button></div>
           </section>`).join("")}
 
@@ -84,7 +84,7 @@ UI.mount("home", function render() {
               return `<button class="habit${done ? " done" : ""}" data-habit="${h.id}" aria-pressed="${done}">
                 <span class="box">${done ? icon("check", "sm") : ""}</span>
                 <span class="grow"><span class="title">${esc(h.title)}</span>${h.lessonNumber ? `<br><span class="tag grey">From Lesson ${h.lessonNumber}</span>` : ""}</span>
-                <span class="tiny muted">+${Store.POINTS.habit}</span></button>`;
+                </button>`;
             }).join("") || (habitManage
               ? '<p class="muted small">No habits yet. Add one below, or finish a lesson to get one.</p>'
               : `<div class="center"><p class="muted small">No habits yet. Add one, or finish a lesson to get one.</p><button class="btn btn-sm" id="habit-start">${icon("plus", "sm")}Add a habit</button></div>`)}
@@ -92,7 +92,7 @@ UI.mount("home", function render() {
           ${habitManage && Store.archivedHabits().length ? `
             <p class="label mt-lg">Archived</p>
             <div class="stack">${Store.archivedHabits().map((h) => `<div class="row-between soft"><span class="muted">${esc(h.title)}</span><button class="btn btn-sm" data-restore="${h.id}">Restore</button></div>`).join("")}</div>
-            <p class="hint">Archived habits keep their history, so your streak and points stay accurate.</p>` : ""}
+            <p class="hint">Archived habits keep their history, so your streak stay accurate.</p>` : ""}
           ${habitManage ? `<form class="row mt" id="add-habit"><input type="text" class="grow" style="flex:1" placeholder="Add a habit, e.g. Read 10 pages before bed" maxlength="80" aria-label="New habit"><button class="btn">${icon("plus", "sm")}Add</button></form>` : ""}
         </section>
       </div>
@@ -108,7 +108,7 @@ UI.mount("home", function render() {
         <section class="panel tight">
           <p class="label">Explore</p>
           <a class="tile" href="activities.html"><span class="ico">${icon("activity")}</span><span class="grow"><b>Activities</b><br><span class="small muted">Find something to do nearby</span></span>${icon("right", "sm")}</a>
-          <a class="tile" href="${lessonN ? "lesson.html?n=" + lessonN : "lessons.html"}"><span class="ico">${icon("book")}</span><span class="grow"><b>${lessonN ? "Lesson " + lessonN : "Lessons"}</b><br><span class="small muted">${lessonN ? "Pick up where you left off" : "All lessons complete"}</span></span>${icon("right", "sm")}</a>
+          <a class="tile" href="${lessonN ? "lesson.html?n=" + lessonN : "lessons.html"}"><span class="ico">${icon("book")}</span><span class="grow"><b>${lessonN ? "Lesson " + lessonN : "Lessons"}</b><br><span class="small muted">${s.lessonPercent}% complete</span></span>${icon("right", "sm")}</a>
           <a class="tile" href="social.html"><span class="ico">${icon("users")}</span><span class="grow"><b>Social</b><br><span class="small muted">See what friends have been doing</span></span>${icon("right", "sm")}</a>
           <a class="tile" href="calendar.html"><span class="ico">${icon("calendar")}</span><span class="grow"><b>Calendar</b><br><span class="small muted">${s.upcoming} upcoming commitment${s.upcoming === 1 ? "" : "s"}</span></span>${icon("right", "sm")}</a>
         </section>
@@ -124,8 +124,8 @@ UI.mount("home", function render() {
   document.querySelectorAll("[data-habit]").forEach((b) => (b.onclick = () => {
     const r = Store.toggleHabit(b.dataset.habit);
     const days = Store.streak().current;
-    if (r.done) UI.toast(r.streakUp ? "Streak extended to " + days + (days === 1 ? " day" : " days") : "Habit checked", r.points);
-    else UI.toast("Habit unchecked", r.points); // shows -10: unchecking takes the points back
+    if (r.done) UI.toast(r.streakUp ? "Streak extended to " + days + (days === 1 ? " day" : " days") : "Habit checked");
+    else UI.toast("Habit unchecked");
   }));
   const start = document.getElementById("habit-start");
   if (start) start.onclick = () => { habitManage = true; render(); document.querySelector("#add-habit input").focus(); };
@@ -143,11 +143,11 @@ UI.mount("home", function render() {
   document.querySelectorAll("[data-invite]").forEach((b) => (b.onclick = () => {
     const r = Store.respondPlusOne(b.dataset.invite, b.hasAttribute("data-yes"));
     if (!r.ok && r.message) UI.alertModal("Couldn't accept", UI.esc(r.message), { error: true });
-    else if (b.hasAttribute("data-yes")) UI.toast("You're going. It's on your calendar.", r.points);
+    else if (b.hasAttribute("data-yes")) UI.toast("You're going. It's on your calendar.");
   }));
   document.querySelectorAll("[data-checkin]").forEach((b) => (b.onclick = () => {
     const went = b.hasAttribute("data-yes"); const r = Store.checkIn(b.dataset.checkin, went);
-    UI.toast(went ? "Nice. That counts." : "Thanks for being honest.", r.points);
+    UI.toast(went ? "Nice. That counts." : "Thanks for being honest.");
   }));
 });
 
@@ -180,7 +180,7 @@ function editHabitModal(id) {
     <form id="edit-habit" novalidate>
       <div class="field"><label for="edit-title">Habit</label><input id="edit-title" type="text" maxlength="80" value="${UI.esc(h.title)}"><div class="err" hidden></div></div>
       ${h.goalText ? `<div class="goal-box small"><b>Lesson ${h.lessonNumber} goal</b><br>${UI.esc(h.goalText)}</div><p class="hint">The lesson goal itself can't be edited here.</p>` : ""}
-      <p class="hint">Renaming keeps this habit's streak and points.</p>
+      <p class="hint">Renaming keeps this habit's streak.</p>
       <div class="modal-actions"><button type="button" class="btn" data-close>Cancel</button><button class="btn btn-primary">Save</button></div>
     </form>`, {
     onMount(m, close) {

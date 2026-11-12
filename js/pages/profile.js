@@ -111,7 +111,7 @@
         ${own && compose.open ? `
         <form class="panel mt" id="composer" novalidate>
           <div class="row-between"><h2 class="mb0">Share a post</h2><button type="button" class="icon-btn" id="close-compose" aria-label="Close">${icon("x")}</button></div>
-          <p class="small muted">Text posts save to your profile and Supabase database. Your first post each day earns ${Store.POINTS.post} points.</p>
+          <p class="small muted">Text posts save to your profile and Supabase database.</p>
           <div class="field"><label for="caption">Post</label><textarea id="caption" maxlength="500" placeholder="What did you do?">${esc(compose.caption)}</textarea><div class="hint"><span id="cc">${compose.caption.length}</span> / 500</div></div>
           <div class="grid-2">
             <div class="field"><label for="link">Link an activity <span class="opt">(optional)</span></label><select id="link"><option value="">None</option>${linkable.map((a) => `<option value="${a.id}"${a.id === compose.activityId ? " selected" : ""}>${esc(a.title)}</option>`).join("")}</select></div>
@@ -203,7 +203,7 @@
       }
       Object.assign(compose, { open: false, caption: "", activityId: "", error: "" });
       render();
-      UI.toast(r.points ? "Posted" : "Posted (post points already earned today)", r.points);
+      UI.toast("Posted");
     };
   });
 })();

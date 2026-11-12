@@ -4,13 +4,13 @@ Integrated into `main` from `feature/interactive-lessons`. The six-lesson curric
 
 ## Data contract
 
-`Store.completeLesson(number, goalText, habitTitle)` returns a Promise resolving to `{ ok, points, message? }`. The data layer calls `complete_momentum_lesson` for signed-in users. The server owns identity, order validation, completion, habit creation, points, and retry protection. A successful retry can include `alreadyCompleted: true` and zero new points.
+`Store.completeLesson(number, goalText, habitTitle)` returns a Promise resolving to `{ ok, habitId, alreadyCompleted, message? }`. The data layer calls `complete_momentum_lesson` for signed-in users. The server owns identity, order validation, completion, habit creation, and retry protection. A successful retry can include `alreadyCompleted: true`.
 
-`loadLessonData` loads version-2 lesson ID/number mappings and the signed-in profile's completions. `loadHabitData` restores habits, check-ins, and habit/lesson points. `Store.lessonHabit(number)` finds the canonical habit referenced by the completion; a changed title or archive state on Home is shown on the completed lesson. The habit input is the final input below the reflection and above Finish lesson.
+`loadLessonData` loads version-2 lesson ID/number mappings and the signed-in profile's completions. `loadHabitData` restores habits and check-ins. `Store.lessonHabit(number)` finds the canonical habit referenced by the completion; a changed title or archive state on Home is shown on the completed lesson. The habit input is the final input below the reflection and above Finish lesson.
 
 Live progress is not inferred from localStorage. The cache preserves old browser progress separately for reference, but only confirmed server completions unlock the six-lesson course. If initial restore fails, the UI blocks the lesson view and offers reload rather than rendering cached completion as confirmed.
 
-Practice inputs remain page-only. Add plan to my reflection appends text and supplies a suggested habit only when empty; nothing is persisted until completion. Browser autocomplete is disabled for practice, reflection, and habit-name inputs. Quiz attempts do not gate completion or award points.
+Practice inputs remain page-only. Add plan to my reflection appends text and supplies a suggested habit only when empty; nothing is persisted until completion. Browser autocomplete is disabled for practice, reflection, and habit-name inputs. Quiz attempts do not gate completion.
 
 ## Curriculum and preservation
 

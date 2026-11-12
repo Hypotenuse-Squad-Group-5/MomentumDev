@@ -44,10 +44,9 @@ begin
   select count(*) into new_count from public.habits;
   if new_count <> old_count+6 then raise exception 'FAIL: habits not created'; end if;
   r := public.complete_momentum_lesson(1,repeat('word ',35),'Retry must not replace the habit');
-  if not (r->>'alreadyCompleted')::boolean or (r->>'points')::int <> 0 then raise exception 'FAIL: retry not idempotent'; end if;
+  if not (r->>'alreadyCompleted')::boolean then raise exception 'FAIL: retry not idempotent'; end if;
   if (select count(*) from public.habits) <> new_count then raise exception 'FAIL: duplicate habit'; end if;
   if (select count(*) from public.lesson_completions c join public.lessons l on l.id=c.lesson_id where l.curriculum_version=2) <> 6 then raise exception 'FAIL: saved progress'; end if;
-  if (select count(*) from public.point_events p join public.lessons l on l.id=p.lesson_id where p.kind='lesson' and l.curriculum_version=2) <> 6 then raise exception 'FAIL: duplicate points'; end if;
   if not exists(select 1 from public.lesson_completions c join public.habits h on h.id=c.habit_id where h.id=first_habit and h.source_lesson_id=c.lesson_id and h.profile_id=c.profile_id and h.goal_text=c.user_goal_response) then raise exception 'FAIL: habit linkage'; end if;
   -- The completed lesson reads the SAME habit after Home changes its name/archive state.
   update public.habits set title='QA renamed on Home',is_active=false where id=first_habit;
@@ -61,7 +60,10 @@ begin
 end $$;
 reset role;
 -- Force a late failure after the habit/completion inserts; the function must undo both.
-delete from public.point_values where kind='lesson';
+create function momentum_private.qa_reject_completion() returns trigger language plpgsql as $$
+begin raise exception 'Forced completion failure'; end $$;
+create trigger qa_reject_completion before insert on public.lesson_completions
+for each row execute function momentum_private.qa_reject_completion();
 set local role authenticated;
 do $$
 declare before_habits bigint; after_habits bigint; rejected boolean := false;
