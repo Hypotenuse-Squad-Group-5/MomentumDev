@@ -6,12 +6,14 @@
    publishable key. There is no demo mode.
 
    Stored in Supabase: accounts, profiles, interests, habits + check-ins,
-   lessons, activities, friendships, messages, and posts.
-   RSVPs/+1s, attendance, reports, likes, and general settings stay browser-local.
+   lessons, activities, commitments (RSVPs) + +1s + attendance, friendships,
+   messages, and posts.
+   Activity reports, likes, and general settings stay browser-local.
    ===================================================================== */
 (function () {
   let KEY = null; // this user's browser data: "momentum.v1.user.<profile id>" (set in init)
-  const CANCELS_PER_MONTH = 2;
+  const CANCELS_PER_MONTH = 2;  // also enforced by the database (migration 018)
+  const CANCEL_HOURS = 3;       // no cancelling within 3 hours of the start (also in the database)
   const BUFFER_MIN = 30;
 
   let ME = null; // the signed-in user's profile id (set in init)
@@ -38,7 +40,7 @@
     return {
       version: 1, meId: me.id, signedIn: true, profiles: { [me.id]: me },
       friendships: [], blocks: [], activities: [], addresses: {}, rsvps: [], guests: [], reports: [], posts: [],
-      encouragements: [], conversations: [], lessonsDone: [], habits: [], checkins: [], momentum: [],
+      encouragements: [], conversations: [], lessonsDone: [], habits: [], checkins: [], momentum: [], cancellations: [],
       settings: defaultSettings(),
     };
   }
@@ -47,7 +49,9 @@
   function restoreState(saved, me) {
     const restored = blankState(me);
     if (saved && saved.version === 1) {
-      Object.keys(restored).forEach((key) => { if (key in saved) restored[key] = saved[key]; });
+      // Commitments come from the database now (migration 018): never restore this browser's old copy.
+      const FROM_DATABASE = ["rsvps", "guests", "cancellations"];
+      Object.keys(restored).forEach((key) => { if (key in saved && !FROM_DATABASE.includes(key)) restored[key] = saved[key]; });
       restored.settings = { ...defaultSettings(), ...restored.settings };
     }
     return restored;
@@ -102,6 +106,7 @@
       description: row.description, bring: row.what_to_bring || "", startsAt: row.starts_at, endsAt: row.ends_at,
       location: row.general_location, city: row.city, lat: row.latitude != null ? Number(row.latitude) : null,
       lng: row.longitude != null ? Number(row.longitude) : null, min: row.min_participants, max: row.max_participants,
+      taken: row.spots_taken != null ? Number(row.spots_taken) : null, // host + people going + their +1s (migration 018)
       visibility: row.visibility, createdAt: row.created_at, source: "supabase",
     };
   }
@@ -109,17 +114,16 @@
   async function loadActivities(force) {
     if (actCache && !force) return actCache;
     loadError = null;
-    let { data, error } = await sb.from("activities")
-      .select("*, host:profiles!activities_host_id_fkey(first_name,avatar_url,created_at), type:activity_types(name)")
-      .order("starts_at");
-    if (error) {
-      const alt = await sb.from("activities")
-        .select("*, host:profiles!activities_host_id_fkey(first_name,created_at), type:activity_types(name)")
-        .order("starts_at");
-      if (!alt.error) {
-        data = alt.data;
-        error = null;
-      }
+    // spots_taken needs migration 018; without it the count is worked out from the commitments we can see
+    const selects = [
+      "*, spots_taken, host:profiles!activities_host_id_fkey(first_name,avatar_url,created_at), type:activity_types(name)",
+      "*, host:profiles!activities_host_id_fkey(first_name,avatar_url,created_at), type:activity_types(name)",
+      "*, host:profiles!activities_host_id_fkey(first_name,created_at), type:activity_types(name)",
+    ];
+    let data = null, error = null;
+    for (const cols of selects) {
+      ({ data, error } = await sb.from("activities").select(cols).order("starts_at"));
+      if (!error) break;
     }
     if (error) { loadError = error.message; console.error(error); actCache = []; }
     else actCache = data.map(fromRow);
@@ -438,10 +442,16 @@
   }
 
   // =====================================================================
-  // Activities: RSVPs, +1s, cancellations, check-ins
+  // Activities: commitments (RSVPs), +1s, cancellations, check-ins
+  // Saved in Supabase (migration 018). The database enforces every rule (full, 3-hour
+  // cancel window, 2 cancels a month, 30-minute gap, blocks); the checks here just answer
+  // quickly before asking it. Who can see what:
+  //   everyone signed in: how many are going (activity.taken)
+  //   the host and people going: who's going
   // =====================================================================
   const activity = (id) => (actCache || []).find((a) => a.id === id) || null;
   const isPast = (a) => new Date(a.endsAt) < new Date();
+  const hasStarted = (a) => new Date(a.startsAt) <= new Date();
   function myRsvp(activityId) { return state.rsvps.find((r) => r.activityId === activityId && r.profileId === ME) || null; }
   function myGuestInvite(activityId) {
     return state.guests.find((g) => g.guestProfileId === ME && state.rsvps.some((r) => r.id === g.rsvpId && r.activityId === activityId)) || null;
@@ -456,7 +466,7 @@
   }
   function isGoing(activityId) { return myCommitmentIds().includes(activityId); }
   function myCommitments() { return myCommitmentIds().map(activity).filter(Boolean).sort((a, b) => new Date(a.startsAt) - new Date(b.startsAt)); }
-    // Exact address of an activity. Supabase only returns it to the host (and later, committed members).
+  // Exact address of an activity. Supabase returns it to the host and to people going (migration 018).
   async function loadAddress(id) {
     if (state.addresses[id]) return state.addresses[id];
     const { data, error } = await sb.from("activity_addresses").select("exact_address").eq("activity_id", id).maybeSingle();
@@ -466,7 +476,45 @@
   }
   function hosting() { return (actCache || []).filter((a) => a.hostId === ME); }
 
-  // Who's going: committed people + their +1s (pending friend invites don't hold a spot)
+  // Load my commitments, the commitments on activities I host or go to, and +1 invites
+  // (the database only returns rows I'm allowed to see), plus my cancellations.
+  function fromRsvpRow(r) {
+    if (r.person) cacheRemoteProfile(r.person);
+    return { id: r.id, activityId: r.activity_id, profileId: r.profile_id, status: r.status, createdAt: r.created_at, cancelledAt: r.cancelled_at || null, attended: r.attended == null ? null : r.attended };
+  }
+  function fromGuestRow(g) {
+    if (g.person) cacheRemoteProfile(g.person);
+    return { id: g.id, rsvpId: g.rsvp_id, guestProfileId: g.guest_profile_id || null, guestFirstName: g.guest_first_name || null, status: g.status, createdAt: g.created_at };
+  }
+  async function loadCommitments() {
+    if (!ME) return false;
+    const who = "id,first_name,avatar_url,created_at";
+    const [r, g, c] = await Promise.all([
+      sb.from("rsvps").select(`id,activity_id,profile_id,status,created_at,cancelled_at,attended,checked_in_at,person:profiles!rsvps_profile_id_fkey(${who})`),
+      sb.from("rsvp_guests").select(`id,rsvp_id,guest_profile_id,guest_first_name,status,created_at,person:profiles!rsvp_guests_guest_profile_id_fkey(${who})`),
+      sb.from("rsvp_cancellations").select("activity_id,cancelled_at"),
+    ]);
+    const err = r.error || g.error || c.error;
+    if (err) { console.warn("Commitments didn't load (has migration 018 been run?):", err.message); return false; }
+    state.rsvps = (r.data || []).map(fromRsvpRow);
+    state.guests = (g.data || []).map(fromGuestRow);
+    state.cancellations = (c.data || []).map((x) => ({ activityId: x.activity_id, cancelledAt: x.cancelled_at }));
+    // the exact address unlocks once you're going
+    await Promise.all(myCommitmentIds().filter((id) => !state.addresses[id]).map((id) => loadAddress(id).catch(() => null)));
+    return true;
+  }
+  // After a change: fresh commitments + fresh "N going" counts, then redraw every open page
+  async function refreshCommitments() {
+    await Promise.all([loadCommitments(), loadActivities(true)]);
+    save();
+  }
+  // A database refusal → the same { ok:false, code, message } shape the pages already use
+  function refusal(error) {
+    return { ok: false, code: (error && error.hint) || null, message: (error && error.message) || "Something went wrong. Please try again." };
+  }
+
+  // Who's going: committed people + their +1s (pending friend invites don't hold a spot).
+  // Only filled in for the host and people going; everyone else just sees the count.
   function attendees(activityId) {
     const list = [];
     state.rsvps.filter((r) => r.activityId === activityId && r.status === "committed").forEach((r) => {
@@ -476,18 +524,21 @@
     });
     return list;
   }
-  function spotsTaken(activityId) { return attendees(activityId).length + 1; } // +1 = host
+  function canSeeAttendees(activityId) { const a = activity(activityId); return !!a && (a.hostId === ME || isGoing(activityId)); }
+  function spotsTaken(activityId) { // +1 = host
+    const a = activity(activityId);
+    return a && a.taken != null ? a.taken : attendees(activityId).length + 1;
+  }
   function cancellationsUsed() {
     const now = new Date();
-    return state.rsvps.filter((r) => r.profileId === ME && r.status === "cancelled" && r.cancelledAt &&
-      new Date(r.cancelledAt).getMonth() === now.getMonth() && new Date(r.cancelledAt).getFullYear() === now.getFullYear()).length;
+    return state.cancellations.filter((c) => new Date(c.cancelledAt).getMonth() === now.getMonth() && new Date(c.cancelledAt).getFullYear() === now.getFullYear()).length;
   }
   function cancellationsLeft() { return Math.max(0, CANCELS_PER_MONTH - cancellationsUsed()); }
   function canCancel(activityId) {
     const a = activity(activityId); const r = myRsvp(activityId);
-    if (!a || !r || r.status !== "committed") return { ok: false, reason: "You're not committed to this activity." };
-    if (new Date(a.startsAt) - new Date() < 24 * 36e5) return { ok: false, reason: "Commitments can't be cancelled within 24 hours of the start." };
-    if (cancellationsLeft() === 0) return { ok: false, reason: "You've used both cancellations for this month." };
+    if (!a || !r || r.status !== "committed") return { ok: false, code: "not_committed", reason: "You're not committed to this activity." };
+    if (new Date(a.startsAt) - new Date() < CANCEL_HOURS * 36e5) return { ok: false, code: "cancel_window", reason: `Commitments can't be cancelled within ${CANCEL_HOURS} hours of the start.` };
+    if (cancellationsLeft() === 0) return { ok: false, code: "no_cancels", reason: "You've used both cancellations for this month." };
     return { ok: true };
   }
   // PL-14: no overlap and no starting within 30 minutes of another commitment
@@ -497,68 +548,67 @@
     return myCommitments().find((o) => o.id !== a.id && s < new Date(o.endsAt).getTime() + buf && e > new Date(o.startsAt).getTime() - buf) || null;
   }
 
-  function commit(activityId, plusOne) {
+  async function commit(activityId, plusOne) {
     const a = activity(activityId);
     if (!a) return { ok: false, message: "That activity couldn't be found." };
     if (!state.signedIn) return { ok: false, code: "login", message: "Sign in to commit to an activity." };
-    if (isPast(a)) return { ok: false, message: "This activity has already happened." };
+    if (hasStarted(a)) return { ok: false, code: "started", message: isPast(a) ? "This activity has already happened." : "This activity has already started." };
     if (a.hostId === ME) return { ok: false, message: "You're hosting this one." };
     if (isGoing(activityId)) return { ok: false, message: "You're already committed." };
     const conflict = conflictFor(a);
     if (conflict) return { ok: false, code: "conflict", conflict, message: "This overlaps or starts within 30 minutes of " + conflict.title + "." };
     const need = 1 + (plusOne && plusOne.type === "guest" ? 1 : 0);
-    if (spotsTaken(activityId) + need > a.max) return { ok: false, message: need > 1 ? "There's only room for one more person, so you can't bring a guest." : "This activity is full." };
+    if (spotsTaken(activityId) + need > a.max) return { ok: false, code: "full", message: need > 1 && spotsTaken(activityId) + 1 <= a.max ? "There's only room for one more person, so you can't bring a guest." : "This activity is full." };
 
-    let r = myRsvp(activityId);
-    if (r) { r.status = "committed"; r.createdAt = nowIso(); } else { r = { id: uid(), activityId, profileId: ME, status: "committed", createdAt: nowIso(), cancelledAt: null, attended: null }; state.rsvps.push(r); }
-    state.guests = state.guests.filter((g) => g.rsvpId !== r.id);
-    if (plusOne && plusOne.type === "friend") state.guests.push({ id: uid(), rsvpId: r.id, guestProfileId: plusOne.profileId, guestFirstName: null, status: "pending", createdAt: nowIso() });
-    if (plusOne && plusOne.type === "guest") state.guests.push({ id: uid(), rsvpId: r.id, guestProfileId: null, guestFirstName: plusOne.name.trim(), status: "accepted", createdAt: nowIso() });
-    save();
+    const args = { p_activity: activityId };
+    if (plusOne && plusOne.type === "friend") args.p_friend = plusOne.profileId;
+    if (plusOne && plusOne.type === "guest") args.p_guest_name = plusOne.name.trim();
+    const { error } = await sb.rpc("commit_to_activity", args);
+    await refreshCommitments(); // either way: someone may have taken the last spot
+    if (error) { const r = refusal(error); if (r.code === "conflict") r.code = null; return r; } // (the conflict pop-up needs details only the site has)
     return { ok: true };
   }
 
-  function cancel(activityId) {
-    const c = canCancel(activityId); if (!c.ok) return { ok: false, message: c.reason };
-    const r = myRsvp(activityId);
-    r.status = "cancelled"; r.cancelledAt = nowIso();
-    state.guests = state.guests.filter((g) => g.rsvpId !== r.id);
-    save();
-    return { ok: true, left: cancellationsLeft() };
+  async function cancel(activityId) {
+    const c = canCancel(activityId); if (!c.ok) return { ok: false, code: c.code, message: c.reason };
+    const { data, error } = await sb.rpc("cancel_commitment", { p_activity: activityId });
+    await refreshCommitments();
+    if (error) return refusal(error);
+    return { ok: true, left: data && data.left != null ? data.left : cancellationsLeft() };
   }
 
   // Incoming +1 invites (a friend asked me along)
   function plusOneInvites() {
     return state.guests.filter((g) => g.guestProfileId === ME && g.status === "pending").map((g) => {
       const r = state.rsvps.find((x) => x.id === g.rsvpId); return { guest: g, rsvp: r, activity: r && activity(r.activityId) };
-    }).filter((x) => x.activity && !isPast(x.activity));
+    }).filter((x) => x.rsvp && x.activity && !hasStarted(x.activity));
   }
-  function respondPlusOne(guestId, accept) {
-    const g = state.guests.find((x) => x.id === guestId); if (!g) return { ok: false };
-    if (!accept) { g.status = "declined"; save(); return { ok: true }; }
-    const r = state.rsvps.find((x) => x.id === g.rsvpId); const a = activity(r.activityId);
-    const conflict = conflictFor(a);
-    if (conflict) return { ok: false, message: "This overlaps or starts within 30 minutes of " + conflict.title + "." };
-    if (spotsTaken(a.id) + 1 > a.max) { g.status = "expired"; save(); return { ok: false, message: "The activity filled up before you accepted. Committed people get priority." }; }
-    g.status = "accepted";
-    save();
+  async function respondPlusOne(guestId, accept) {
+    const g = state.guests.find((x) => x.id === guestId); if (!g) return { ok: false, message: "That invite is no longer open." };
+    if (accept) {
+      const r = state.rsvps.find((x) => x.id === g.rsvpId); const a = r && activity(r.activityId);
+      const conflict = a && conflictFor(a);
+      if (conflict) return { ok: false, code: "conflict", message: "This overlaps or starts within 30 minutes of " + conflict.title + "." };
+    }
+    const { data, error } = await sb.rpc("respond_plus_one", { p_guest: guestId, p_accept: !!accept });
+    await refreshCommitments();
+    if (error) return refusal(error);
+    if (data && data.ok === false) return { ok: false, code: data.code || null, message: data.message };
     return { ok: true };
   }
 
-  function checkIn(activityId, attended) {
-    const r = myRsvp(activityId); if (!r || r.attended !== null) return { ok: false };
-    r.attended = !!attended;
-    save();
-    if (!attended) return { ok: true, gainedNow: false };
+  // "Did you go?" after it ends. Yes = today's "attended" Momentum (the database also credits the host).
+  async function checkIn(activityId, attended) {
+    const r = myRsvp(activityId); if (!r || r.attended !== null) return { ok: false, message: "You already checked in." };
     const before = momentum().gainedToday;
-    const entry = { date: today(), reason: "attended" };
-    state.momentum.push(entry);
-    Promise.resolve().then(() => sb.rpc("record_attended_momentum", {}))
-      .then((res) => { if (res && res.error) throw res.error; })
-      .catch((err) => { state.momentum = state.momentum.filter((m) => m !== entry); syncFailed("Couldn't save your Momentum: " + (err.message || err)); });
-    return { ok: true, gainedNow: !before && momentum().gainedToday };
+    const { error } = await sb.rpc("check_in_activity", { p_activity: activityId, p_attended: !!attended });
+    if (error) return refusal(error);
+    r.attended = !!attended;
+    if (attended && !state.momentum.some((m) => m.date === today() && m.reason === "attended")) state.momentum.push({ date: today(), reason: "attended" });
+    save();
+    return { ok: true, gainedNow: !!attended && !before && momentum().gainedToday };
   }
-  function needsCheckIn() { return myCommitments().filter((a) => isPast(a) && myRsvp(a.id) && myRsvp(a.id).attended === null); }
+  function needsCheckIn() { return myCommitments().filter((a) => isPast(a) && myRsvp(a.id) && myRsvp(a.id).status === "committed" && myRsvp(a.id).attended === null); }
 
   function report(activityId, authorId) { return state.reports.find((r) => r.activityId === activityId && r.authorId === authorId) || null; }
   function saveReport(activityId, body) {
@@ -1459,7 +1509,7 @@
       if (state && state.settings) delete state.settings.messageRequestsFrom;
       if (!Array.isArray(state.blocks)) state.blocks = [];
       state.meId = ME; state.signedIn = true;
-      const [habitsLoaded, lessonsLoaded] = await Promise.all([loadHabitData(), loadLessonData(), loadPosts(), loadInterests(), loadFriendships(), loadConversations(), loadBlocks()]);
+      const [habitsLoaded, lessonsLoaded] = await Promise.all([loadHabitData(), loadLessonData(), loadPosts(), loadInterests(), loadFriendships(), loadConversations(), loadBlocks(), loadCommitments()]);
       if (!habitsLoaded || !lessonsLoaded) { loadError = "We couldn't load your saved habits and lesson progress. Please reload to try again."; return "syncerror"; }
       persist();
       return true;
@@ -1516,7 +1566,7 @@
     today, dayKey, addDays,
     // activities
     loadActivities, allActivities: () => actCache || [], loadTypes, types: () => typeCache || [], loadSuggestions, activitySuggestions, validateActivity, createActivity, activity, isPast, attendees, spotsTaken,
-    myRsvp, myGuestInvite, isGoing, myCommitments, myCommitmentIds, hosting, conflictFor, commit, cancel, canCancel,
+    myRsvp, myGuestInvite, isGoing, myCommitments, myCommitmentIds, hosting, conflictFor, commit, cancel, canCancel, hasStarted, canSeeAttendees, loadCommitments, CANCEL_HOURS,
     cancellationsLeft, plusOneInvites, respondPlusOne, checkIn, needsCheckIn, address: (id) => state.addresses[id] || null, loadAddress,
     report, saveReport,
     // people

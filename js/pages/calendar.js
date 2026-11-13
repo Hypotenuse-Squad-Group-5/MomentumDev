@@ -87,7 +87,7 @@
           <dl class="kv">
             <dt>Host</dt><dd>${UI.nameLink(a.hostId)}</dd>
             <dt>Address</dt><dd><b>${esc(Store.address(a.id) || a.location)}</b></dd>
-            <dt>Group</dt><dd>${Store.spotsTaken(a.id)} ${isPast ? "went" : "going"} (min ${a.min}, max ${a.max})</dd>
+            <dt>Group</dt><dd>${Store.spotsTaken(a.id)} ${isPast ? "signed up" : "going"} (min ${a.min}, max ${a.max})</dd>
             ${a.bring ? `<dt>Bring</dt><dd>${esc(a.bring)}</dd>` : ""}
           </dl>
           ${!isPast ? `<p class="small mt">${icon("clock", "sm")} You'll get a reminder 30 minutes before the start.</p>` : ""}
@@ -119,8 +119,14 @@
     document.getElementById("next").onclick = () => { month = new Date(y, m + 1, 1); render(); };
     document.querySelectorAll(".cal .ev").forEach((l) => (l.onclick = () => { const d = document.querySelector(l.getAttribute("href")); if (d) d.open = true; }));
     document.querySelectorAll("[data-cal]").forEach((b) => (b.onclick = () => UI.addToCalendarModal(Store.activity(b.dataset.cal))));
-    document.querySelectorAll("[data-went]").forEach((b) => (b.onclick = () => { const r = Store.checkIn(b.dataset.went, true); UI.toast(r.gainedNow ? "You gained Momentum!" : "Attendance saved."); }));
-    document.querySelectorAll("[data-missed]").forEach((b) => (b.onclick = () => { Store.checkIn(b.dataset.missed, false); UI.toast("Thanks for being honest."); }));
+    const checkIn = async (b, id, went) => {
+      b.closest(".row").querySelectorAll("button").forEach((x) => (x.disabled = true));
+      const r = await Store.checkIn(id, went);
+      if (!r.ok) return UI.alertModal("Couldn't save", esc(r.message || "Please try again."), { error: true });
+      UI.toast(!went ? "Thanks for being honest." : r.gainedNow ? "You gained Momentum!" : "Attendance saved.");
+    };
+    document.querySelectorAll("[data-went]").forEach((b) => (b.onclick = () => checkIn(b, b.dataset.went, true)));
+    document.querySelectorAll("[data-missed]").forEach((b) => (b.onclick = () => checkIn(b, b.dataset.missed, false)));
     document.querySelectorAll("[data-report]").forEach((f) => (f.onsubmit = (e) => { e.preventDefault(); const t = f.querySelector("textarea").value.trim(); if (!t) return; Store.saveReport(f.dataset.report, t); UI.toast("Report saved"); }));
 
     // Just committed? Show the "add it to your calendar" pop-up once.

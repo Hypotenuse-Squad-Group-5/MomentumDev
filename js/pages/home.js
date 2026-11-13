@@ -154,13 +154,18 @@ UI.mount("home", function render() {
     }
     finally { button.disabled = false; }
   };
-  document.querySelectorAll("[data-invite]").forEach((b) => (b.onclick = () => {
-    const r = Store.respondPlusOne(b.dataset.invite, b.hasAttribute("data-yes"));
-    if (!r.ok && r.message) UI.alertModal("Couldn't accept", UI.esc(r.message), { error: true });
-    else if (b.hasAttribute("data-yes")) UI.toast("You're going. It's on your calendar.");
+  // These wait for the database (it has the final say on spots and check-ins)
+  const busy = (b) => b.closest(".row").querySelectorAll("button").forEach((x) => (x.disabled = true));
+  document.querySelectorAll("[data-invite]").forEach((b) => (b.onclick = async () => {
+    const yes = b.hasAttribute("data-yes"); busy(b);
+    const r = await Store.respondPlusOne(b.dataset.invite, yes);
+    if (!r.ok) UI.alertModal(yes ? "Couldn't accept" : "Couldn't decline", UI.esc(r.message || "Please try again."), { error: true });
+    else if (yes) UI.toast("You're going. It's on your calendar.");
   }));
-  document.querySelectorAll("[data-checkin]").forEach((b) => (b.onclick = () => {
-    const went = b.hasAttribute("data-yes"); const r = Store.checkIn(b.dataset.checkin, went);
+  document.querySelectorAll("[data-checkin]").forEach((b) => (b.onclick = async () => {
+    const went = b.hasAttribute("data-yes"); busy(b);
+    const r = await Store.checkIn(b.dataset.checkin, went);
+    if (!r.ok) return UI.alertModal("Couldn't save", UI.esc(r.message || "Please try again."), { error: true });
     UI.toast(!went ? "Thanks for being honest." : r.gainedNow ? "You gained Momentum!" : "Attendance saved.");
   }));
 });
