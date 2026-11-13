@@ -1,18 +1,55 @@
 /* Activities: filterable feed of upcoming activities (PL-7, PL-8, PL-9) */
 (function () {
-  const f = { open: false, distance: "25", types: [], name: "", min: "", max: "", sort: "distance" };
+  const f = { open: false, timeOfDay: "any", dateRange: "upcoming", types: [], name: "", min: "", max: "", sort: "distance" };
+
+  const inDateRange = (activity, range) => {
+    const start = new Date(activity.startsAt);
+    if (Number.isNaN(start.getTime())) return false;
+
+    if (range === "past") return Store.isPast(activity);
+    if (Store.isPast(activity)) return false;
+    if (range === "upcoming") return true;
+
+    const now = new Date();
+    if (range === "week") {
+      const weekStart = new Date(now);
+      weekStart.setHours(0, 0, 0, 0);
+      weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+      const nextWeek = new Date(weekStart);
+      nextWeek.setDate(nextWeek.getDate() + 7);
+      return start >= weekStart && start < nextWeek;
+    }
+    if (range === "month") {
+      return start.getFullYear() === now.getFullYear() && start.getMonth() === now.getMonth();
+    }
+    if (range === "year") {
+      return start.getFullYear() === now.getFullYear();
+    }
+    return true;
+  };
+
+  const inTimeOfDay = (activity, timeOfDay) => {
+    if (timeOfDay === "any") return true;
+    const start = new Date(activity.startsAt);
+    if (Number.isNaN(start.getTime())) return false;
+    const hour = start.getHours();
+    if (timeOfDay === "morning") return hour >= 5 && hour < 12;
+    if (timeOfDay === "afternoon") return hour >= 12 && hour < 17;
+    return hour >= 17 || hour < 5;
+  };
 
   UI.mount("activities", function render() {
     const { icon, esc } = UI;
-    const upcoming = Store.allActivities().filter((a) => !Store.isPast(a)).map((a) => ({ ...a, dist: UI.distanceMi(a) }));
-    let list = upcoming.filter((a) =>
-      (f.distance === "any" || a.dist == null || a.dist <= Number(f.distance)) &&
+    const activities = Store.allActivities().map((a) => ({ ...a, dist: UI.distanceMi(a) }));
+    let list = activities.filter((a) =>
+      inDateRange(a, f.dateRange) &&
+      inTimeOfDay(a, f.timeOfDay) &&
       (!f.types.length || f.types.includes(a.type)) &&
       (!f.name || (a.activityName + " " + a.title).toLowerCase().includes(f.name.toLowerCase())) &&
       (!f.min || a.min >= Number(f.min)) &&
       (!f.max || a.max <= Number(f.max)));
     list.sort(f.sort === "soonest" ? (a, b) => new Date(a.startsAt) - new Date(b.startsAt) : (a, b) => (a.dist ?? 999) - (b.dist ?? 999));
-    const activeCount = (f.distance !== "25" ? 1 : 0) + f.types.length + (f.name ? 1 : 0) + (f.min ? 1 : 0) + (f.max ? 1 : 0);
+    const activeCount = (f.timeOfDay !== "any" ? 1 : 0) + (f.dateRange !== "upcoming" ? 1 : 0) + f.types.length + (f.name ? 1 : 0) + (f.min ? 1 : 0) + (f.max ? 1 : 0);
 
     const types = Store.types().map((t) => t.name); // from the activity_types table
 
@@ -26,9 +63,22 @@
       <section class="stack">
         <form class="panel" id="filters" ${f.open ? "" : "hidden"}>
           <div class="filter-panel">
-            <div class="field"><label for="f-dist">Distance</label>
-              <select id="f-dist">${[["1", "Within 1 mile"], ["5", "Within 5 miles"], ["10", "Within 10 miles"], ["25", "Within 25 miles"], ["any", "Any distance"]].map(([v, l]) => `<option value="${v}"${f.distance === v ? " selected" : ""}>${l}</option>`).join("")}</select></div>
-            <div class="field"><label for="f-name">Activity</label><input id="f-name" type="search" value="${esc(f.name)}" placeholder="e.g. board games, hiking"></div>
+            <div class="field"><label for="f-time">Time of day</label>
+              <select id="f-time">
+                <option value="any"${f.timeOfDay === "any" ? " selected" : ""}>Any time</option>
+                <option value="morning"${f.timeOfDay === "morning" ? " selected" : ""}>Morning (5 AM–12 PM)</option>
+                <option value="afternoon"${f.timeOfDay === "afternoon" ? " selected" : ""}>Afternoon (12–5 PM)</option>
+                <option value="evening"${f.timeOfDay === "evening" ? " selected" : ""}>Evening (5 PM–5 AM)</option>
+              </select></div>
+            <div class="field"><label for="f-date">Date range</label>
+              <select id="f-date">
+                <option value="upcoming"${f.dateRange === "upcoming" ? " selected" : ""}>All upcoming</option>
+                <option value="week"${f.dateRange === "week" ? " selected" : ""}>This week</option>
+                <option value="month"${f.dateRange === "month" ? " selected" : ""}>This month</option>
+                <option value="year"${f.dateRange === "year" ? " selected" : ""}>This year</option>
+                <option value="past"${f.dateRange === "past" ? " selected" : ""}>Past events</option>
+              </select></div>
+            <div class="field"><label for="f-name">Activity title</label><input id="f-name" type="search" value="${esc(f.name)}" placeholder="e.g. board games, hiking"></div>
             <div class="field"><label for="f-min">Min. group size</label><input id="f-min" type="number" min="3" max="20" value="${esc(f.min)}" placeholder="Any"></div>
             <div class="field"><label for="f-max">Max. group size</label><input id="f-max" type="number" min="3" max="20" value="${esc(f.max)}" placeholder="Any"></div>
           </div>
@@ -53,7 +103,7 @@
               <div class="row-between small"><span>${taken} of ${a.max} going</span><span class="muted">Host: ${esc(UI.displayName(a.hostId))}</span></div>
               <div class="capacity"><i style="width:${Math.min(100, (taken / a.max) * 100)}%"></i></div>
             </div></a>`;
-        }).join("") || `<div class="panel center"><p><b>Nothing matches those filters.</b></p><p class="muted small">Try widening the distance, or post your own.</p><a class="btn btn-primary" href="activity-new.html">Post an activity</a></div>`}
+        }).join("") || `<div class="panel center"><p><b>Nothing matches those filters.</b></p><p class="muted small">Try adjusting your filters, or post your own.</p><a class="btn btn-primary" href="activity-new.html">Post an activity</a></div>`}
       </section>`;
 
     document.getElementById("toggle-filter").onclick = () => { f.open = !f.open; render(); };
@@ -61,11 +111,16 @@
     const form = document.getElementById("filters");
     form.onsubmit = (e) => {
       e.preventDefault();
-      f.distance = form.querySelector("#f-dist").value; f.name = form.querySelector("#f-name").value.trim();
+      f.timeOfDay = form.querySelector("#f-time").value;
+      f.dateRange = form.querySelector("#f-date").value;
+      f.name = form.querySelector("#f-name").value.trim();
       f.min = form.querySelector("#f-min").value; f.max = form.querySelector("#f-max").value;
       f.types = [...form.querySelectorAll(".chip input:checked")].map((x) => x.value);
       render();
     };
-    document.getElementById("clear").onclick = () => { Object.assign(f, { distance: "25", types: [], name: "", min: "", max: "" }); render(); };
+    document.getElementById("clear").onclick = () => {
+      Object.assign(f, { timeOfDay: "any", dateRange: "upcoming", types: [], name: "", min: "", max: "" });
+      render();
+    };
   });
 })();
