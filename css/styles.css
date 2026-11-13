@@ -805,9 +805,6 @@ details.event[open] > summary { border-bottom: 1px solid var(--border); }
   .auth-hero h1 { font-size: 2.6rem; }
 }
 
-@media (min-width: 1200px) {
-  .filter-panel { grid-template-columns: repeat(6, minmax(0, 1fr)); }
-}
 
 /* ---------- Habit manage mode (Home → wrench) ---------- */
 .habit.manage { position: relative; cursor: default; }
