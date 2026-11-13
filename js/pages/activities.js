@@ -1,6 +1,6 @@
 /* Activities: filterable feed of upcoming activities (PL-7, PL-8, PL-9) */
 (function () {
-  const f = { open: false, timeOfDay: "any", dateRange: "upcoming", commitment: "any", types: [], name: "", min: "", max: "", sort: "distance" };
+  const f = { open: false, timeOfDay: "any", dateRange: "upcoming", commitment: "any", types: [], name: "", min: "3", max: "", sort: "distance" };
 
   const inDateRange = (activity, range) => {
     const start = new Date(activity.startsAt);
@@ -127,7 +127,7 @@
       render();
     };
     document.getElementById("clear").onclick = () => {
-      Object.assign(f, { timeOfDay: "any", dateRange: "upcoming", commitment: "any", types: [], name: "", min: "", max: "" });
+      Object.assign(f, { timeOfDay: "any", dateRange: "upcoming", commitment: "any", types: [], name: "", min: "3", max: "" });
       render();
     };
   });
