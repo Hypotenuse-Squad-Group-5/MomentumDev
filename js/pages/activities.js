@@ -1,6 +1,6 @@
 /* Activities: filterable feed of upcoming activities (PL-7, PL-8, PL-9) */
 (function () {
-  const f = { open: false, timeOfDay: "any", dateRange: "upcoming", commitment: "any", types: [], name: "", min: "3", max: "", sort: "distance" };
+  const f = { open: true, timeOfDay: "any", dateRange: "upcoming", commitment: "any", types: [], name: "", min: "3", max: "" };
 
   const inDateRange = (activity, range) => {
     const start = new Date(activity.startsAt);
@@ -49,7 +49,6 @@
       (!f.name || (a.activityName + " " + a.title).toLowerCase().includes(f.name.toLowerCase())) &&
       (!f.min || a.min >= Number(f.min)) &&
       (!f.max || a.max <= Number(f.max)));
-    list.sort(f.sort === "soonest" ? (a, b) => new Date(a.startsAt) - new Date(b.startsAt) : (a, b) => (a.dist ?? 999) - (b.dist ?? 999));
     const activeCount = (f.timeOfDay !== "any" ? 1 : 0) + (f.dateRange !== "upcoming" ? 1 : 0) + (f.commitment !== "any" ? 1 : 0) + f.types.length + (f.name ? 1 : 0) + (f.min ? 1 : 0) + (f.max ? 1 : 0);
 
     const types = Store.types().map((t) => t.name); // from the activity_types table
@@ -95,7 +94,6 @@
 
         <div class="row-between">
           <span class="small muted">${list.length} activit${list.length === 1 ? "y" : "ies"}</span>
-          <label class="small row">Sort <select id="sort" style="width:auto;min-height:34px;padding:4px 8px"><option value="distance"${f.sort === "distance" ? " selected" : ""}>Closest</option><option value="soonest"${f.sort === "soonest" ? " selected" : ""}>Soonest</option></select></label>
         </div>
 
         ${list.map((a, i) => {
@@ -114,7 +112,6 @@
       </section>`;
 
     document.getElementById("toggle-filter").onclick = () => { f.open = !f.open; render(); };
-    document.getElementById("sort").onchange = (e) => { f.sort = e.target.value; render(); };
     const form = document.getElementById("filters");
     form.onsubmit = (e) => {
       e.preventDefault();
