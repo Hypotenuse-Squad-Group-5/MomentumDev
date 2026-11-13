@@ -1,6 +1,6 @@
 /* Activities: filterable feed of upcoming activities (PL-7, PL-8, PL-9) */
 (function () {
-  const f = { open: false, timeOfDay: "any", dateRange: "upcoming", types: [], name: "", min: "", max: "", sort: "distance" };
+  const f = { open: false, timeOfDay: "any", dateRange: "upcoming", commitment: "any", types: [], name: "", min: "3", max: "", sort: "distance" };
 
   const inDateRange = (activity, range) => {
     const start = new Date(activity.startsAt);
@@ -44,12 +44,13 @@
     let list = activities.filter((a) =>
       inDateRange(a, f.dateRange) &&
       inTimeOfDay(a, f.timeOfDay) &&
+      (f.commitment === "any" || (f.commitment === "committed" ? Store.isGoing(a.id) : !Store.isGoing(a.id))) &&
       (!f.types.length || f.types.includes(a.type)) &&
       (!f.name || (a.activityName + " " + a.title).toLowerCase().includes(f.name.toLowerCase())) &&
       (!f.min || a.min >= Number(f.min)) &&
       (!f.max || a.max <= Number(f.max)));
     list.sort(f.sort === "soonest" ? (a, b) => new Date(a.startsAt) - new Date(b.startsAt) : (a, b) => (a.dist ?? 999) - (b.dist ?? 999));
-    const activeCount = (f.timeOfDay !== "any" ? 1 : 0) + (f.dateRange !== "upcoming" ? 1 : 0) + f.types.length + (f.name ? 1 : 0) + (f.min ? 1 : 0) + (f.max ? 1 : 0);
+    const activeCount = (f.timeOfDay !== "any" ? 1 : 0) + (f.dateRange !== "upcoming" ? 1 : 0) + (f.commitment !== "any" ? 1 : 0) + f.types.length + (f.name ? 1 : 0) + (f.min ? 1 : 0) + (f.max ? 1 : 0);
 
     const types = Store.types().map((t) => t.name); // from the activity_types table
 
@@ -79,6 +80,12 @@
                 <option value="past"${f.dateRange === "past" ? " selected" : ""}>Past events</option>
               </select></div>
             <div class="field"><label for="f-name">Activity title</label><input id="f-name" type="search" maxlength="50" value="${esc(f.name)}" placeholder="e.g. board games, hiking"></div>
+            <div class="field"><label for="f-commitment">Commitment</label>
+              <select id="f-commitment">
+                <option value="any"${f.commitment === "any" ? " selected" : ""}>Any</option>
+                <option value="committed"${f.commitment === "committed" ? " selected" : ""}>Committed to</option>
+                <option value="not-committed"${f.commitment === "not-committed" ? " selected" : ""}>Not committed to</option>
+              </select></div>
             <div class="field"><label for="f-min">Min. group size</label><input id="f-min" type="number" min="3" max="20" value="${esc(f.min)}" placeholder="Any"></div>
             <div class="field"><label for="f-max">Max. group size</label><input id="f-max" type="number" min="3" max="20" value="${esc(f.max)}" placeholder="Any"></div>
           </div>
@@ -113,13 +120,14 @@
       e.preventDefault();
       f.timeOfDay = form.querySelector("#f-time").value;
       f.dateRange = form.querySelector("#f-date").value;
+      f.commitment = form.querySelector("#f-commitment").value;
       f.name = form.querySelector("#f-name").value.trim();
       f.min = form.querySelector("#f-min").value; f.max = form.querySelector("#f-max").value;
       f.types = [...form.querySelectorAll(".chip input:checked")].map((x) => x.value);
       render();
     };
     document.getElementById("clear").onclick = () => {
-      Object.assign(f, { timeOfDay: "any", dateRange: "upcoming", types: [], name: "", min: "", max: "" });
+      Object.assign(f, { timeOfDay: "any", dateRange: "upcoming", commitment: "any", types: [], name: "", min: "3", max: "" });
       render();
     };
   });
