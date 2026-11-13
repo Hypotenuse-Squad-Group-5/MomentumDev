@@ -78,7 +78,7 @@
                 <option value="year"${f.dateRange === "year" ? " selected" : ""}>This year</option>
                 <option value="past"${f.dateRange === "past" ? " selected" : ""}>Past events</option>
               </select></div>
-            <div class="field"><label for="f-name">Activity title</label><input id="f-name" type="search" value="${esc(f.name)}" placeholder="e.g. board games, hiking"></div>
+            <div class="field"><label for="f-name">Activity title</label><input id="f-name" type="search" maxlength="50" value="${esc(f.name)}" placeholder="e.g. board games, hiking"></div>
             <div class="field"><label for="f-min">Min. group size</label><input id="f-min" type="number" min="3" max="20" value="${esc(f.min)}" placeholder="Any"></div>
             <div class="field"><label for="f-max">Max. group size</label><input id="f-max" type="number" min="3" max="20" value="${esc(f.max)}" placeholder="Any"></div>
           </div>
