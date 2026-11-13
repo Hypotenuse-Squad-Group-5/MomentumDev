@@ -220,7 +220,7 @@
     const errs = {};
     const req = ["title", "typeId", "activityName", "date", "start", "end", "location", "city", "address", "min", "max", "description"];
     req.forEach((k) => { if (!String(f[k] ?? "").trim()) errs[k] = "Required."; });
-    if (f.title && f.title.length > 60) errs.title = "Keep it under 60 characters.";
+    if (f.title && f.title.length > 50) errs.title = "Keep it to 50 characters or fewer.";
     const min = Number(f.min), max = Number(f.max);
     if (f.min !== "" && (min < 3 || min > 20)) errs.min = "Use a number from 3 to 20.";
     if (f.max !== "" && (max < 3 || max > 20)) errs.max = "Use a number from 3 to 20.";

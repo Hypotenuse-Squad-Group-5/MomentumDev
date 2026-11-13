@@ -56,7 +56,7 @@ UI.mount("activities", async function render() {
           <span class="form-section-chevron"></span>
         </summary>
         <div class="form-section-body">
-          <div class="field" data-f="title"><label for="title">Title</label><input id="title" type="text" maxlength="60" placeholder="e.g. Board Game Night"><div class="err" hidden></div></div>
+          <div class="field" data-f="title"><label for="title">Title</label><input id="title" type="text" maxlength="50" placeholder="e.g. Board Game Night"><div class="err" hidden></div></div>
           
           <div class="field" data-f="typeId">
             <span class="flabel" style="font-weight:600;margin-bottom:8px">Activity category</span>
