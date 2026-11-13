@@ -5,10 +5,11 @@ UI.mount("activities", function render() {
   const a = Store.activity(UI.qs("id"));
   if (!a) { main.innerHTML = `<a class="small" href="activities.html">‹ Back to activities</a><div class="panel mt center"><h2>Activity not found</h2><p class="muted">It may have been removed, or it isn't visible to you.</p></div>`; return; }
 
-  const past = Store.isPast(a), mine = a.hostId === Store.ME, going = Store.isGoing(a.id);
+  const past = Store.isPast(a), started = Store.hasStarted(a), mine = a.hostId === Store.ME, going = Store.isGoing(a.id);
   const rsvp = Store.myRsvp(a.id), invite = Store.myGuestInvite(a.id);
   const myGuest = rsvp && rsvp.status === "committed" ? Store.state.guests.find((g) => g.rsvpId === rsvp.id) : null;
-  const people = Store.attendees(a.id);
+  const seeList = Store.canSeeAttendees(a.id); // host + people going see names; everyone else sees the count
+  const people = seeList ? Store.attendees(a.id) : [];
   const taken = Store.spotsTaken(a.id), need = Math.max(0, a.min - taken), full = taken >= a.max;
   const addr = going || mine ? Store.address(a.id) : null;
 
@@ -23,6 +24,15 @@ UI.mount("activities", function render() {
   }).join("");
 
   const reports = Store.state.reports.filter((r) => r.activityId === a.id);
+
+  // Cancel button with a live counter: "Cancel (2 left)". Grey once they're used up or it's within 3 hours.
+  const canC = rsvp ? Store.canCancel(a.id) : { ok: false };
+  function cancelButton() {
+    return `<button class="btn btn-sm btn-danger" id="cancel"${canC.ok ? "" : " disabled"} title="${esc(canC.ok ? "Cancel your commitment" : canC.reason || "")}">Cancel (${Store.cancellationsLeft()} left)</button>`;
+  }
+  function cancelHint() {
+    return canC.code === "cancel_window" ? `Cancelling closes ${Store.CANCEL_HOURS} hours before the start.` : canC.code === "no_cancels" ? "You've used both cancellations this month. They reset on the 1st." : "";
+  }
 
   main.innerHTML = `
     <div class="narrow" style="max-width:720px">
@@ -56,7 +66,9 @@ UI.mount("activities", function render() {
         <div class="attendee">${UI.avatar(a.hostId, "sm", Store.isFriend(a.hostId))}<span class="grow">${UI.nameLink(a.hostId)}</span><span class="tag flame">Host</span></div>
         ${rows}
         ${hidden ? `<div class="attendee"><span class="avatar sm anon">+${hidden}</span><span class="grow muted">${hidden} more ${hidden === 1 ? "person keeps their" : "people keep their"} name private</span></div>` : ""}
-        <p class="hint mt mb0">Friends show with their full profile. Everyone else shows by first name only.</p>
+        ${seeList ? `<p class="hint mt mb0">Friends show with their full profile. Everyone else shows by first name only.</p>`
+          : taken > 1 ? `<div class="attendee"><span class="avatar sm anon">${icon("users", "sm")}</span><span class="grow muted">${taken - 1} ${taken - 1 === 1 ? "person is" : "people are"} going</span></div><p class="hint mt mb0">${past ? "Only the host and people who went can see who went." : "Commit to see who's going."}</p>`
+          : `<p class="hint mt mb0">${past ? "No one else went." : "No one else has committed yet."}</p>`}
       </section>
 
       ${reports.length ? `<section><h2>Activity reports</h2>${reports.map((r) => `<div class="goal-box"><b>${UI.nameLink(r.authorId)}</b><p class="mb0">${esc(r.body)}</p></div>`).join("")}</section>` : ""}
@@ -66,7 +78,8 @@ UI.mount("activities", function render() {
       invite && invite.status === "pending" ? `<p class="mb0 small"><b>${esc(UI.displayName(Store.state.rsvps.find((r) => r.id === invite.rsvpId).profileId))}</b> invited you as their +1.</p><div class="row mt"><button class="btn btn-primary grow" id="accept-invite">Accept and commit</button><button class="btn" id="decline-invite">Decline</button></div>`
       : mine ? `<p class="mb0"><b>You're hosting.</b> ${need ? `${need} more ${need === 1 ? "person needs" : "people need"} to commit for this to happen.` : "You've hit the minimum. It's happening."}</p>`
       : going ? `<div class="row-between"><span><b>You're committed.</b>${myGuest ? ` <span class="small muted">+1: ${myGuest.guestFirstName ? esc(myGuest.guestFirstName) : esc(UI.displayName(myGuest.guestProfileId))} (${myGuest.status === "pending" ? "waiting for them to accept" : myGuest.status})</span>` : ""}</span>
-          <div class="row"><button class="btn btn-sm" id="add-cal">${icon("calendar", "sm")}Add to calendar</button>${rsvp ? `<button class="btn btn-sm btn-danger" id="cancel">Cancel</button>` : ""}</div></div>`
+          <div class="row"><button class="btn btn-sm" id="add-cal">${icon("calendar", "sm")}Add to calendar</button>${rsvp ? cancelButton() : ""}</div></div>${rsvp && cancelHint() ? `<p class="hint mb0">${cancelHint()}</p>` : ""}`
+      : started ? `<button class="btn btn-block" disabled>This activity has already started</button>`
       : full ? `<button class="btn btn-block" disabled>This activity is full</button>`
       : `<button class="btn btn-primary btn-block" id="commit">Commit to this activity</button><p class="hint center mb0">Commitments count. You get ${Store.CANCELS_PER_MONTH} cancellations a month.</p>`
     }</div>`}
@@ -75,12 +88,17 @@ UI.mount("activities", function render() {
   const $ = (id) => document.getElementById(id);
   if ($("msg-host")) $("msg-host").onclick = () => UI.Messages.openChat(a.hostId, a.id);
   if ($("add-cal")) $("add-cal").onclick = () => UI.addToCalendarModal(a);
-  if ($("accept-invite")) $("accept-invite").onclick = () => {
-    const r = Store.respondPlusOne(invite.id, true);
+  if ($("accept-invite")) $("accept-invite").onclick = async (e) => {
+    e.currentTarget.disabled = true;
+    const r = await Store.respondPlusOne(invite.id, true);
     if (!r.ok) return UI.alertModal("Couldn't accept", esc(r.message), { error: true });
     UI.flash("You're going. It's on your calendar."); location.href = "calendar.html?added=" + a.id;
   };
-  if ($("decline-invite")) $("decline-invite").onclick = () => { Store.respondPlusOne(invite.id, false); UI.toast("Invite declined"); };
+  if ($("decline-invite")) $("decline-invite").onclick = async (e) => {
+    e.currentTarget.disabled = true;
+    const r = await Store.respondPlusOne(invite.id, false);
+    if (!r.ok) UI.alertModal("Couldn't decline", esc(r.message), { error: true });
+  };
   if ($("cancel")) $("cancel").onclick = () => {
     const c = Store.canCancel(a.id), left = Store.cancellationsLeft();
     if (!c.ok) return UI.alertModal("You can't cancel this one", esc(c.reason) + " You're still committed.", { error: true });
@@ -88,7 +106,11 @@ UI.mount("activities", function render() {
       <p>People are counting on you, and it may drop the group below the minimum.</p>
       <div class="alert warn">${icon("alert", "sm")}<span>This uses 1 of your ${left} remaining cancellation${left === 1 ? "" : "s"} this month.${myGuest ? " Your +1 is removed too." : ""}</span></div>
       <div class="modal-actions"><button class="btn" data-close>Keep my spot</button><button class="btn btn-danger" id="confirm-cancel">Cancel commitment</button></div>`,
-      { onMount: (m, close) => (m.querySelector("#confirm-cancel").onclick = () => { const r = Store.cancel(a.id); close(); if (r.ok) UI.toast("Commitment cancelled. " + r.left + " left this month."); else UI.alertModal("Couldn't cancel", esc(r.message), { error: true }); }) });
+      { onMount: (m, close) => (m.querySelector("#confirm-cancel").onclick = async (e) => {
+        e.currentTarget.disabled = true; e.currentTarget.textContent = "Cancelling…";
+        const r = await Store.cancel(a.id); close();
+        if (r.ok) UI.toast("Commitment cancelled. " + r.left + " left this month."); else UI.alertModal("Couldn't cancel", esc(r.message), { error: true });
+      }) });
   };
   if ($("commit")) $("commit").onclick = () => openCommit(a);
 });
@@ -100,7 +122,7 @@ function openCommit(a) {
   UI.modal(`
     <h2>Commit to ${esc(a.title)}?</h2>
     <p class="muted">${esc(UI.fmtRange(a))}</p>
-    <div class="alert warn">${icon("alert", "sm")}<span><b>Commitments count.</b> You have ${left} cancellation${left === 1 ? "" : "s"} left this month, and you can't cancel within 24 hours of the start.</span></div>
+    <div class="alert warn">${icon("alert", "sm")}<span><b>Commitments count.</b> You have ${left} cancellation${left === 1 ? "" : "s"} left this month, and you can't cancel within ${Store.CANCEL_HOURS} hours of the start.</span></div>
     <fieldset class="choice-list mt" style="border:0;padding:0;margin-top:16px">
       <legend class="flabel" style="font-weight:600;margin-bottom:6px">Bring a +1?</legend>
       <label><input type="radio" name="plus" value="none" checked><span>Just me</span></label>
@@ -117,7 +139,7 @@ function openCommit(a) {
       onMount(m, close) {
         const sel = () => m.querySelector("input[name=plus]:checked").value;
         m.querySelectorAll("input[name=plus]").forEach((r) => (r.onchange = () => { m.querySelector("#friend-pick").hidden = sel() !== "friend"; m.querySelector("#guest-pick").hidden = sel() !== "guest"; }));
-        m.querySelector("#do-commit").onclick = () => {
+        m.querySelector("#do-commit").onclick = async () => {
           const ack = m.querySelector("#ack").checked; m.querySelector("#ack-err").hidden = ack;
           let plus = null;
           if (sel() === "friend") plus = { type: "friend", profileId: m.querySelector("#friend-id").value };
@@ -126,11 +148,12 @@ function openCommit(a) {
             if (!n) return; plus = { type: "guest", name: n };
           }
           if (!ack) return;
-          const r = Store.commit(a.id, plus);
+          const btn = m.querySelector("#do-commit"); btn.disabled = true; btn.textContent = "Committing…";
+          const r = await Store.commit(a.id, plus);
           if (r.ok) { UI.flash("You're committed to " + a.title); location.href = "calendar.html?added=" + a.id; return; }
           close();
           if (r.code === "login") return UI.alertModal("Sign in to commit", "You need to be signed in to commit to an activity.", { error: true, actions: '<button class="btn" data-close>Back to activity</button><a class="btn btn-primary" href="login.html">Sign in</a>' });
-          if (r.code === "conflict") return UI.alertModal("You can't commit to this one", `It overlaps or starts within 30 minutes of something you're already committed to:</p><div class="soft"><b>${esc(r.conflict.title)}</b><br><span class="small">${esc(UI.fmtRange(r.conflict))}</span></div><p class="hint mt">Committed activities need at least 30 minutes between one ending and the next starting.`, { error: true, actions: '<button class="btn btn-primary" data-close>Back to activity</button>' });
+          if (r.code === "conflict" && r.conflict) return UI.alertModal("You can't commit to this one", `It overlaps or starts within 30 minutes of something you're already committed to:</p><div class="soft"><b>${esc(r.conflict.title)}</b><br><span class="small">${esc(UI.fmtRange(r.conflict))}</span></div><p class="hint mt">Committed activities need at least 30 minutes between one ending and the next starting.`, { error: true, actions: '<button class="btn btn-primary" data-close>Back to activity</button>' });
           UI.alertModal("Couldn't commit", esc(r.message), { error: true });
         };
       },
