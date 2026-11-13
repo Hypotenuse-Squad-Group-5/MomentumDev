@@ -9,9 +9,9 @@
   const ICONS = {
     // Momentum (icon C): a peak with a one-tick arrow on its left slope.
     // up = climbing (gained today) · flat = no arrow (coasting) · down = sliding (lost Momentum yesterday)
-    mo_up: '<polyline points="10 20.5 16.25 10 22.5 20.5"/><polyline points="6.47 10.38 10.67 10.38 4.3 21.09"/>',
-    mo_flat: '<polyline points="10 20.5 16.25 10 22.5 20.5"/>',
-    mo_down: '<polyline points="10 20.5 16.25 10 22.5 20.5"/><polyline points="10.67 10.38 4.3 21.09 4.3 16.89"/>',
+    mo_up: '<polyline points="8.26 16.95 15.13 5.4 22.01 16.95"/><polyline points="4.38 5.82 9 5.82 1.99 17.6"/>',
+    mo_flat: '<polyline points="5.12 17.27 12 5.72 18.88 17.27"/>',
+    mo_down: '<polyline points="8.26 16.95 15.13 5.4 22.01 16.95"/><polyline points="9 5.82 1.99 17.6 1.99 12.98"/>',
     home: '<path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
     activity: '<path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/>',
     calendar: '<path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/>',
@@ -46,7 +46,8 @@
     ban: '<circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/>',
   };
   const icon = (name, cls = "") => '<svg class="i ' + cls + '" viewBox="0 0 24 24" aria-hidden="true">' + (ICONS[name] || "") + "</svg>";
-  // Momentum icon in its state color (see .mo-up / .mo-flat / .mo-down in styles.css)
+  // Momentum icon in its state color (see .mo-up / .mo-flat / .mo-down in styles.css).
+  // Each state's drawing is centered on its own, so the icon sits in the middle of the chip and Home badge.
   const MOMENTUM_WORD = { up: "gaining", flat: "coasting", down: "slowing" };
   const momentumIcon = (trend, cls = "") => { const k = MOMENTUM_WORD[trend] ? trend : "flat"; return icon("mo_" + k, "mo-icon mo-" + k + (cls ? " " + cls : "")); };
   // Briefly pulse what the user needs to act on: red by default, white ("light") for buttons that are already red.
@@ -175,7 +176,7 @@
   function headerHtml() {
     const s = Store.stats(); const u = Store.unreadCount();
     return '<a href="home.html" class="brand" aria-label="Momentum home"><span class="brand-mark"><img src="img/logo.svg" alt=""></span><span class="brand-name">Momentum</span></a>' +
-      '<a href="streak.html" class="streak-chip" title="Momentum ' + s.streak + ", " + MOMENTUM_WORD[s.trend || "flat"] + '" aria-label="Momentum ' + s.streak + ", " + MOMENTUM_WORD[s.trend || "flat"] + '">' + momentumIcon(s.trend, "sm") + s.streak + "</a>" +
+      '<a href="streak.html" class="streak-chip mo-chip-' + (MOMENTUM_WORD[s.trend] ? s.trend : "flat") + '" title="Momentum ' + s.streak + ", " + MOMENTUM_WORD[s.trend || "flat"] + '" aria-label="Momentum ' + s.streak + ", " + MOMENTUM_WORD[s.trend || "flat"] + '">' + momentumIcon(s.trend, "sm") + s.streak + "</a>" +
       '<button class="icon-btn" id="msg-toggle" aria-label="Messages" aria-expanded="false">' + icon("message") + (u ? '<span class="badge">' + u + "</span>" : "") + "</button>" +
       '<a href="settings.html" class="icon-btn" aria-label="Settings">' + icon("settings") + "</a>" +
       '<a href="profile.html" class="avatar-btn" aria-label="My profile">' + avatar(Store.ME, "sm") + "</a>";

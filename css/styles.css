@@ -124,7 +124,7 @@ svg.i.lg { width: 28px; height: 28px; }
 .streak-chip {
   display: inline-flex; align-items: center; gap: 4px;
   height: 34px; padding: 0 10px;
-  border-radius: 999px; background: #fff; color: var(--fg); border: 1px solid var(--border);
+  border-radius: 999px; background: var(--flame-soft); color: var(--flame);
   font-family: var(--font-display); font-weight: 700; text-decoration: none;
 }
 .avatar-btn { padding: 0; border: 0; background: none; border-radius: 50%; text-decoration: none; }
@@ -570,12 +570,19 @@ details.form-section[open] .form-section-chevron {
 .flame-badge svg { width: 40px; height: 40px; stroke: oklch(0.88 0.12 75); }
 /* ---------- Momentum (migration 017) ---------- */
 /* The icon's color + arrow show today's state: up = gained today, flat = nothing yet, down = lost Momentum yesterday */
+/* Same look the fire had: a soft tinted chip in the header, a see-through tile on the teal card */
 svg.mo-icon { stroke-width: 2.4; }
-.mo-up { color: #15803d; }
-.mo-flat { color: #b45309; }
-.mo-down { color: #c62828; }
-.flame-badge.mo-badge { background: #fff; border-radius: 50%; width: 64px; height: 64px; }
-.flame-badge.mo-badge svg { width: 38px; height: 38px; stroke: currentColor; }
+.mo-up { color: oklch(0.48 0.13 150); }
+.mo-flat { color: oklch(0.6 0.15 55); }
+.mo-down { color: oklch(0.55 0.18 27); }
+.streak-chip svg.mo-icon { width: 20px; height: 20px; }
+.streak-chip.mo-chip-up   { background: oklch(0.95 0.05 150); color: oklch(0.48 0.13 150); }
+.streak-chip.mo-chip-flat { background: var(--flame-soft);     color: oklch(0.6 0.15 55); }
+.streak-chip.mo-chip-down { background: oklch(0.95 0.04 25);  color: oklch(0.55 0.18 27); }
+.flame-badge.mo-badge svg { width: 44px; height: 44px; stroke: currentColor; }
+.mo-badge .mo-up   { color: oklch(0.93 0.13 140); }
+.mo-badge .mo-flat { color: oklch(0.88 0.12 75); }
+.mo-badge .mo-down { color: oklch(0.85 0.1 25); }
 /* Empty habit slots: the board always shows 5 */
 .habit.habit-slot { border: 1.5px dashed oklch(0.58 0.12 181 / 35%); background: transparent; color: var(--muted-fg); font-weight: 600; }
 .habit.habit-slot:hover { background: var(--primary-soft); color: var(--primary); }
