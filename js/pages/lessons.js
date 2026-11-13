@@ -29,6 +29,11 @@ UI.mount("lessons", function render() {
     svg.innerHTML = pts.slice(1).map((p, i) => `<line x1="${pts[i][0]}" y1="${pts[i][1]}" x2="${p[0]}" y2="${p[1]}" stroke="oklch(0.82 0.03 200)" stroke-width="6" stroke-linecap="round" stroke-dasharray="1 14"/>`).join("");
   });
 
+  // Finishing a lesson adds a habit, so a NEW lesson needs a free habit slot (5 max). Point them to Home.
+  document.querySelectorAll(".lesson-node.current").forEach((node) => (node.onclick = (e) => {
+    if (Store.canStartLesson(Number(node.dataset.n))) return;
+    e.preventDefault(); UI.toast(Store.LESSON_BLOCKED_MSG); UI.attention(UI.HOME_TABS);
+  }));
   document.querySelectorAll(".lesson-node.locked").forEach((n) => (n.onclick = (e) => {
     e.preventDefault();
     const cur = Store.currentLesson();

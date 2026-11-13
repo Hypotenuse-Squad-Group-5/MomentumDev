@@ -1,4 +1,4 @@
-/* Home: streak front and center, today's habits, next activity, quick actions */
+/* Home: Momentum front and center, my habits, next activity, quick actions */
 
 // Manage mode for the Daily practice card (wrench button): edit, archive, reorder.
 let habitManage = false;
@@ -22,7 +22,12 @@ UI.mount("home", function render() {
   const checkIns = Store.needsCheckIn();
   const lessonN = Store.currentLesson();
 
-  const streakMsg = s.doneToday ? "Today's done. See you tomorrow." : s.streak ? "Check off a habit today to keep it going." : "Check off a habit to start a streak.";
+  // Momentum card message (no toast for these: the card shows today's state)
+  const left = Math.max(0, s.habitsNeeded - s.habitsDone);
+  const ways = (s.activeHabits ? `Check off ${left} more habit${left === 1 ? "" : "s"}` : "Add a habit") + ", finish a lesson, or show up to an activity";
+  const momentumMsg = s.doneToday ? "Momentum gained. Keep rolling tomorrow."
+    : s.trend === "down" ? "You slowed down yesterday. Gain Momentum today to speed back up."
+    : ways + " to gain Momentum.";
 
   document.getElementById("main").innerHTML = `
     <p class="muted small mb0">${new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}</p>
@@ -30,12 +35,12 @@ UI.mount("home", function render() {
 
     <div class="home-grid mt">
       <div class="stack">
-        <a class="streak-hero" href="streak.html" aria-label="Streak details">
-          <span class="flame-badge">${icon("flame")}</span>
+        <a class="streak-hero" href="streak.html" aria-label="Momentum ${s.streak}, ${UI.MOMENTUM_WORD[s.trend]}. Details">
+          <span class="flame-badge mo-badge">${UI.momentumIcon(s.trend)}</span>
           <span class="grow">
-            <span class="streak-num">${s.streak}</span> <b>day streak</b>
-            <span style="display:block;opacity:.85;font-size:.88rem">${streakMsg}</span>
-            <span class="week-dots">${days.map((d, i) => `<span class="${d.count ? "on" : ""}${i === 6 ? " today" : ""}" title="${d.date}">${"SMTWTFS"[new Date(d.date + "T12:00").getDay()]}</span>`).join("")}</span>
+            <span class="streak-num">${s.streak}</span> <b>Momentum</b>
+            <span style="display:block;opacity:.85;font-size:.88rem">${momentumMsg}</span>
+            <span class="week-dots">${days.map((d, i) => `<span class="${d.gained ? "on" : ""}${i === 6 ? " today" : ""}" title="${d.date}${d.gained ? ": gained Momentum" : ""}">${"SMTWTFS"[new Date(d.date + "T12:00").getDay()]}</span>`).join("")}</span>
           </span>
           ${icon("right")}
         </a>
@@ -63,9 +68,9 @@ UI.mount("home", function render() {
 
         <section class="panel" id="practice">
           <div class="row-between">
-            <div><p class="label">${habitManage ? '<s>Daily practice</s> Under construction!' : "Daily practice"}</p><h2 class="mb0">Goals & habits</h2></div>
+            <div>${habitManage ? '<p class="label">Trail maintenance</p>' : ""}<h2 class="mb0">My habits</h2></div>
             <div class="row">
-              ${habitManage ? "" : `<span class="tag">${doneCount} of ${habits.length} today</span>`}
+              <span class="tag">${habitManage ? `${habits.length} of ${Store.MAX_ACTIVE_HABITS} active` : `${doneCount} of ${habits.length} today`}</span>
               ${habitManage
                 ? `<button class="btn btn-sm btn-primary" id="habit-manage">${icon("check", "sm")}Done</button>`
                 : `<button class="icon-btn" id="habit-manage" aria-label="Manage habits" title="Manage habits" style="width:32px;height:32px">${HABIT_ICONS.wrench}</button>`}
@@ -85,14 +90,16 @@ UI.mount("home", function render() {
                 <span class="box">${done ? icon("check", "sm") : ""}</span>
                 <span class="grow"><span class="title">${esc(h.title)}</span>${h.lessonNumber ? `<br><span class="tag grey">From Lesson ${h.lessonNumber}</span>` : ""}</span>
                 </button>`;
-            }).join("") || (habitManage
-              ? '<p class="muted small">No habits yet. Add one below, or finish a lesson to get one.</p>'
-              : `<div class="center"><p class="muted small">No habits yet. Add one, or finish a lesson to get one.</p><button class="btn btn-sm" id="habit-start">${icon("plus", "sm")}Add a habit</button></div>`)}
+            }).join("")}
+            ${habitManage
+              ? (habits.length ? "" : '<p class="muted small">No habits yet. Add one below, or finish a lesson to get one.</p>')
+              : Array.from({ length: Math.max(0, Store.MAX_ACTIVE_HABITS - habits.length) }, () =>
+                  `<button class="habit habit-slot" data-slot>${icon("plus", "sm")}<span class="grow">Add a habit</span></button>`).join("")}
           </div>
           ${habitManage && Store.archivedHabits().length ? `
-            <p class="label mt-lg">Archived</p>
-            <div class="stack">${Store.archivedHabits().map((h) => `<div class="row-between soft"><span class="muted">${esc(h.title)}</span><button class="btn btn-sm" data-restore="${h.id}">Restore</button></div>`).join("")}</div>
-            <p class="hint">Archived habits keep their history, so your streak stay accurate.</p>` : ""}
+            <p class="label mt-lg">Archived · ${Store.archivedHabits().length} of ${Store.MAX_ARCHIVED_HABITS}</p>
+            <div class="stack">${Store.archivedHabits().map((h) => `<div class="row-between soft"><span class="muted grow">${esc(h.title)}</span><div class="row"><button class="btn btn-sm" data-restore="${h.id}">Restore</button><button class="btn btn-sm btn-danger solid" data-delete="${h.id}">Delete</button></div></div>`).join("")}</div>
+            <p class="hint">Deleting a habit removes it and its check-ins for good. Your Momentum stays.</p>` : ""}
           ${habitManage ? `<form class="row mt" id="add-habit"><input type="text" class="grow" style="flex:1" placeholder="Add a habit, e.g. Read 10 pages before bed" maxlength="80" aria-label="New habit"><button class="btn">${icon("plus", "sm")}Add</button></form>` : ""}
         </section>
       </div>
@@ -117,27 +124,34 @@ UI.mount("home", function render() {
 
   // ---- Manage mode ----
   document.getElementById("habit-manage").onclick = () => { habitManage = !habitManage; render(); };
-  document.querySelectorAll("[data-restore]").forEach((b) => (b.onclick = () => { Store.restoreHabit(b.dataset.restore); UI.toast("Habit restored"); }));
+  document.querySelectorAll("[data-restore]").forEach((b) => (b.onclick = () => {
+    const r = Store.restoreHabit(b.dataset.restore);
+    if (!r.ok && r.code === "max_active") { UI.toast(r.message); UI.attention("[data-tools]"); }
+  }));
+  document.querySelectorAll("[data-delete]").forEach((b) => (b.onclick = () => deleteHabitModal(b.dataset.delete)));
   document.querySelectorAll("[data-tools]").forEach((b) => (b.onclick = (e) => { e.stopPropagation(); openHabitMenu(b); }));
   enableHabitDrag(document.getElementById("habits"));
 
+  // Checking/unchecking is visible on its own; only a change in today's Momentum gets a toast.
   document.querySelectorAll("[data-habit]").forEach((b) => (b.onclick = () => {
     const r = Store.toggleHabit(b.dataset.habit);
-    const days = Store.streak().current;
-    if (r.done) UI.toast(r.streakUp ? "Streak extended to " + days + (days === 1 ? " day" : " days") : "Habit checked");
-    else UI.toast("Habit unchecked");
+    if (r.gainedNow) UI.toast("You gained Momentum!");
+    else if (r.lostNow) UI.toast("You lost today's Momentum.");
   }));
-  const start = document.getElementById("habit-start");
-  if (start) start.onclick = () => { habitManage = true; render(); document.querySelector("#add-habit input").focus(); };
+  document.querySelectorAll("[data-slot]").forEach((b) => (b.onclick = () => { habitManage = true; render(); document.querySelector("#add-habit input").focus(); }));
   const addForm = document.getElementById("add-habit");
   if (addForm) addForm.onsubmit = async (e) => {
     e.preventDefault(); const inp = e.target.querySelector("input");
+    if (!Store.canAddHabit()) { UI.toast(Store.MAX_ACTIVE_MSG); UI.attention("[data-tools]"); return; }
     if (!inp.value.trim()) { inp.classList.add("invalid"); inp.focus(); return; }
     const button = addForm.querySelector("button");
     if (button.disabled) return;
     button.disabled = true;
-    try { await Store.addHabit(inp.value); UI.toast("Habit added"); }
-    catch (error) { UI.alertModal("Couldn't add habit", UI.esc(error.message), { error: true }); }
+    try { await Store.addHabit(inp.value); }
+    catch (error) {
+      if (error.code === "max_active" || /5 active habits/.test(error.message)) { UI.toast(Store.MAX_ACTIVE_MSG); UI.attention("[data-tools]"); }
+      else UI.alertModal("Couldn't add habit", UI.esc(error.message), { error: true });
+    }
     finally { button.disabled = false; }
   };
   document.querySelectorAll("[data-invite]").forEach((b) => (b.onclick = () => {
@@ -147,7 +161,7 @@ UI.mount("home", function render() {
   }));
   document.querySelectorAll("[data-checkin]").forEach((b) => (b.onclick = () => {
     const went = b.hasAttribute("data-yes"); const r = Store.checkIn(b.dataset.checkin, went);
-    UI.toast(went ? "Nice. That counts." : "Thanks for being honest.");
+    UI.toast(!went ? "Thanks for being honest." : r.gainedNow ? "You gained Momentum!" : "Attendance saved.");
   }));
 });
 
@@ -169,7 +183,8 @@ function openHabitMenu(btn) {
   menu.querySelector('[data-act="archive"]').onclick = () => {
     close();
     const h = Store.habits().find((x) => x.id === id);
-    Store.archiveHabit(id);
+    const r = Store.archiveHabit(id);
+    if (!r.ok && r.code === "archive_full") { UI.toast(r.message); UI.attention("[data-delete]", true); return; }
     undoToast(`Archived "${h ? h.title : "habit"}"`, () => Store.restoreHabit(id, { keepPlace: true }));
   };
 }
@@ -180,7 +195,7 @@ function editHabitModal(id) {
     <form id="edit-habit" novalidate>
       <div class="field"><label for="edit-title">Habit</label><input id="edit-title" type="text" maxlength="80" value="${UI.esc(h.title)}"><div class="err" hidden></div></div>
       ${h.goalText ? `<div class="goal-box small"><b>Lesson ${h.lessonNumber} goal</b><br>${UI.esc(h.goalText)}</div><p class="hint">The lesson goal itself can't be edited here.</p>` : ""}
-      <p class="hint">Renaming keeps this habit's streak.</p>
+      <p class="hint">Renaming keeps this habit's history.</p>
       <div class="modal-actions"><button type="button" class="btn" data-close>Cancel</button><button class="btn btn-primary">Save</button></div>
     </form>`, {
     onMount(m, close) {
@@ -189,8 +204,22 @@ function editHabitModal(id) {
         e.preventDefault();
         const r = Store.editHabit(id, inp.value);
         if (!r.ok) { const er = m.querySelector(".err"); er.textContent = r.message; er.hidden = false; inp.classList.add("invalid"); return; }
-        close(); UI.toast("Habit renamed");
+        close();
       };
+    },
+  });
+}
+
+// Delete an archived habit for good (asks first).
+function deleteHabitModal(id) {
+  const h = Store.archivedHabits().find((x) => x.id === id); if (!h) return;
+  UI.modal(`<h2>Delete habit?</h2>
+    <p>Delete "${UI.esc(h.title)}" forever? Its check-in history goes with it. This can't be undone.</p>
+    <p class="hint">Your Momentum stays the same.</p>
+    <div class="modal-actions"><button type="button" class="btn" data-close>Cancel</button><button type="button" class="btn btn-danger solid" id="confirm-delete">Delete</button></div>`, {
+    onMount(m, close) {
+      m.querySelector("#confirm-delete").onclick = () => { Store.deleteHabit(id); close(); };
+      m.querySelector("[data-close]").focus();
     },
   });
 }
@@ -230,7 +259,7 @@ function enableHabitDrag(list) {
       const up = () => {
         grip.removeEventListener("pointermove", move); grip.removeEventListener("pointerup", up); grip.removeEventListener("pointercancel", up);
         row.classList.remove("dragging"); row.style.transform = "";
-        if (order().join() !== before) { Store.reorderHabits(order()); UI.toast("Order saved"); }
+        if (order().join() !== before) Store.reorderHabits(order());
       };
       grip.addEventListener("pointermove", move); grip.addEventListener("pointerup", up); grip.addEventListener("pointercancel", up);
     });
