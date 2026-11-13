@@ -94,7 +94,7 @@
           <div class="profile-stats">
             <div><b>${attended}</b><span>Activities</span></div>
             <div><b>${own ? Store.friends().length : friend ? "Friend" : "-"}</b><span>${own ? "Friends" : "Status"}</span></div>
-            <div><b>${own ? Store.stats().streak : history.filter((h) => h.kind === "post").length}</b><span>${own ? "Day streak" : "Posts"}</span></div>
+            <div><b>${own ? Store.stats().streak : history.filter((h) => h.kind === "post").length}</b><span>${own ? "Momentum" : "Posts"}</span></div>
           </div>
           <div class="row mt">${own
             ? `<button class="btn btn-primary" id="open-compose">${icon("post", "sm")}Share a post</button><a class="btn" href="activity-new.html">${icon("plus", "sm")}Post an activity</a><a class="btn btn-ghost" href="settings.html#profile">${icon("edit", "sm")}Edit profile</a>`

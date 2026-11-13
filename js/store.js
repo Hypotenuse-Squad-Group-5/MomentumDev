@@ -38,7 +38,7 @@
     return {
       version: 1, meId: me.id, signedIn: true, profiles: { [me.id]: me },
       friendships: [], blocks: [], activities: [], addresses: {}, rsvps: [], guests: [], reports: [], posts: [],
-      encouragements: [], conversations: [], lessonsDone: [], habits: [], checkins: [],
+      encouragements: [], conversations: [], lessonsDone: [], habits: [], checkins: [], momentum: [],
       settings: defaultSettings(),
     };
   }
@@ -549,7 +549,14 @@
     const r = myRsvp(activityId); if (!r || r.attended !== null) return { ok: false };
     r.attended = !!attended;
     save();
-    return { ok: true };
+    if (!attended) return { ok: true, gainedNow: false };
+    const before = momentum().gainedToday;
+    const entry = { date: today(), reason: "attended" };
+    state.momentum.push(entry);
+    Promise.resolve().then(() => sb.rpc("record_attended_momentum", {}))
+      .then((res) => { if (res && res.error) throw res.error; })
+      .catch((err) => { state.momentum = state.momentum.filter((m) => m !== entry); syncFailed("Couldn't save your Momentum: " + (err.message || err)); });
+    return { ok: true, gainedNow: !before && momentum().gainedToday };
   }
   function needsCheckIn() { return myCommitments().filter((a) => isPast(a) && myRsvp(a.id) && myRsvp(a.id).attended === null); }
 
@@ -569,16 +576,20 @@
   const archivedHabits = () => state.habits.filter((h) => !h.active).sort((a, b) => a.title.localeCompare(b.title));
   const nextSortOrder = () => state.habits.reduce((m, h) => Math.max(m, h.sortOrder ?? 0), 0) + 1;
   const isHabitDone = (habitId, d = today()) => state.checkins.some((c) => c.habitId === habitId && c.date === d);
+  // Limits (the database enforces these too, migration 017)
+  const MAX_ACTIVE_HABITS = 5, MAX_ARCHIVED_HABITS = 10;
+  const canAddHabit = () => habits().length < MAX_ACTIVE_HABITS;
+  const canArchiveHabit = () => archivedHabits().length < MAX_ARCHIVED_HABITS;
+  const MAX_ACTIVE_MSG = "Max of 5 active habits reached. Archive one to add one.";
+  const ARCHIVE_FULL_MSG = "Your habit archive is full (10). Delete an archived habit to archive this one.";
   function toggleHabitLocal(habitId) {
     const d = today();
-    if (isHabitDone(habitId, d)) {
-      state.checkins = state.checkins.filter((c) => !(c.habitId === habitId && c.date === d));
-      save(); return { done: false };
-    }
-    const streakBefore = streak().current;
-    state.checkins.push({ habitId, date: d });
+    const before = momentum().gainedToday;
+    if (isHabitDone(habitId, d)) state.checkins = state.checkins.filter((c) => !(c.habitId === habitId && c.date === d));
+    else state.checkins.push({ habitId, date: d });
     save();
-    return { done: true, streakUp: streak().current > streakBefore };
+    const after = momentum().gainedToday;
+    return { done: isHabitDone(habitId, d), gainedNow: !before && after, lostNow: before && !after };
   }
   // Signed in: the screen updates instantly, then the change is saved to Supabase.
   // If the save fails, the change is undone and the reason is shown.
@@ -618,6 +629,7 @@
     return r;
   }
   async function addHabit(title, extra = {}) {
+    if (!canAddHabit()) { const e = new Error(MAX_ACTIVE_MSG); e.code = "max_active"; throw e; }
     const clean = title.trim();
     if (!clean || clean.length > 80) throw new Error("Give your habit a name of 1 to 80 characters.");
     const h = { id: uid(), title: clean, goalText: null, lessonNumber: null, active: true, createdAt: nowIso(), sortOrder: nextSortOrder(), ...extra };
@@ -626,20 +638,32 @@
     state.habits.push(h);save();
     return h;
   }
-  // Archive = hide the habit but keep its check-ins (streak history stays true).
+  // Archive = hide the habit but keep its check-ins. Returns { ok:false, code } when the archive is full.
   function removeHabit(habitId) {
-    const h = state.habits.find((x) => x.id === habitId);if (!h) return;
+    const h = state.habits.find((x) => x.id === habitId);if (!h) return { ok: false };
+    if (!canArchiveHabit()) return { ok: false, code: "archive_full", message: ARCHIVE_FULL_MSG };
     h.active = false;save();
     sb.from("habits").update({ is_active: false }).eq("id", habitId)
-      .then(({ error }) => { if (error) { h.active = true; syncFailed("Couldn't archive habit: " + error.message); } });
+      .then(({ error }) => { if (error) { h.active = true; syncFailed("Couldn't archive habit: " + error.message); } else loadHabitData().then(save); });
+    return { ok: true };
+  }
+  // Delete an ARCHIVED habit for good. Its check-ins go with it; past Momentum stays (it lives in the momentum log).
+  function deleteHabit(habitId) {
+    const i = state.habits.findIndex((x) => x.id === habitId && !x.active); if (i < 0) return { ok: false };
+    const [h] = state.habits.splice(i, 1); save();
+    sb.from("habits").delete().eq("id", habitId)
+      .then(({ error }) => { if (error) { state.habits.push(h); syncFailed("Couldn't delete habit: " + error.message); } });
+    return { ok: true };
   }
   // Restore from the Archived list → bottom of the list. Undo right after archiving → back in its old spot.
   function restoreHabit(habitId, { keepPlace = false } = {}) {
-    const h = state.habits.find((x) => x.id === habitId);if (!h) return;
+    const h = state.habits.find((x) => x.id === habitId);if (!h) return { ok: false };
+    if (!canAddHabit()) return { ok: false, code: "max_active", message: MAX_ACTIVE_MSG };
     const before = h.sortOrder;
     h.active = true;if (!keepPlace) h.sortOrder = nextSortOrder();save();
     sb.from("habits").update({ is_active: true, sort_order: h.sortOrder }).eq("id", habitId)
-      .then(({ error }) => { if (error) { h.active = false; h.sortOrder = before; syncFailed("Couldn't restore habit: " + error.message); } });
+      .then(({ error }) => { if (error) { h.active = false; h.sortOrder = before; syncFailed("Couldn't restore habit: " + error.message); } else loadHabitData().then(save); });
+    return { ok: true };
   }
   function editHabit(habitId, title) {
     const h = state.habits.find((x) => x.id === habitId);if (!h) return { ok: false, message: "Habit not found." };
@@ -669,6 +693,9 @@
   const isLessonDone = (n) => state.lessonsDone.some((l) => l.n === n);
   const isLessonUnlocked = (n) => n === 1 || isLessonDone(n - 1);
   function currentLesson() { for (let n = 1; n <= LESSON_COUNT; n++) if (!isLessonDone(n)) return n; return null; }
+  // Finishing a lesson adds its habit, so a NEW lesson needs a free habit slot. Reviewing a finished one is always fine.
+  const LESSON_BLOCKED_MSG = "You won't be able to do this lesson until you have 1 open habit slot.";
+  const canStartLesson = (n) => isLessonDone(n) || canAddHabit();
   function completeLesson(n, goalText, habitTitle) {
     if (pendingLessons.has(n)) return pendingLessons.get(n);
     const pending = saveLesson(n, goalText, habitTitle).finally(() => pendingLessons.delete(n));
@@ -679,6 +706,8 @@
     if (!Number.isInteger(n) || n < 1 || n > LESSON_COUNT) return { ok: false, message: "Lesson not found." };
     if (!isLessonUnlocked(n)) return { ok: false, message: "Finish the previous lesson first." };
     if (isLessonDone(n)) return { ok: false, message: "You've already finished this lesson." };
+    if (!canStartLesson(n)) return { ok: false, code: "max_active", message: LESSON_BLOCKED_MSG };
+    const gainedBefore = momentum().gainedToday;
     const goal = goalText.trim(), title = habitTitle.trim();
     if (!goal || goal.length > 1000) return { ok: false, message: "Add a brief reflection of up to 1,000 characters." };
     if (!title || title.length > 80) return { ok: false, message: "Give your daily habit a name of 1 to 80 characters." };
@@ -689,7 +718,7 @@
       const refreshed = await Promise.all([loadLessonData(), loadHabitData()]);
       if (!refreshed.every(Boolean)) return { ok: false, message: "Your lesson was saved, but we couldn't refresh your progress. Reload this page; retrying won't create another habit." };
       save();
-      return data;
+      return { ...data, gainedNow: !gainedBefore && momentum().gainedToday };
     } catch (error) { return { ok: false, message: error.message || "Couldn't reach the server. Your reflection is still here; please try again." }; }
 
   }
@@ -715,26 +744,51 @@
   }
   function lessonGoal(n) { const l = state.lessonsDone.find((x) => x.n === n); return l ? l.goal : null; }
 
-  // Streak = consecutive days with at least one habit checked. Today counts once done;
-  // until then, the streak is still "alive" from yesterday.
-  function streak() {
-    const days = new Set(state.checkins.map((c) => c.date));
-    let cur = 0, d = today();
-    if (!days.has(d)) d = addDays(d, -1);
-    while (days.has(d)) { cur++; d = addDays(d, -1); }
-    const sorted = [...days].sort(); let best = 0, run = 0, prev = null;
-    sorted.forEach((k) => { run = prev && addDays(prev, 1) === k ? run + 1 : 1; best = Math.max(best, run); prev = k; });
-    return { current: cur, longest: Math.max(best, cur), doneToday: days.has(today()) };
+  // Momentum (migration 017). A day "gains Momentum" if you checked at least half your active habits
+  // (rounded up), finished a lesson, or went to an activity. Past days come from the momentum log
+  // (locked in by the database); TODAY is judged live on this device so the screen reacts instantly.
+  // The number: +1 for each day gained, -2 for each day missed, never below 0. Today never counts
+  // against you until it's over.
+  const MOMENTUM_GAIN = 1, MOMENTUM_DECAY = 2;
+  const habitsNeeded = () => { const n = habits().length; return n ? Math.ceil(n / 2) : 0; };
+  const habitsDoneToday = () => habits().filter((h) => isHabitDone(h.id)).length;
+  function momentumDays() {
+    const t = today();
+    const days = new Set(state.momentum.filter((m) => !(m.date === t && m.reason === "habits")).map((m) => m.date));
+    if (habits().length && habitsDoneToday() >= habitsNeeded()) days.add(t);
+    return days;
+  }
+  function momentum() {
+    const t = today(), days = momentumDays();
+    const past = [...days].filter((d) => d < t).sort();
+    let value = 0, top = 0;
+    for (let d = past[0]; d && d < t; d = addDays(d, 1)) {
+      value = days.has(d) ? value + MOMENTUM_GAIN : Math.max(0, value - MOMENTUM_DECAY);
+      top = Math.max(top, value);
+    }
+    const gainedToday = days.has(t);
+    if (gainedToday) { value += MOMENTUM_GAIN; top = Math.max(top, value); }
+    const missedYesterday = past.length > 0 && !days.has(addDays(t, -1));
+    return {
+      value, top, gainedToday,
+      trend: gainedToday ? "up" : missedYesterday ? "down" : "flat", // up = gaining, flat = coasting, down = slowing
+      needed: habitsNeeded(), doneToday: habitsDoneToday(), active: habits().length,
+    };
   }
   function lastDays(n) {
-    const out = []; for (let i = n - 1; i >= 0; i--) { const d = addDays(today(), -i); out.push({ date: d, count: state.checkins.filter((c) => c.date === d).length }); } return out;
+    const days = momentumDays(), out = [];
+    for (let i = n - 1; i >= 0; i--) { const d = addDays(today(), -i); out.push({ date: d, gained: days.has(d), count: days.has(d) ? 1 : 0 }); }
+    return out;
   }
   function stats() {
-    const s = streak();
+    const m = momentum();
     const countsByDay = {}; state.checkins.forEach((c) => (countsByDay[c.date] = (countsByDay[c.date] || 0) + 1));
     const goalsMetDays = Object.values(countsByDay).filter((n) => n >= Math.max(1, habits().length)).length;
     return {
-      streak: s.current, longest: s.longest, doneToday: s.doneToday, lessonPercent: Math.round(state.lessonsDone.length / LESSON_COUNT * 100),
+      // "streak", "longest" and "doneToday" keep their old names for older pages and tests:
+      // they now mean the Momentum number, top speed, and "gained Momentum today".
+      streak: m.value, longest: m.top, doneToday: m.gainedToday, momentum: m.value, top: m.top, trend: m.trend,
+      habitsNeeded: m.needed, habitsDone: m.doneToday, activeHabits: m.active, gainedDays: momentumDays().size, lessonPercent: Math.round(state.lessonsDone.length / LESSON_COUNT * 100),
       habitsChecked: state.checkins.length, goalsMetDays, lessonsDone: state.lessonsDone.length,
       attended: state.rsvps.filter((r) => r.profileId === ME && r.attended === true).length,
       upcoming: myCommitments().filter((a) => !isPast(a)).length,
@@ -1322,15 +1376,18 @@
   }
   // Habits and check-ins are restored from the database.
   async function loadHabitData(stillCurrent) {
-    const [h, c] = await Promise.all([
+    const [h, c, m] = await Promise.all([
       sb.from("habits").select("id,title,goal_text,source_lesson_id,is_active,created_at,sort_order").order("sort_order"),
       sb.from("habit_checkins").select("habit_id,check_date"),
+      sb.from("momentum_log").select("gained_on,reason").order("gained_on"),
     ]);
+    if (m.error) console.error("Momentum log:", m.error.message);
     const err = h.error || c.error;
     if (err || !h.data || !c.data) { if (err) console.error(err); return false; }
     if (stillCurrent && !stillCurrent()) return true; // newer clicks are still saving; their refresh will follow
     state.habits = h.data.map((r) => ({ id: r.id, title: r.title, goalText: r.goal_text, lessonId: r.source_lesson_id, active: r.is_active, createdAt: r.created_at, sortOrder: r.sort_order }));
     state.checkins = c.data.map((r) => ({ habitId: r.habit_id, date: r.check_date }));
+    if (!m.error && m.data) state.momentum = m.data.map((r) => ({ date: r.gained_on, reason: r.reason }));
     return true;
   }
 
@@ -1467,7 +1524,8 @@
     removeFriend, sendFriendRequest, cancelFriendRequest, loadFriendships, loadProfile, searchProfiles, sharedActivityId,
     // growth
     habits, archivedHabits, isHabitDone, toggleHabit, addHabit, removeHabit, archiveHabit: removeHabit, restoreHabit, editHabit, reorderHabits, isLessonDone, isLessonUnlocked, currentLesson,
-    completeLesson, lessonGoal, lessonHabit, streak, lastDays, stats,
+    completeLesson, lessonGoal, lessonHabit, momentum, lastDays, stats, canStartLesson, LESSON_BLOCKED_MSG,
+    canAddHabit, canArchiveHabit, deleteHabit, MAX_ACTIVE_HABITS, MAX_ARCHIVED_HABITS, MAX_ACTIVE_MSG, ARCHIVE_FULL_MSG,
     // social
     loadPosts, createPost, deletePost, setPostVisibility, encouraged, toggleEncourage, feed, historyFor,
     // messages

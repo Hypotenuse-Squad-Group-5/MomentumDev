@@ -119,7 +119,7 @@
     document.getElementById("next").onclick = () => { month = new Date(y, m + 1, 1); render(); };
     document.querySelectorAll(".cal .ev").forEach((l) => (l.onclick = () => { const d = document.querySelector(l.getAttribute("href")); if (d) d.open = true; }));
     document.querySelectorAll("[data-cal]").forEach((b) => (b.onclick = () => UI.addToCalendarModal(Store.activity(b.dataset.cal))));
-    document.querySelectorAll("[data-went]").forEach((b) => (b.onclick = () => { Store.checkIn(b.dataset.went, true); UI.toast("Attendance saved."); }));
+    document.querySelectorAll("[data-went]").forEach((b) => (b.onclick = () => { const r = Store.checkIn(b.dataset.went, true); UI.toast(r.gainedNow ? "You gained Momentum!" : "Attendance saved."); }));
     document.querySelectorAll("[data-missed]").forEach((b) => (b.onclick = () => { Store.checkIn(b.dataset.missed, false); UI.toast("Thanks for being honest."); }));
     document.querySelectorAll("[data-report]").forEach((f) => (f.onsubmit = (e) => { e.preventDefault(); const t = f.querySelector("textarea").value.trim(); if (!t) return; Store.saveReport(f.dataset.report, t); UI.toast("Report saved"); }));
 

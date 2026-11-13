@@ -30,12 +30,13 @@ UI.mount("lessons", function render() {
         ${n < window.LESSONS.length ? `<a class="btn btn-primary mt" href="lesson.html?n=${n + 1}">Next lesson</a>` : ""}</section>`
     : `<form autocomplete="off" class="panel mt-lg" id="goal-form" novalidate>
         <p class="label">Set your goal</p>
+        ${Store.canStartLesson(n) ? "" : `<div class="alert warn" style="margin-bottom:12px">${icon("alert", "sm")}<span>${esc(Store.LESSON_BLOCKED_MSG)} Archive one on <a href="home.html">Home</a>.</span></div>`}
         <div class="field" data-f="goal"><label for="goal">${esc(l.prompt)}</label>
           <textarea maxlength="1000" autocomplete="off" id="goal" placeholder="${esc(l.placeholder)}" style="min-height:140px"></textarea>
           <div class="hint"><span id="wc">0</span> / 1,000 characters maximum</div><div class="err" hidden></div></div>
         <div class="field" data-f="habit"><label for="habit">Your daily habit</label>
           <input autocomplete="off" id="habit" type="text" maxlength="80" placeholder="${esc(l.habitPlaceholder)}" aria-describedby="habit-hint habit-error">
-          <div class="hint" id="habit-hint">Name a small habit to practice. Finishing this lesson adds it to your habits on Home.</div><div class="err" id="habit-error" hidden></div></div>
+          <div class="hint" id="habit-hint">Name a small habit to practice. Finishing this lesson adds it to My habits on Home.</div><div class="err" id="habit-error" hidden></div></div>
         <button class="btn btn-primary btn-block">Finish lesson</button>
       </form>`}
   </div>`;
@@ -55,14 +56,16 @@ UI.mount("lessons", function render() {
     if (empty) bad("goal", "Add a brief reflection before finishing this lesson.");
     if (!h) bad("habit", "Give your daily habit a short name.");
     if (empty || goal.value.length > 1000 || !h) { fields[!h ? "habit" : "goal"].querySelector("input, textarea").focus(); return; }
+    if (!Store.canStartLesson(n)) { UI.toast(Store.LESSON_BLOCKED_MSG); UI.attention(UI.HOME_TABS); return; }
     const button = form.querySelector('button[type="submit"], button');
     button.disabled = true;
     let r;
     try { r = await Store.completeLesson(n, goal.value, h); }
     catch (_) { r = { ok: false, message: "Your lesson could not be saved. Your reflection is still here; please try again." }; }
     finally { button.disabled = false; }
+    if (!r.ok && r.code === "max_active") { UI.toast(r.message); UI.attention(UI.HOME_TABS); return; }
     if (!r.ok) return UI.alertModal("Couldn't finish", esc(r.message), { error: true });
-    UI.flash("Lesson " + n + " complete. New habit added to Home.");
+    UI.flash(r.gainedNow ? "You gained Momentum!" : "Lesson " + n + " complete. New habit added to My habits.");
     location.href = "lessons.html";
   };
 }, { live: false });
