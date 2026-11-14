@@ -109,7 +109,17 @@ UI.mount("activities", function render() {
       { onMount: (m, close) => (m.querySelector("#confirm-cancel").onclick = async (e) => {
         e.currentTarget.disabled = true; e.currentTarget.textContent = "Cancelling…";
         const r = await Store.cancel(a.id); close();
-        if (r.ok) UI.toast("Commitment cancelled. " + r.left + " left this month."); else UI.alertModal("Couldn't cancel", esc(r.message), { error: true });
+        if (r.ok) {
+          const msg = "Commitment cancelled. " + r.left + " left this month.";
+          if (a.visibility === "friends" && !Store.isFriend(a.hostId)) {
+            UI.flash(msg);
+            location.replace("activities.html");
+            return;
+          }
+          UI.toast(msg);
+        } else {
+          UI.alertModal("Couldn't cancel", esc(r.message), { error: true });
+        }
       }) });
   };
   if ($("commit")) $("commit").onclick = () => openCommit(a);
