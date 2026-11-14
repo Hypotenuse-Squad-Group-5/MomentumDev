@@ -39,7 +39,7 @@ UI.mount("activities", function render() {
     <a class="small" href="activities.html">‹ Back to activities</a>
     <article class="stack mt">
       <div>
-        <div class="row"><span class="tag">${esc(a.type)}</span><span class="tag grey">${UI.VIS[a.visibility] || "Public"}</span>
+        <div class="row"><span class="tag">${esc(a.type)}</span>${a.visibility === "friends" ? '<span class="tag grey">Friends Only</span>' : ""}
           ${past ? '<span class="tag grey">Ended</span>' : going ? `<span class="tag ok">${icon("check", "sm")}You're going</span>` : mine ? '<span class="tag flame">You\'re hosting</span>' : need ? `<span class="tag warn">Needs ${need} more to happen</span>` : full ? '<span class="tag grey">Full</span>' : ""}</div>
         <h1 class="mt">${esc(a.title)}</h1>
         <div class="row-between">

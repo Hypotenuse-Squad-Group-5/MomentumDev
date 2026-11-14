@@ -31,13 +31,13 @@ window.Social = {
       const rep = Store.report(a.id, a.hostId) || Store.state.reports.find((r) => r.activityId === a.id);
       // Inactive: basic details only (no location or participants), plus the optional report
       return `<article class="panel" style="opacity:.92">
-        <div class="post-head">${UI.avatar(a.hostId, "", true)}<div class="who"><span class="name">${UI.nameLink(a.hostId)}</span><div class="tiny muted">Activity · ${esc(UI.fmtDay(a.startsAt))}</div></div><span class="tag grey">Inactive</span></div>
+        <div class="post-head">${UI.avatar(a.hostId, "", true)}<div class="who"><span class="name">${UI.nameLink(a.hostId)}</span><div class="tiny muted">Activity · ${esc(UI.fmtDay(a.startsAt))}</div></div><div class="row" style="gap:6px">${a.visibility === "friends" ? '<span class="tag grey">Friends Only</span>' : ""}<span class="tag grey">Inactive</span></div></div>
         <h3>${esc(a.title)}</h3><p class="small muted">${esc(a.type)}</p>
         ${rep ? `<div class="goal-box"><span class="tiny muted">Activity report</span><p class="mb0">${esc(rep.body)}</p></div>` : ""}
       </article>`;
     }
     return `<article class="panel">
-      <div class="post-head">${UI.avatar(a.hostId, "", true)}<div class="who"><span class="name">${UI.nameLink(a.hostId)}</span><div class="tiny muted">${UI.fmtAgo(a.createdAt)} · Posted an activity</div></div><span class="tag ok">Active</span></div>
+      <div class="post-head">${UI.avatar(a.hostId, "", true)}<div class="who"><span class="name">${UI.nameLink(a.hostId)}</span><div class="tiny muted">${UI.fmtAgo(a.createdAt)} · Posted an activity</div></div><div class="row" style="gap:6px">${a.visibility === "friends" ? '<span class="tag grey">Friends Only</span>' : ""}<span class="tag ok">Active</span></div></div>
       <h3>${esc(a.title)}</h3>
       <div class="meta"><span>${icon("clock", "sm")}${esc(UI.fmtRange(a))}</span><span>${icon("activity", "sm")}${esc(a.location)}</span><span>${icon("users", "sm")}${Store.spotsTaken(a.id)} of ${a.max} going</span></div>
       <p class="mb0">${esc(a.description)}</p>

@@ -1,6 +1,6 @@
 /* Activities: filterable feed of upcoming activities (PL-7, PL-8, PL-9) */
 (function () {
-  const f = { open: true, timeOfDay: "any", dateRange: "upcoming", commitment: "any", types: [], name: "", min: "3", max: "" };
+  const f = { open: true, timeOfDay: "any", dateRange: "upcoming", commitment: "any", visibility: "all", types: [], name: "", min: "3", max: "" };
 
   const inDateRange = (activity, range) => {
     const start = new Date(activity.startsAt);
@@ -44,12 +44,13 @@
     let list = activities.filter((a) =>
       inDateRange(a, f.dateRange) &&
       inTimeOfDay(a, f.timeOfDay) &&
+      (f.visibility === "all" || (f.visibility === "friends" ? a.visibility === "friends" : a.visibility === "public")) &&
       (f.commitment === "any" || (f.commitment === "committed" ? Store.isGoing(a.id) : !Store.isGoing(a.id))) &&
       (!f.types.length || f.types.includes(a.type)) &&
       (!f.name || (a.activityName + " " + a.title).toLowerCase().includes(f.name.toLowerCase())) &&
       (!f.min || a.min >= Number(f.min)) &&
       (!f.max || a.max <= Number(f.max)));
-    const activeCount = (f.timeOfDay !== "any" ? 1 : 0) + (f.dateRange !== "upcoming" ? 1 : 0) + (f.commitment !== "any" ? 1 : 0) + f.types.length + (f.name ? 1 : 0) + (f.min ? 1 : 0) + (f.max ? 1 : 0);
+    const activeCount = (f.timeOfDay !== "any" ? 1 : 0) + (f.dateRange !== "upcoming" ? 1 : 0) + (f.visibility !== "all" ? 1 : 0) + (f.commitment !== "any" ? 1 : 0) + f.types.length + (f.name ? 1 : 0) + (f.min ? 1 : 0) + (f.max ? 1 : 0);
 
     const types = Store.types().map((t) => t.name); // from the activity_types table
 
@@ -78,6 +79,12 @@
                 <option value="year"${f.dateRange === "year" ? " selected" : ""}>This year</option>
                 <option value="past"${f.dateRange === "past" ? " selected" : ""}>Past events</option>
               </select></div>
+            <div class="field"><label for="f-vis">Visibility</label>
+              <select id="f-vis">
+                <option value="all"${f.visibility === "all" ? " selected" : ""}>All</option>
+                <option value="friends"${f.visibility === "friends" ? " selected" : ""}>Friends Only</option>
+                <option value="public"${f.visibility === "public" ? " selected" : ""}>Public</option>
+              </select></div>
             <div class="field"><label for="f-name">Activity title</label><input id="f-name" type="search" maxlength="50" value="${esc(f.name)}" placeholder="e.g. board games, hiking"></div>
             <div class="field"><label for="f-commitment">Commitment</label>
               <select id="f-commitment">
@@ -101,7 +108,7 @@
           return `<a class="panel tight act-card" href="activity.html?id=${a.id}">
             <span class="num">${i + 1}</span>
             <div class="grow">
-              <div class="row-between"><span class="tag">${esc(a.type)}</span>
+              <div class="row-between"><div class="row" style="gap:6px"><span class="tag">${esc(a.type)}</span>${a.visibility === "friends" ? '<span class="tag grey">Friends Only</span>' : ""}</div>
                 ${Store.isGoing(a.id) ? `<span class="tag ok">${icon("check", "sm")}Going</span>` : a.hostId === Store.ME ? '<span class="tag flame">Hosting</span>' : need ? `<span class="tag warn">Needs ${need} more</span>` : taken >= a.max ? '<span class="tag grey">Full</span>' : ""}</div>
               <h3 style="margin-top:6px">${esc(a.title)}</h3>
               <div class="meta"><span>${icon("clock", "sm")}${esc(UI.fmtRange(a))}</span><span>${icon("activity", "sm")}${esc(a.city)}${a.dist != null ? " · " + UI.fmtMi(a.dist) : ""}</span></div>
@@ -117,6 +124,7 @@
       e.preventDefault();
       f.timeOfDay = form.querySelector("#f-time").value;
       f.dateRange = form.querySelector("#f-date").value;
+      f.visibility = form.querySelector("#f-vis").value;
       f.commitment = form.querySelector("#f-commitment").value;
       f.name = form.querySelector("#f-name").value.trim();
       f.min = form.querySelector("#f-min").value; f.max = form.querySelector("#f-max").value;
@@ -124,7 +132,7 @@
       render();
     };
     document.getElementById("clear").onclick = () => {
-      Object.assign(f, { timeOfDay: "any", dateRange: "upcoming", commitment: "any", types: [], name: "", min: "3", max: "" });
+      Object.assign(f, { timeOfDay: "any", dateRange: "upcoming", commitment: "any", visibility: "all", types: [], name: "", min: "3", max: "" });
       render();
     };
   });
