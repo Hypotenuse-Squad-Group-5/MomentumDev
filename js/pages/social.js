@@ -27,12 +27,10 @@ window.Social = {
     const { icon, esc } = UI;
     const past = Store.isPast(a);
     if (past) {
-      const rep = Store.report(a.id, a.hostId) || Store.state.reports.find((r) => r.activityId === a.id);
-      // Inactive: basic details only (no location or participants), plus the optional report
+      // Inactive: basic details only (no location or participants)
       return `<article class="panel" style="opacity:.92">
         <div class="post-head">${UI.avatar(a.hostId, "", true)}<div class="who"><span class="name">${UI.nameLink(a.hostId)}</span><div class="tiny muted">Activity · ${esc(UI.fmtDay(a.startsAt))}</div></div><div class="row" style="gap:6px">${a.visibility === "friends" ? '<span class="tag grey">Friends Only</span>' : ""}<span class="tag grey">Inactive</span></div></div>
         <h3>${esc(a.title)}</h3><p class="small muted">${esc(a.type)}</p>
-        ${rep ? `<div class="goal-box"><span class="tiny muted">Activity report</span><p class="mb0">${esc(rep.body)}</p></div>` : ""}
       </article>`;
     }
     return `<article class="panel">

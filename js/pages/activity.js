@@ -23,8 +23,6 @@ UI.mount("activities", function render() {
     return `<div class="attendee">${UI.avatar(id, "sm", Store.isFriend(id))}<span class="grow">${UI.nameLink(id)}${Store.isFriend(id) ? ' <span class="tag ok">Friend</span>' : ""}</span>${via}</div>`;
   }).join("");
 
-  const reports = Store.state.reports.filter((r) => r.activityId === a.id);
-
   // Cancel button with a live counter: "Cancel (2 left)". Grey once they're used up or it's within 3 hours.
   const canC = rsvp ? Store.canCancel(a.id) : { ok: false };
   function cancelButton() {
@@ -70,8 +68,6 @@ UI.mount("activities", function render() {
           : taken > 1 ? `<div class="attendee"><span class="avatar sm anon">${icon("users", "sm")}</span><span class="grow muted">${taken - 1} ${taken - 1 === 1 ? "person is" : "people are"} going</span></div><p class="hint mt mb0">${past ? "Only the host and people who went can see who went." : "Commit to see who's going."}</p>`
           : `<p class="hint mt mb0">${past ? "No one else went." : "No one else has committed yet."}</p>`}
       </section>
-
-      ${reports.length ? `<section><h2>Activity reports</h2>${reports.map((r) => `<div class="goal-box"><b>${UI.nameLink(r.authorId)}</b><p class="mb0">${esc(r.body)}</p></div>`).join("")}</section>` : ""}
     </article>
 
     ${past ? "" : `<div class="cta-bar">${
