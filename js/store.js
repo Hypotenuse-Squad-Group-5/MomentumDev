@@ -45,6 +45,12 @@
     };
   }
 
+  function normalizeVisibility(v, fallback = "public") {
+    if (v === "friends_of_friends") return "public";
+    if (v === "private") return "friends";
+    return v === "public" || v === "friends" ? v : fallback;
+  }
+
   // Restore only supported fields so old browser data cannot reintroduce retired features.
   function restoreState(saved, me) {
     const restored = blankState(me);
@@ -53,6 +59,9 @@
       const FROM_DATABASE = ["rsvps", "guests", "cancellations"];
       Object.keys(restored).forEach((key) => { if (key in saved && !FROM_DATABASE.includes(key)) restored[key] = saved[key]; });
       restored.settings = { ...defaultSettings(), ...restored.settings };
+      restored.settings.activityVisibility = normalizeVisibility(restored.settings.activityVisibility, "public");
+      restored.settings.postVisibility = normalizeVisibility(restored.settings.postVisibility, "friends");
+      restored.settings.friendsListVisibility = normalizeVisibility(restored.settings.friendsListVisibility, "friends");
     }
     return restored;
   }
