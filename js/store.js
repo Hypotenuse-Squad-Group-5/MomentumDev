@@ -8,7 +8,7 @@
    Stored in Supabase: accounts, profiles, interests, habits + check-ins,
    lessons, activities, commitments (RSVPs) + +1s + attendance, friendships,
    messages, and posts.
-   Activity reports, likes, and general settings stay browser-local.
+   Likes and general settings stay browser-local.
    ===================================================================== */
 (function () {
   let KEY = null; // this user's browser data: "momentum.v1.user.<profile id>" (set in init)
@@ -39,7 +39,7 @@
   function blankState(me) {
     return {
       version: 1, meId: me.id, signedIn: true, profiles: { [me.id]: me },
-      friendships: [], blocks: [], activities: [], addresses: {}, rsvps: [], guests: [], reports: [], posts: [],
+      friendships: [], blocks: [], activities: [], addresses: {}, rsvps: [], guests: [], posts: [],
       conversations: [], lessonsDone: [], habits: [], checkins: [], momentum: [], cancellations: [],
       settings: defaultSettings(),
     };
@@ -618,13 +618,6 @@
     return { ok: true, gainedNow: !!attended && !before && momentum().gainedToday };
   }
   function needsCheckIn() { return myCommitments().filter((a) => isPast(a) && myRsvp(a.id) && myRsvp(a.id).status === "committed" && myRsvp(a.id).attended === null); }
-
-  function report(activityId, authorId) { return state.reports.find((r) => r.activityId === activityId && r.authorId === authorId) || null; }
-  function saveReport(activityId, body) {
-    let r = report(activityId, ME);
-    if (r) r.body = body; else state.reports.push({ id: uid(), activityId, authorId: ME, body, createdAt: nowIso() });
-    save();
-  }
 
   // =====================================================================
   // Habits, lessons, streaks
@@ -1571,7 +1564,6 @@
     loadActivities, allActivities: () => actCache || [], loadTypes, types: () => typeCache || [], loadSuggestions, activitySuggestions, validateActivity, createActivity, activity, isPast, attendees, spotsTaken,
     myRsvp, myGuestInvite, isGoing, myCommitments, myCommitmentIds, hosting, conflictFor, commit, cancel, canCancel, hasStarted, canSeeAttendees, loadCommitments, CANCEL_HOURS,
     cancellationsLeft, plusOneInvites, respondPlusOne, checkIn, needsCheckIn, address: (id) => state.addresses[id] || null, loadAddress,
-    report, saveReport,
     // people
     profile, fullName, isFriend, friends, friendshipWith, incomingRequests, sentRequests, acceptFriend, declineFriend,
     removeFriend, sendFriendRequest, cancelFriendRequest, loadFriendships, loadProfile, searchProfiles, sharedActivityId,
