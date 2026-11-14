@@ -159,12 +159,20 @@ test('social.js renders Friends Only tag on activity cards', () => {
   assert.match(code, /a\.visibility === "friends" \? '<span class="tag grey">Friends Only<\/span>' : ""/);
 });
 
-test('Migration 019 file exists and defines valid RLS and constraints', () => {
-  const sql = fs.readFileSync('database/019_friends_activity_visibility.sql', 'utf8');
-  assert.match(sql, /visibility in \('public', 'friends'\)/);
+test('activity.js redirects unfriended cancelled commitments to activities.html', () => {
+  const code = fs.readFileSync('js/pages/activity.js', 'utf8');
+  assert.match(code, /if \(a\.visibility === "friends" && !Store\.isFriend\(a\.hostId\)\)/);
+  assert.match(code, /location\.replace\("activities\.html"\)/);
+});
+
+test('Migration 020 fixes RLS policy to ignore cancelled RSVPs and expired guests', () => {
+  const sql = fs.readFileSync('database/020_fix_friends_activity_rls.sql', 'utf8');
   assert.match(sql, /signed-in users read activities/);
-  assert.match(sql, /momentum_private\.commit_to_activity/);
-  assert.match(sql, /friendships/);
-  assert.match(sql, /status = 'accepted'/);
-  assert.match(sql, /rsvp_guests/);
+  assert.match(sql, /r\.status = 'committed' or r\.attended is not null/);
+  assert.match(sql, /r\.status = 'committed'\s+and g\.status in \('accepted', 'pending'\)/);
+
+  const supabaseSql = fs.readFileSync('supabase/migrations/20261114010000_fix_friends_activity_rls.sql', 'utf8');
+  assert.match(supabaseSql, /signed-in users read activities/);
+  assert.match(supabaseSql, /r\.status = 'committed' or r\.attended is not null/);
+  assert.match(supabaseSql, /r\.status = 'committed'\s+and g\.status in \('accepted', 'pending'\)/);
 });
