@@ -40,7 +40,7 @@
     return {
       version: 1, meId: me.id, signedIn: true, profiles: { [me.id]: me },
       friendships: [], blocks: [], activities: [], addresses: {}, rsvps: [], guests: [], reports: [], posts: [],
-      encouragements: [], conversations: [], lessonsDone: [], habits: [], checkins: [], momentum: [], cancellations: [],
+      conversations: [], lessonsDone: [], habits: [], checkins: [], momentum: [], cancellations: [],
       settings: defaultSettings(),
     };
   }
@@ -900,12 +900,6 @@
     if (p) { p.visibility = v; save(); }
   }
 
-  function encouraged(postId) { return state.encouragements.some((e) => e.postId === postId && e.profileId === ME); }
-  function toggleEncourage(postId) {
-    if (encouraged(postId)) state.encouragements = state.encouragements.filter((e) => !(e.postId === postId && e.profileId === ME));
-    else state.encouragements.push({ postId, profileId: ME, at: nowIso() });
-    save();
-  }
 
   // 10 most recent posts + activities from friends and public posts. No reshuffle, newest first.
   function feed() {
@@ -1586,7 +1580,7 @@
     completeLesson, lessonGoal, lessonHabit, momentum, lastDays, stats, canStartLesson, LESSON_BLOCKED_MSG,
     canAddHabit, canArchiveHabit, deleteHabit, MAX_ACTIVE_HABITS, MAX_ARCHIVED_HABITS, MAX_ACTIVE_MSG, ARCHIVE_FULL_MSG,
     // social
-    loadPosts, createPost, deletePost, setPostVisibility, encouraged, toggleEncourage, feed, historyFor,
+    loadPosts, createPost, deletePost, setPostVisibility, feed, historyFor,
     // messages
     loadConversations, conversations, conversation, findDirect, unread, unreadCount, unreadConversationsCount, incomingMessageRequests,
     isRequestToMe, isOutgoingPending, requestStatusFor, markRead, openDirect, sendDirectMessage, send, respondRequest,

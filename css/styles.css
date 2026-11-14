@@ -745,8 +745,6 @@ details.event[open] > summary { border-bottom: 1px solid var(--border); }
 .post-head .name { font-weight: 600; text-decoration: none; }
 .post-head select { width: auto; min-height: 32px; padding: 3px 8px; font-size: .78rem; }
 .post-actions { display: flex; gap: 6px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
-.encourage.on { color: var(--flame); }
-.encourage.on svg { fill: currentColor; }
 .linked-activity { display: flex; gap: 10px; align-items: center; margin-top: 12px; padding: 10px 12px; border-radius: 10px; background: var(--goal); text-decoration: none; }
 .feed-end { padding: 24px; text-align: center; border: 2px dashed var(--border); border-radius: var(--r); }
 .profile-head { display: flex; gap: 16px; align-items: center; }

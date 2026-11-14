@@ -19,8 +19,7 @@ window.Social = {
       <div class="post-actions">
         ${isOwner
           ? `<button class="btn btn-sm btn-ghost" data-del="${p.id}" style="color:var(--danger, #d9383a)">${icon("trash", "sm")}Delete</button>`
-          : `<button class="btn btn-sm btn-ghost encourage${Store.encouraged(p.id) ? " on" : ""}" data-enc="${p.id}" aria-pressed="${Store.encouraged(p.id)}">${icon("heart", "sm")}${Store.encouraged(p.id) ? "Encouraged" : "Encourage"}</button>
-             <button class="btn btn-sm btn-ghost" data-msg="${p.authorId}">${icon("message", "sm")}Message ${esc(Store.profile(p.authorId).first)}</button>`}
+          : `<button class="btn btn-sm btn-ghost" data-msg="${p.authorId}">${icon("message", "sm")}Message ${esc(Store.profile(p.authorId).first)}</button>`}
       </div>
     </article>`;
   },
@@ -45,7 +44,6 @@ window.Social = {
     </article>`;
   },
   bind() {
-    document.querySelectorAll("[data-enc]").forEach((b) => (b.onclick = () => Store.toggleEncourage(b.dataset.enc)));
     document.querySelectorAll("[data-msg]").forEach((b) => (b.onclick = () => UI.Messages.openChat(b.dataset.msg, b.dataset.act || null)));
     document.querySelectorAll("[data-vis]").forEach((s) => (s.onchange = () => { Store.setPostVisibility(s.dataset.vis, s.value); UI.toast("Visibility updated"); }));
     document.querySelectorAll("[data-del]").forEach((b) => (b.onclick = async () => {
