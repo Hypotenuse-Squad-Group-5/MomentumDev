@@ -227,7 +227,7 @@
   // Server-side rules the DB also enforces, checked here first for friendly messages.
   function validateActivity(f) {
     const errs = {};
-    const req = ["title", "typeId", "activityName", "date", "start", "end", "location", "city", "address", "min", "max", "description"];
+    const req = ["title", "typeId", "date", "start", "end", "location", "city", "address", "min", "max", "description"];
     req.forEach((k) => { if (!String(f[k] ?? "").trim()) errs[k] = "Required."; });
     if (f.title && f.title.length > 50) errs.title = "Keep it to 50 characters or fewer.";
     const min = Number(f.min), max = Number(f.max);
@@ -252,7 +252,7 @@
     const typeName = (types.find((t) => String(t.id) === String(f.typeId)) || {}).name || "";
     let id;
     const { data, error } = await sb.from("activities").insert({
-      host_id: ME, type_id: Number(f.typeId), title: f.title.trim(), activity_name: f.activityName.trim(),
+      host_id: ME, type_id: Number(f.typeId), title: f.title.trim(), activity_name: f.title.trim(),
       description: f.description.trim(), what_to_bring: f.bring.trim() || null, starts_at: starts, ends_at: ends,
       general_location: f.location.trim(), city: f.city.trim(), latitude: me.lat, longitude: me.lng,
       min_participants: Number(f.min), max_participants: Number(f.max), visibility: f.visibility,
