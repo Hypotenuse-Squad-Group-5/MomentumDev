@@ -52,7 +52,6 @@ UI.mount("activities", function render() {
           <dt>${icon("activity", "sm")}Where</dt><dd>${esc(a.location)}${UI.distanceMi(a) != null ? ` <span class="muted">· ${UI.fmtMi(UI.distanceMi(a))} away</span>` : ""}<br>
             ${addr ? `<span class="tag ok">${icon("lock", "sm")}Address unlocked</span> <b>${esc(addr)}</b>` : `<span class="small muted">${icon("lock", "sm")} The exact address appears after you commit.</span>`}</dd>
           <dt>${icon("users", "sm")}Group</dt><dd>${taken} going · needs at least ${a.min} · max ${a.max}</dd>
-          <dt>${icon("target", "sm")}Activity</dt><dd>${esc(a.activityName)}</dd>
           ${a.bring ? `<dt>${icon("check", "sm")}Bring</dt><dd>${esc(a.bring)}</dd>` : ""}
         </dl>
       </div>
