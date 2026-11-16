@@ -123,3 +123,4 @@
   .steps { grid-template-columns: repeat(3, 1fr); }
   .note-band { grid-template-columns: 1.2fr .8fr; }
 }
+
