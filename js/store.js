@@ -148,7 +148,7 @@
       authorId: row.author_id,
       caption: row.caption,
       activityId: row.activity_id || null,
-      visibility: row.visibility || "public",
+      visibility: row.visibility || "friends",
       createdAt: row.created_at,
       source: "supabase",
     };
@@ -861,14 +861,14 @@
       author_id: ME,
       caption: caption.trim(),
       activity_id: activityId || null,
-      visibility: "public",
+      visibility: "friends",
     }).select("id, author_id, caption, activity_id, visibility, created_at, author:profiles!posts_author_id_fkey(first_name,avatar_url,created_at)").single();
     if (res.error) {
       res = await sb.from("posts").insert({
         author_id: ME,
         caption: caption.trim(),
         activity_id: activityId || null,
-        visibility: "public",
+        visibility: "friends",
       }).select().single();
     }
     if (res.error) return { ok: false, message: res.error.message };
@@ -896,13 +896,13 @@
   }
 
 
-  // 10 most recent posts + activities from friends and public posts. No reshuffle, newest first.
+  // 10 most recent posts + activities from friends and public activities. No reshuffle, newest first.
   function feed() {
     const fr = new Set(friends().map((f) => f.id));
     fr.add(ME);
     const items = [];
     const pList = postCache !== null ? postCache : (state.posts || []);
-    pList.filter((p) => p.visibility === "public" || fr.has(p.authorId)).forEach((p) => items.push({ kind: "post", at: p.createdAt, post: p }));
+    pList.filter((p) => fr.has(p.authorId)).forEach((p) => items.push({ kind: "post", at: p.createdAt, post: p }));
     (actCache || []).filter((a) => a.visibility === "public" || fr.has(a.hostId)).forEach((a) => items.push({ kind: "activity", at: a.createdAt, activity: a }));
     return items.sort((a, b) => new Date(b.at) - new Date(a.at)).slice(0, 10);
   }
