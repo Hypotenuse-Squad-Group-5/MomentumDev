@@ -145,14 +145,14 @@ create table activities (
   latitude          numeric(8,5),         -- city-level pin for the map (PL-8)
   longitude         numeric(8,5),
   min_participants  smallint not null default 3,
-  max_participants  smallint not null,
+  max_participants  smallint not null default 100,
   visibility        text not null default 'public'   -- PL-3 / PL-4
     check (visibility in ('public','friends_of_friends','friends','private')),
   cover_photo_url   text,
   created_at        timestamptz not null default now(),
   check (ends_at > starts_at),
   check (min_participants >= 3),                       -- PL-1
-  check (max_participants <= 20),
+  check (max_participants <= 100),
   check (min_participants <= max_participants)
 );
 create index activities_starts_at on activities (starts_at);
