@@ -18,7 +18,6 @@ UI.mount("settings", function render() {
     ${tab === "general" ? `
     <section class="panel">
       <h2>Privacy</h2>
-      ${sel("postVisibility", "Posts", "Default for new posts", vis)}
       ${sel("activityVisibility", "Activities", "Default for new activities", vis)}
       ${sel("friendsListVisibility", "Friends list", "Who can see your friends", vis)}
       ${sel("attendeeDisplay", "On \"Who's going\" lists", "How people who aren't your friends see you", [["first_name", "Show my first name"], ["hidden", "Hide me from non-friends"]])}

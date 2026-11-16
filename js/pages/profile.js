@@ -69,12 +69,11 @@
     const blockedByMe = !own && Store.hasBlocked && Store.hasBlocked(id);
     if (compose.visibility === null) compose.visibility = Store.state.settings.postVisibility;
 
-    // Non-friends see public hosted activities and public posts
+    // Non-friends see public hosted activities only (posts are friends-only)
     let history = Store.historyFor(id);
     if (!own && !friend) {
       history = history.filter((h) =>
-        (h.kind === "activity" && h.hosting && h.activity.visibility === "public") ||
-        (h.kind === "post" && h.post.visibility === "public")
+        h.kind === "activity" && h.hosting && h.activity.visibility === "public"
       );
     }
     const attended = own ? Store.stats().attended : Store.state.rsvps.filter((r) => r.profileId === id && r.status === "committed").length;
@@ -94,7 +93,7 @@
           <div class="profile-stats">
             <div><b>${attended}</b><span>Activities</span></div>
             <div><b>${own ? Store.friends().length : friend ? "Friend" : "-"}</b><span>${own ? "Friends" : "Status"}</span></div>
-            <div><b>${own ? Store.stats().streak : history.filter((h) => h.kind === "post").length}</b><span>${own ? "Momentum" : "Posts"}</span></div>
+            <div><b>${own ? Store.stats().streak : friend ? history.filter((h) => h.kind === "post").length : "-"}</b><span>${own ? "Momentum" : "Posts"}</span></div>
           </div>
           <div class="row mt">${own
             ? `<button class="btn btn-primary" id="open-compose">${icon("post", "sm")}Share a post</button><a class="btn" href="activity-new.html">${icon("plus", "sm")}Post an activity</a><a class="btn btn-ghost" href="settings.html#profile">${icon("edit", "sm")}Edit profile</a>`
@@ -111,17 +110,9 @@
         ${own && compose.open ? `
         <form class="panel mt" id="composer" novalidate>
           <div class="row-between"><h2 class="mb0">Share a post</h2><button type="button" class="icon-btn" id="close-compose" aria-label="Close">${icon("x")}</button></div>
-          <p class="small muted">Text posts save to your profile and Supabase database.</p>
+          <p class="small muted">Posts save to your profile and are visible only to your friends.</p>
           <div class="field"><label for="caption">Post</label><textarea id="caption" maxlength="500" placeholder="What did you do?">${esc(compose.caption)}</textarea><div class="hint"><span id="cc">${compose.caption.length}</span> / 500</div></div>
-          <div class="grid-2">
-            <div class="field"><label for="link">Link an activity <span class="opt">(optional)</span></label><select id="link"><option value="">None</option>${linkable.map((a) => `<option value="${a.id}"${a.id === compose.activityId ? " selected" : ""}>${esc(a.title)}</option>`).join("")}</select></div>
-            <div class="field"><label for="vis">Who can see this?</label>
-              <select id="vis" disabled>
-                <option value="public" selected>Public (All posts are currently public)</option>
-              </select>
-              <p class="hint">All posts made are currently public right now.</p>
-            </div>
-          </div>
+          <div class="field"><label for="link">Link an activity <span class="opt">(optional)</span></label><select id="link"><option value="">None</option>${linkable.map((a) => `<option value="${a.id}"${a.id === compose.activityId ? " selected" : ""}>${esc(a.title)}</option>`).join("")}</select></div>
           ${compose.error ? `<div class="alert">${icon("alert", "sm")}<span>${esc(compose.error)}</span></div>` : ""}
           <button class="btn btn-primary btn-block mt" id="post-submit-btn">Post</button>
         </form>` : ""}
@@ -189,12 +180,12 @@
     $("close-compose").onclick = () => { compose.open = false; render(); };
     $("caption").oninput = (e) => { compose.caption = e.target.value; $("cc").textContent = compose.caption.length; };
     $("link").onchange = (e) => (compose.activityId = e.target.value);
-    $("vis").onchange = (e) => (compose.visibility = e.target.value);
+    if ($("vis")) $("vis").onchange = (e) => (compose.visibility = e.target.value);
     form.onsubmit = async (e) => {
       e.preventDefault();
       const submitBtn = $("post-submit-btn");
       if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = "Posting..."; }
-      const r = await Store.createPost({ caption: compose.caption, activityId: compose.activityId, visibility: "public" });
+      const r = await Store.createPost({ caption: compose.caption, activityId: compose.activityId, visibility: "friends" });
       if (!r.ok) {
         compose.error = r.message;
         if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = "Post"; }
