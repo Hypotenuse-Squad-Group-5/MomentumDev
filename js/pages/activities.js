@@ -91,8 +91,8 @@
                 <option value="committed"${f.commitment === "committed" ? " selected" : ""}>Committed to</option>
                 <option value="not-committed"${f.commitment === "not-committed" ? " selected" : ""}>Not committed to</option>
               </select></div>
-            <div class="field"><label for="f-min">Min. group size</label><input id="f-min" type="number" min="3" max="20" value="${esc(f.min)}" placeholder="Any"></div>
-            <div class="field"><label for="f-max">Max. group size</label><input id="f-max" type="number" min="3" max="20" value="${esc(f.max)}" placeholder="Any"></div>
+            <div class="field"><label for="f-min">Min. group size</label><input id="f-min" type="number" min="3" max="100" value="${esc(f.min)}" placeholder="Any"></div>
+            <div class="field"><label for="f-max">Max. group size</label><input id="f-max" type="number" min="3" max="100" value="${esc(f.max)}" placeholder="Any"></div>
             <div class="field"><label for="f-name">Activity title</label><input id="f-name" type="search" maxlength="50" value="${esc(f.name)}" placeholder="e.g. board games, hiking"></div>
           </div>
           <div class="field"><span class="flabel">Activity category</span><div class="chips">${types.map((t) => `<label class="chip"><input type="checkbox" value="${esc(t)}"${f.types.includes(t) ? " checked" : ""}>${esc(t)}</label>`).join("")}</div></div>
