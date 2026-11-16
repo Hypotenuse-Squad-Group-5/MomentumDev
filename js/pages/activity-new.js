@@ -3,7 +3,7 @@
    PL-6: missing/invalid fields block posting, are flagged, and everything typed stays put. */
 UI.mount("activities", async function render() {
   const { icon, esc } = UI;
-  const [types] = await Promise.all([Store.loadTypes(), Store.loadSuggestions()]);
+  const [types] = await Promise.all([Store.loadTypes()]);
   const s = Store.state.settings;
   const tomorrow = new Date(Date.now() + 864e5).toISOString().slice(0, 10);
   // "Use info from a previous activity": everything you've hosted, newest first
@@ -56,7 +56,7 @@ UI.mount("activities", async function render() {
           <span class="form-section-chevron"></span>
         </summary>
         <div class="form-section-body">
-          <div class="field" data-f="title"><label for="title">Title</label><input id="title" type="text" maxlength="50" placeholder="e.g. Board Game Night"><div class="err" hidden></div></div>
+          <div class="field" data-f="title"><label for="title">Activity Title</label><input id="title" type="text" maxlength="50" placeholder="e.g. Board Game Night"><div class="err" hidden></div></div>
           
           <div class="field" data-f="typeId">
             <span class="flabel" style="font-weight:600;margin-bottom:8px">Activity category</span>
@@ -69,14 +69,6 @@ UI.mount("activities", async function render() {
               `).join("")}
             </div>
             <input type="hidden" id="typeId" value="">
-            <div class="err" hidden></div>
-          </div>
-
-          <div class="field" data-f="activityName">
-            <label for="activityName">Activity</label>
-            <input id="activityName" type="text" maxlength="40" placeholder="e.g. board games, volleyball, mindfulness meditation" list="activity-name-suggestions">
-            <datalist id="activity-name-suggestions">${Store.activitySuggestions().map((n) => `<option value="${esc(n)}"></option>`).join("")}</datalist>
-            <div class="hint">Used for search and filters.</div>
             <div class="err" hidden></div>
           </div>
 
@@ -302,7 +294,6 @@ UI.mount("activities", async function render() {
         // Text and number fields
         const setVal = (id, v) => { const el = form.querySelector("#" + id); if (el) el.value = v ?? ""; };
         setVal("title", a.title);
-        setVal("activityName", a.activityName);
         setVal("location", a.location);
         setVal("city", a.city);
         setVal("description", a.description);
@@ -352,7 +343,7 @@ UI.mount("activities", async function render() {
   }
 
   // Force strict maxlength enforcement in case pasting or browser quirks bypass it
-  ["title", "activityName", "location", "city", "address", "description", "bring"].forEach((id) => {
+  ["title", "location", "city", "address", "description", "bring"].forEach((id) => {
     const el = form.querySelector("#" + id);
     if (!el) return;
     const max = el.getAttribute("maxlength");
@@ -369,7 +360,7 @@ UI.mount("activities", async function render() {
   form.onsubmit = async (e) => {
     e.preventDefault();
     const data = {
-      title: val("title"), typeId: val("typeId"), activityName: val("activityName"), date: val("date"), start: val("start"), end: val("end"),
+      title: val("title"), typeId: val("typeId"), date: val("date"), start: val("start"), end: val("end"),
       location: val("location"), city: val("city"), address: val("address"), min: val("min"), max: val("max"),
       description: val("description"), bring: val("bring"), visibility: form.querySelector("input[name=visibility]:checked").value,
     };
