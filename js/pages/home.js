@@ -17,7 +17,10 @@ UI.mount("home", function render() {
   const days = Store.lastDays(7);
   const habits = Store.habits();
   const doneCount = habits.filter((h) => Store.isHabitDone(h.id)).length;
-  const next = Store.myCommitments().find((a) => !Store.isPast(a));
+  const nextCommitted = Store.myCommitments().find((a) => !Store.isPast(a));
+  const nextHosted = Store.hosting()
+    .filter((a) => !Store.isPast(a) && !Store.isGoing(a.id))
+    .sort((a, b) => new Date(a.startsAt) - new Date(b.startsAt))[0];
   const invites = Store.plusOneInvites();
   const checkIns = Store.needsCheckIn();
   const lessonN = Store.currentLesson();
@@ -106,11 +109,18 @@ UI.mount("home", function render() {
 
       <aside class="stack">
         <section>
-          <p class="label">Your next activity</p>
-          ${next ? `<a class="panel tight" href="activity.html?id=${next.id}">
-              <div class="row" style="flex-wrap:nowrap;gap:12px">${UI.dateBadge(next.startsAt)}
-                <div class="grow"><h3 class="mb0">${esc(next.title)}</h3><p class="small muted mb0">${esc(UI.fmtRange(next))}</p><span class="tag ok">${icon("check", "sm")}Committed</span></div>${icon("right")}</div></a>`
-            : `<div class="panel tight"><p class="mb0">Nothing on the calendar yet.</p><a class="btn btn-sm mt" href="activities.html">Find an activity</a></div>`}
+          <div class="row-between">
+            <p class="label mb0">Your next activities</p>
+            <a class="small" href="calendar.html">View calendar ${icon("right", "sm")}</a>
+          </div>
+          ${nextCommitted ? `<a class="panel tight mt" href="activity.html?id=${nextCommitted.id}">
+              <div class="row" style="flex-wrap:nowrap;gap:12px">${UI.dateBadge(nextCommitted.startsAt)}
+                <div class="grow"><p class="small muted mb0">Next activity you're committed to</p><h3 class="mb0">${esc(nextCommitted.title)}</h3><p class="small muted mb0">${esc(UI.fmtRange(nextCommitted))}</p><span class="tag ok">${icon("check", "sm")}Committed</span></div>${icon("right")}</div></a>`
+            : `<div class="panel tight mt"><p class="small muted mb0">No upcoming activities you're committed to.</p><a class="btn btn-sm mt" href="activities.html">Find an activity</a></div>`}
+          ${nextHosted ? `<a class="panel tight mt" href="activity.html?id=${nextHosted.id}">
+              <div class="row" style="flex-wrap:nowrap;gap:12px">${UI.dateBadge(nextHosted.startsAt)}
+                <div class="grow"><p class="small muted mb0">Next activity you're hosting</p><h3 class="mb0">${esc(nextHosted.title)}</h3><p class="small muted mb0">${esc(UI.fmtRange(nextHosted))}</p><span class="tag">${icon("calendar", "sm")}Hosting</span></div>${icon("right")}</div></a>`
+            : `<div class="panel tight mt"><p class="small muted mb0">You aren't hosting an upcoming activity.</p><a class="btn btn-sm mt" href="activity-new.html">Post an activity</a></div>`}
         </section>
         <section class="panel tight">
           <p class="label">Explore</p>
