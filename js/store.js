@@ -230,10 +230,11 @@
     const req = ["title", "typeId", "date", "start", "end", "location", "city", "address", "min", "max", "description"];
     req.forEach((k) => { if (!String(f[k] ?? "").trim()) errs[k] = "Required."; });
     if (f.title && f.title.length > 50) errs.title = "Keep it to 50 characters or fewer.";
-    const min = Number(f.min), max = Number(f.max);
-    if (f.min !== "" && (min < 3 || min > 20)) errs.min = "Use a number from 3 to 20.";
-    if (f.max !== "" && (max < 3 || max > 20)) errs.max = "Use a number from 3 to 20.";
-    if (!errs.min && !errs.max && f.min !== "" && f.max !== "" && min > max) errs.max = "Max can't be smaller than min.";
+    const min = String(f.min ?? "").trim() === "" ? 3 : Number(f.min);
+    const max = String(f.max ?? "").trim() === "" ? 100 : Number(f.max);
+    if (String(f.min ?? "").trim() !== "" && (!Number.isInteger(min) || min < 3 || min > 100)) errs.min = "Use a whole number from 3 to 100.";
+    if (String(f.max ?? "").trim() !== "" && (!Number.isInteger(max) || max < 3 || max > 100)) errs.max = "Use a whole number from 3 to 100.";
+    if (!errs.min && !errs.max && min > max) errs.max = "Max can't be smaller than min.";
     if (f.date && f.start) {
       const s = new Date(f.date + "T" + f.start);
       if (s < new Date()) errs.date = "The activity must start in the future.";
@@ -255,7 +256,8 @@
       host_id: ME, type_id: Number(f.typeId), title: f.title.trim(), activity_name: f.title.trim(),
       description: f.description.trim(), what_to_bring: f.bring.trim() || null, starts_at: starts, ends_at: ends,
       general_location: f.location.trim(), city: f.city.trim(), latitude: me.lat, longitude: me.lng,
-      min_participants: Number(f.min), max_participants: Number(f.max), visibility: f.visibility,
+      min_participants: String(f.min ?? "").trim() === "" ? 3 : Number(f.min),
+      max_participants: String(f.max ?? "").trim() === "" ? 100 : Number(f.max), visibility: f.visibility,
     }).select("id").single();
     if (error) return { ok: false, message: error.message };
     id = data.id;
