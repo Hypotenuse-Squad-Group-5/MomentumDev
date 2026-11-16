@@ -37,13 +37,21 @@ UI.mount("lessons", function render() {
         <div class="field" data-f="habit"><label for="habit">Your daily habit</label>
           <input autocomplete="off" id="habit" type="text" maxlength="80" placeholder="${esc(l.habitPlaceholder)}" aria-describedby="habit-hint habit-error">
           <div class="hint" id="habit-hint">Name a small habit to practice. Finishing this lesson adds it to My habits on Home.</div><div class="err" id="habit-error" hidden></div></div>
-        <button class="btn btn-primary btn-block">Finish lesson</button>
+        <div class="habit-ai">
+          <p class="small muted" id="ai-notice">Optional: get three habit ideas from Gemini. Your reflection will be sent to Google, which may use it to improve its products, including human review. Do not include names, contact details, or personal, sensitive, or confidential information. <a href="https://ai.google.dev/gemini-api/terms" target="_blank" rel="noopener noreferrer">Google’s terms</a></p>
+          <label class="check small"><input type="checkbox" id="ai-consent" aria-describedby="ai-notice"> <span>My reflection contains no personal or sensitive information, and I want to send it for AI suggestions.</span></label>
+          <button type="button" class="btn mt" id="suggest-habits" aria-describedby="ai-notice ai-status">Suggest habits with AI</button>
+          <p class="hint" id="ai-status" role="status" aria-live="polite"></p>
+          <div id="habit-suggestions" class="habit-suggestions" role="group" aria-label="Suggested daily habits"></div>
+        </div>
+        <button type="submit" class="btn btn-primary btn-block">Finish lesson</button>
       </form>`}
   </div>`;
 
   LessonInteractions.mount(l, document.getElementById("lesson-interactions"));
   const form = document.getElementById("goal-form");
   if (!form) return;
+  HabitSuggestions.mount(form, n);
   const goal = form.querySelector("#goal"), wc = form.querySelector("#wc");
   goal.oninput = () => { const count = goal.value.length; wc.textContent = count; wc.style.color = count >= 1000 ? "var(--warn)" : ""; };
   form.onsubmit = async (e) => {
@@ -57,12 +65,13 @@ UI.mount("lessons", function render() {
     if (!h) bad("habit", "Give your daily habit a short name.");
     if (empty || goal.value.length > 1000 || !h) { fields[!h ? "habit" : "goal"].querySelector("input, textarea").focus(); return; }
     if (!Store.canStartLesson(n)) { UI.toast(Store.LESSON_BLOCKED_MSG); UI.attention(UI.HOME_TABS); return; }
-    const button = form.querySelector('button[type="submit"], button');
+    const button = form.querySelector('button[type="submit"]');
     button.disabled = true;
+    form.querySelector('#suggest-habits').disabled = true;
     let r;
     try { r = await Store.completeLesson(n, goal.value, h); }
     catch (_) { r = { ok: false, message: "Your lesson could not be saved. Your reflection is still here; please try again." }; }
-    finally { button.disabled = false; }
+    finally { button.disabled = false; form.querySelector('#suggest-habits').disabled = false; }
     if (!r.ok && r.code === "max_active") { UI.toast(r.message); UI.attention(UI.HOME_TABS); return; }
     if (!r.ok) return UI.alertModal("Couldn't finish", esc(r.message), { error: true });
     UI.flash(r.gainedNow ? "You gained Momentum!" : "Lesson " + n + " complete. New habit added to My habits.");

@@ -19,8 +19,7 @@ window.Social = {
       <div class="post-actions">
         ${isOwner
           ? `<button class="btn btn-sm btn-ghost" data-del="${p.id}" style="color:var(--danger, #d9383a)">${icon("trash", "sm")}Delete</button>`
-          : `<button class="btn btn-sm btn-ghost encourage${Store.encouraged(p.id) ? " on" : ""}" data-enc="${p.id}" aria-pressed="${Store.encouraged(p.id)}">${icon("heart", "sm")}${Store.encouraged(p.id) ? "Encouraged" : "Encourage"}</button>
-             <button class="btn btn-sm btn-ghost" data-msg="${p.authorId}">${icon("message", "sm")}Message ${esc(Store.profile(p.authorId).first)}</button>`}
+          : `<button class="btn btn-sm btn-ghost" data-msg="${p.authorId}">${icon("message", "sm")}Message ${esc(Store.profile(p.authorId).first)}</button>`}
       </div>
     </article>`;
   },
@@ -28,16 +27,14 @@ window.Social = {
     const { icon, esc } = UI;
     const past = Store.isPast(a);
     if (past) {
-      const rep = Store.report(a.id, a.hostId) || Store.state.reports.find((r) => r.activityId === a.id);
-      // Inactive: basic details only (no location or participants), plus the optional report
+      // Inactive: basic details only (no location or participants)
       return `<article class="panel" style="opacity:.92">
-        <div class="post-head">${UI.avatar(a.hostId, "", true)}<div class="who"><span class="name">${UI.nameLink(a.hostId)}</span><div class="tiny muted">Activity · ${esc(UI.fmtDay(a.startsAt))}</div></div><span class="tag grey">Inactive</span></div>
+        <div class="post-head">${UI.avatar(a.hostId, "", true)}<div class="who"><span class="name">${UI.nameLink(a.hostId)}</span><div class="tiny muted">Activity · ${esc(UI.fmtDay(a.startsAt))}</div></div><div class="row" style="gap:6px">${a.visibility === "friends" ? '<span class="tag grey">Friends Only</span>' : ""}<span class="tag grey">Inactive</span></div></div>
         <h3>${esc(a.title)}</h3><p class="small muted">${esc(a.type)}</p>
-        ${rep ? `<div class="goal-box"><span class="tiny muted">Activity report</span><p class="mb0">${esc(rep.body)}</p></div>` : ""}
       </article>`;
     }
     return `<article class="panel">
-      <div class="post-head">${UI.avatar(a.hostId, "", true)}<div class="who"><span class="name">${UI.nameLink(a.hostId)}</span><div class="tiny muted">${UI.fmtAgo(a.createdAt)} · Posted an activity</div></div><span class="tag ok">Active</span></div>
+      <div class="post-head">${UI.avatar(a.hostId, "", true)}<div class="who"><span class="name">${UI.nameLink(a.hostId)}</span><div class="tiny muted">${UI.fmtAgo(a.createdAt)} · Posted an activity</div></div><div class="row" style="gap:6px">${a.visibility === "friends" ? '<span class="tag grey">Friends Only</span>' : ""}<span class="tag ok">Active</span></div></div>
       <h3>${esc(a.title)}</h3>
       <div class="meta"><span>${icon("clock", "sm")}${esc(UI.fmtRange(a))}</span><span>${icon("activity", "sm")}${esc(a.location)}</span><span>${icon("users", "sm")}${Store.spotsTaken(a.id)} of ${a.max} going</span></div>
       <p class="mb0">${esc(a.description)}</p>
@@ -45,7 +42,6 @@ window.Social = {
     </article>`;
   },
   bind() {
-    document.querySelectorAll("[data-enc]").forEach((b) => (b.onclick = () => Store.toggleEncourage(b.dataset.enc)));
     document.querySelectorAll("[data-msg]").forEach((b) => (b.onclick = () => UI.Messages.openChat(b.dataset.msg, b.dataset.act || null)));
     document.querySelectorAll("[data-vis]").forEach((s) => (s.onchange = () => { Store.setPostVisibility(s.dataset.vis, s.value); UI.toast("Visibility updated"); }));
     document.querySelectorAll("[data-del]").forEach((b) => (b.onclick = async () => {

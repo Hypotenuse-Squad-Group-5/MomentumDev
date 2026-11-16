@@ -76,7 +76,7 @@
     const d = D(iso);
     return '<div class="date-badge' + (past ? " past" : "") + '"><small>' + d.toLocaleDateString(undefined, { weekday: "short" }).toUpperCase() + "</small><b>" + d.getDate() + "</b><small>" + d.toLocaleDateString(undefined, { month: "short" }).toUpperCase() + "</small></div>";
   }
-  const VIS = { public: "Public", friends_of_friends: "Friends of friends", friends: "Friends", private: "Private" };
+  const VIS = { public: "Public", friends: "Friends Only" };
   function visSelect(value, attrs = "") {
     return "<select " + attrs + ">" + Object.entries(VIS).map(([k, v]) => '<option value="' + k + '"' + (k === value ? " selected" : "") + ">" + v + "</option>").join("") + "</select>";
   }

@@ -146,7 +146,7 @@ UI.mount("activities", async function render() {
           <div class="field"><label for="bring">What to bring <span class="opt">(optional)</span></label><input id="bring" maxlength="80" type="text" placeholder="e.g. water, a snack to share"></div>
           <fieldset class="field choice-list" style="border:0;padding:0">
             <legend class="flabel" style="font-weight:600;margin-bottom:6px">Who can see this activity?</legend>
-            ${Object.entries(UI.VIS).map(([k, v]) => `<label><input type="radio" name="visibility" value="${k}"${k === s.activityVisibility ? " checked" : ""}><span><b>${v}</b>${k === "public" ? '<br><span class="small muted">Anyone on Momentum. The default.</span>' : k === "private" ? '<br><span class="small muted">Only people you invite.</span>' : ""}</span></label>`).join("")}
+            ${Object.entries(UI.VIS).map(([k, v]) => `<label><input type="radio" name="visibility" value="${k}"${k === s.activityVisibility ? " checked" : ""}><span><b>${v}</b>${k === "public" ? '<br><span class="small muted">Anyone on Momentum. The default.</span>' : k === "friends" ? '<br><span class="small muted">Only your friends can see it.</span>' : ""}</span></label>`).join("")}
           </fieldset>
         </div>
       </details>

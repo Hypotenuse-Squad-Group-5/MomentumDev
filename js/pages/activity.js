@@ -23,8 +23,6 @@ UI.mount("activities", function render() {
     return `<div class="attendee">${UI.avatar(id, "sm", Store.isFriend(id))}<span class="grow">${UI.nameLink(id)}${Store.isFriend(id) ? ' <span class="tag ok">Friend</span>' : ""}</span>${via}</div>`;
   }).join("");
 
-  const reports = Store.state.reports.filter((r) => r.activityId === a.id);
-
   // Cancel button with a live counter: "Cancel (2 left)". Grey once they're used up or it's within 3 hours.
   const canC = rsvp ? Store.canCancel(a.id) : { ok: false };
   function cancelButton() {
@@ -39,7 +37,7 @@ UI.mount("activities", function render() {
     <a class="small" href="activities.html">‹ Back to activities</a>
     <article class="stack mt">
       <div>
-        <div class="row"><span class="tag">${esc(a.type)}</span><span class="tag grey">${UI.VIS[a.visibility] || "Public"}</span>
+        <div class="row"><span class="tag">${esc(a.type)}</span>${a.visibility === "friends" ? '<span class="tag grey">Friends Only</span>' : ""}
           ${past ? '<span class="tag grey">Ended</span>' : going ? `<span class="tag ok">${icon("check", "sm")}You're going</span>` : mine ? '<span class="tag flame">You\'re hosting</span>' : need ? `<span class="tag warn">Needs ${need} more to happen</span>` : full ? '<span class="tag grey">Full</span>' : ""}</div>
         <h1 class="mt">${esc(a.title)}</h1>
         <div class="row-between">
@@ -70,8 +68,6 @@ UI.mount("activities", function render() {
           : taken > 1 ? `<div class="attendee"><span class="avatar sm anon">${icon("users", "sm")}</span><span class="grow muted">${taken - 1} ${taken - 1 === 1 ? "person is" : "people are"} going</span></div><p class="hint mt mb0">${past ? "Only the host and people who went can see who went." : "Commit to see who's going."}</p>`
           : `<p class="hint mt mb0">${past ? "No one else went." : "No one else has committed yet."}</p>`}
       </section>
-
-      ${reports.length ? `<section><h2>Activity reports</h2>${reports.map((r) => `<div class="goal-box"><b>${UI.nameLink(r.authorId)}</b><p class="mb0">${esc(r.body)}</p></div>`).join("")}</section>` : ""}
     </article>
 
     ${past ? "" : `<div class="cta-bar">${
@@ -109,7 +105,17 @@ UI.mount("activities", function render() {
       { onMount: (m, close) => (m.querySelector("#confirm-cancel").onclick = async (e) => {
         e.currentTarget.disabled = true; e.currentTarget.textContent = "Cancelling…";
         const r = await Store.cancel(a.id); close();
-        if (r.ok) UI.toast("Commitment cancelled. " + r.left + " left this month."); else UI.alertModal("Couldn't cancel", esc(r.message), { error: true });
+        if (r.ok) {
+          const msg = "Commitment cancelled. " + r.left + " left this month.";
+          if (a.visibility === "friends" && !Store.isFriend(a.hostId)) {
+            UI.flash(msg);
+            location.replace("activities.html");
+            return;
+          }
+          UI.toast(msg);
+        } else {
+          UI.alertModal("Couldn't cancel", esc(r.message), { error: true });
+        }
       }) });
   };
   if ($("commit")) $("commit").onclick = () => openCommit(a);

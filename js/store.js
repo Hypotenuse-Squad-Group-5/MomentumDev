@@ -8,7 +8,7 @@
    Stored in Supabase: accounts, profiles, interests, habits + check-ins,
    lessons, activities, commitments (RSVPs) + +1s + attendance, friendships,
    messages, and posts.
-   Activity reports, likes, and general settings stay browser-local.
+   Likes and general settings stay browser-local.
    ===================================================================== */
 (function () {
   let KEY = null; // this user's browser data: "momentum.v1.user.<profile id>" (set in init)
@@ -39,10 +39,16 @@
   function blankState(me) {
     return {
       version: 1, meId: me.id, signedIn: true, profiles: { [me.id]: me },
-      friendships: [], blocks: [], activities: [], addresses: {}, rsvps: [], guests: [], reports: [], posts: [],
-      encouragements: [], conversations: [], lessonsDone: [], habits: [], checkins: [], momentum: [], cancellations: [],
+      friendships: [], blocks: [], activities: [], addresses: {}, rsvps: [], guests: [], posts: [],
+      conversations: [], lessonsDone: [], habits: [], checkins: [], momentum: [], cancellations: [],
       settings: defaultSettings(),
     };
+  }
+
+  function normalizeVisibility(v, fallback = "public") {
+    if (v === "friends_of_friends") return "public";
+    if (v === "private") return "friends";
+    return v === "public" || v === "friends" ? v : fallback;
   }
 
   // Restore only supported fields so old browser data cannot reintroduce retired features.
@@ -53,6 +59,9 @@
       const FROM_DATABASE = ["rsvps", "guests", "cancellations"];
       Object.keys(restored).forEach((key) => { if (key in saved && !FROM_DATABASE.includes(key)) restored[key] = saved[key]; });
       restored.settings = { ...defaultSettings(), ...restored.settings };
+      restored.settings.activityVisibility = normalizeVisibility(restored.settings.activityVisibility, "public");
+      restored.settings.postVisibility = normalizeVisibility(restored.settings.postVisibility, "friends");
+      restored.settings.friendsListVisibility = normalizeVisibility(restored.settings.friendsListVisibility, "friends");
     }
     return restored;
   }
@@ -610,13 +619,6 @@
   }
   function needsCheckIn() { return myCommitments().filter((a) => isPast(a) && myRsvp(a.id) && myRsvp(a.id).status === "committed" && myRsvp(a.id).attended === null); }
 
-  function report(activityId, authorId) { return state.reports.find((r) => r.activityId === activityId && r.authorId === authorId) || null; }
-  function saveReport(activityId, body) {
-    let r = report(activityId, ME);
-    if (r) r.body = body; else state.reports.push({ id: uid(), activityId, authorId: ME, body, createdAt: nowIso() });
-    save();
-  }
-
   // =====================================================================
   // Habits, lessons, streaks
   // =====================================================================
@@ -891,12 +893,6 @@
     if (p) { p.visibility = v; save(); }
   }
 
-  function encouraged(postId) { return state.encouragements.some((e) => e.postId === postId && e.profileId === ME); }
-  function toggleEncourage(postId) {
-    if (encouraged(postId)) state.encouragements = state.encouragements.filter((e) => !(e.postId === postId && e.profileId === ME));
-    else state.encouragements.push({ postId, profileId: ME, at: nowIso() });
-    save();
-  }
 
   // 10 most recent posts + activities from friends and public posts. No reshuffle, newest first.
   function feed() {
@@ -1568,7 +1564,6 @@
     loadActivities, allActivities: () => actCache || [], loadTypes, types: () => typeCache || [], loadSuggestions, activitySuggestions, validateActivity, createActivity, activity, isPast, attendees, spotsTaken,
     myRsvp, myGuestInvite, isGoing, myCommitments, myCommitmentIds, hosting, conflictFor, commit, cancel, canCancel, hasStarted, canSeeAttendees, loadCommitments, CANCEL_HOURS,
     cancellationsLeft, plusOneInvites, respondPlusOne, checkIn, needsCheckIn, address: (id) => state.addresses[id] || null, loadAddress,
-    report, saveReport,
     // people
     profile, fullName, isFriend, friends, friendshipWith, incomingRequests, sentRequests, acceptFriend, declineFriend,
     removeFriend, sendFriendRequest, cancelFriendRequest, loadFriendships, loadProfile, searchProfiles, sharedActivityId,
@@ -1577,7 +1572,7 @@
     completeLesson, lessonGoal, lessonHabit, momentum, lastDays, stats, canStartLesson, LESSON_BLOCKED_MSG,
     canAddHabit, canArchiveHabit, deleteHabit, MAX_ACTIVE_HABITS, MAX_ARCHIVED_HABITS, MAX_ACTIVE_MSG, ARCHIVE_FULL_MSG,
     // social
-    loadPosts, createPost, deletePost, setPostVisibility, encouraged, toggleEncourage, feed, historyFor,
+    loadPosts, createPost, deletePost, setPostVisibility, feed, historyFor,
     // messages
     loadConversations, conversations, conversation, findDirect, unread, unreadCount, unreadConversationsCount, incomingMessageRequests,
     isRequestToMe, isOutgoingPending, requestStatusFor, markRead, openDirect, sendDirectMessage, send, respondRequest,

@@ -95,14 +95,12 @@ test('restoring old browser data discards awards and preserves commitments and s
  a.Store.state.points=[{kind:'post',points:5}];
  a.Store.state.rsvps.push({id:'old-rsvp',profileId:'user-a',activityId:'old-activity',status:'committed',attended:null});
  a.Store.state.settings.checkinTime='18:00';
- a.Store.saveReport('old-activity','Saved report');
  // A fresh Store instance must read the same cache.
  const saved=a.memory;
  const restored=app(db,{memory:saved});await restored.Store.init();
  assert.equal('points' in restored.Store.state,false);
  assert.equal(restored.Store.state.rsvps[0].id,'old-rsvp');
  assert.equal(restored.Store.state.settings.checkinTime,'18:00');
- assert.equal(restored.Store.state.reports[0].body,'Saved report');
 });
 
 test('habit check-ins still save, restore a streak, and can be unchecked', async () => {

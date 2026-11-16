@@ -79,7 +79,6 @@
 
     const card = (a) => {
       const isPast = Store.isPast(a), r = Store.myRsvp(a.id), host = a.hostId === Store.ME;
-      const myReport = Store.report(a.id, Store.ME);
       return `<details class="event" id="ev-${a.id}">
         <summary>${UI.dateBadge(a.startsAt, isPast)}<div class="grow"><b>${esc(a.title)}</b><div class="small muted">${esc(UI.fmtTime(a.startsAt))} – ${esc(UI.fmtTime(a.endsAt))}</div></div>
           ${host ? '<span class="tag flame">Hosting</span>' : isPast ? (r && r.attended === true ? '<span class="tag ok">Went</span>' : r && r.attended === false ? '<span class="tag grey">Missed</span>' : '<span class="tag warn">Check in</span>') : `<span class="tag ok">${icon("check", "sm")}Committed</span>`}</summary>
@@ -96,7 +95,6 @@
             ${!isPast ? `<button class="btn btn-sm" data-cal="${a.id}">${icon("calendar", "sm")}Add to calendar</button>` : ""}
             ${isPast && r && r.attended === null ? `<button class="btn btn-sm btn-primary" data-went="${a.id}">I went</button><button class="btn btn-sm" data-missed="${a.id}">I didn't make it</button>` : ""}
           </div>
-          ${isPast && (host || (r && r.attended)) ? `<form class="mt" data-report="${a.id}"><label class="flabel small" for="rep-${a.id}"><b>Activity report</b> <span class="opt">(optional, shows on your profile)</span></label><textarea id="rep-${a.id}" maxlength="1000" style="min-height:80px" placeholder="How did it go?">${esc(myReport ? myReport.body : "")}</textarea><button class="btn btn-sm mt">Save report</button></form>` : ""}
         </div></details>`;
     };
 
@@ -127,7 +125,6 @@
     };
     document.querySelectorAll("[data-went]").forEach((b) => (b.onclick = () => checkIn(b, b.dataset.went, true)));
     document.querySelectorAll("[data-missed]").forEach((b) => (b.onclick = () => checkIn(b, b.dataset.missed, false)));
-    document.querySelectorAll("[data-report]").forEach((f) => (f.onsubmit = (e) => { e.preventDefault(); const t = f.querySelector("textarea").value.trim(); if (!t) return; Store.saveReport(f.dataset.report, t); UI.toast("Report saved"); }));
 
     // Just committed? Show the "add it to your calendar" pop-up once.
     const added = UI.qs("added");
