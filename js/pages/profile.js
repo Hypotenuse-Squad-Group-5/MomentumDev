@@ -116,10 +116,8 @@
           <div class="grid-2">
             <div class="field"><label for="link">Link an activity <span class="opt">(optional)</span></label><select id="link"><option value="">None</option>${linkable.map((a) => `<option value="${a.id}"${a.id === compose.activityId ? " selected" : ""}>${esc(a.title)}</option>`).join("")}</select></div>
             <div class="field"><label for="vis">Who can see this?</label>
-              <select id="vis" disabled>
-                <option value="public" selected>Public (All posts are currently public)</option>
-              </select>
-              <p class="hint">All posts made are currently public right now.</p>
+              ${UI.visSelect(compose.visibility, 'id="vis"')}
+              <p class="hint">${compose.visibility === "friends" ? "Only your friends can see it." : "Anyone on Momentum can see it."} Your default is in Settings.</p>
             </div>
           </div>
           ${compose.error ? `<div class="alert">${icon("alert", "sm")}<span>${esc(compose.error)}</span></div>` : ""}
@@ -189,12 +187,12 @@
     $("close-compose").onclick = () => { compose.open = false; render(); };
     $("caption").oninput = (e) => { compose.caption = e.target.value; $("cc").textContent = compose.caption.length; };
     $("link").onchange = (e) => (compose.activityId = e.target.value);
-    $("vis").onchange = (e) => (compose.visibility = e.target.value);
+    $("vis").onchange = (e) => { compose.visibility = e.target.value; render(); };
     form.onsubmit = async (e) => {
       e.preventDefault();
       const submitBtn = $("post-submit-btn");
       if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = "Posting..."; }
-      const r = await Store.createPost({ caption: compose.caption, activityId: compose.activityId, visibility: "public" });
+      const r = await Store.createPost({ caption: compose.caption, activityId: compose.activityId, visibility: compose.visibility });
       if (!r.ok) {
         compose.error = r.message;
         if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = "Post"; }

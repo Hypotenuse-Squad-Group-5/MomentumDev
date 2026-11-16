@@ -6,6 +6,7 @@
     const start = new Date(activity.startsAt);
     if (Number.isNaN(start.getTime())) return false;
 
+    if (activity.cancelledAt) return false; // cancelled: only on the calendars of the people it affected
     if (range === "past") return Store.isPast(activity);
     if (Store.isPast(activity)) return false;
     if (range === "upcoming") return true;

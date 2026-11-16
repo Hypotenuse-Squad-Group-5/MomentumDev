@@ -1,7 +1,12 @@
-/* Home: Momentum front and center, my habits, next activity, quick actions */
+/* Home: Momentum front and center, my habits, quick actions, Notifications panel */
 
 // Manage mode for the Daily practice card (wrench button): edit, archive, reorder.
 let habitManage = false;
+// Notifications panel: shows the top few; "Show all" opens the rest (remembered on this device)
+const NOTES_SHOWN = 4;
+let notesOpen = false;
+try { notesOpen = localStorage.getItem("momentum.notes.open") === "1"; } catch (e) { /* storage blocked */ }
+let notesTimer = null;
 const HABIT_ICONS = {
   wrench: '<svg class="i sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>',
   hammer: '<svg class="i sm" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 12-8.373 8.373a1 1 0 1 1-3-3L12 9"/><path d="m18 15 4-4"/><path d="m21.5 11.5-1.914-1.914A2 2 0 0 1 19 8.172V7l-2.26-2.26a6 6 0 0 0-4.202-1.756L9 2.96l.92.82A6.18 6.18 0 0 1 12 8.4V10l2 2h1.172a2 2 0 0 1 1.414.586L18.5 14.5"/></svg>',
@@ -17,13 +22,7 @@ UI.mount("home", function render() {
   const days = Store.lastDays(7);
   const habits = Store.habits();
   const doneCount = habits.filter((h) => Store.isHabitDone(h.id)).length;
-  const nextCommitted = Store.myCommitments().find((a) => !Store.isPast(a));
-  const nextHosted = Store.hosting()
-    .filter((a) => !Store.isPast(a) && !Store.isGoing(a.id))
-    .sort((a, b) => new Date(a.startsAt) - new Date(b.startsAt))[0];
-  const invites = Store.plusOneInvites();
-  const checkIns = Store.needsCheckIn();
-  const lessonN = Store.currentLesson();
+  const notes = Store.notificationsList();
 
   // Momentum card message (no toast for these: the card shows today's state)
   const left = Math.max(0, s.habitsNeeded - s.habitsDone);
@@ -32,12 +31,50 @@ UI.mount("home", function render() {
     : s.trend === "down" ? "You slowed down yesterday. Gain Momentum today to speed back up."
     : ways + " to gain Momentum.";
 
+  // ---- Notifications panel ----
+  function noteItem(n) {
+    const a = n.activity;
+    switch (n.kind) {
+      case "soon":
+        return `<a class="note warn" href="activity.html?id=${a.id}">${icon("clock", "sm")}<span class="grow"><b>${esc(a.title)}</b> starts in ${n.mins} min<br><span class="small muted">${n.role === "hosting" ? "You're hosting" : "You're going"} · ${esc(a.location)}</span></span>${icon("right", "sm")}</a>`;
+      case "upcoming":
+        return `<a class="note" href="activity.html?id=${a.id}">${UI.dateBadge(a.startsAt)}<span class="grow"><span class="small muted">Next activity you're ${n.role === "hosting" ? "hosting" : "going to"}</span><br><b>${esc(a.title)}</b><br><span class="small muted">${esc(UI.fmtRange(a))}</span></span>${icon("right", "sm")}</a>`;
+      case "checkin":
+        return `<div class="note warn">${icon("check", "sm")}<span class="grow">Did you go to <b>${esc(a.title)}</b>?<br><span class="small muted">${esc(UI.fmtDay(a.startsAt))}</span>
+          <span class="row mt-sm"><button class="btn btn-sm btn-primary" data-checkin="${a.id}" data-yes>Yes, I went</button><button class="btn btn-sm" data-checkin="${a.id}">I didn't make it</button></span></span></div>`;
+      case "cancelled":
+        return `<div class="note danger">${icon("alert", "sm")}<span class="grow"><b>${esc(n.note.title)}</b><br><span class="small">${esc(n.note.body)}</span>
+          ${a ? `<br><a class="small" href="activity.html?id=${a.id}">View activity</a>` : ""}</span><button class="icon-btn sm" data-dismiss="${n.note.id}" aria-label="Dismiss" title="Dismiss">${icon("x", "sm")}</button></div>`;
+      case "plusone":
+        return `<div class="note">${UI.avatar(n.rsvp.profileId, "sm")}<span class="grow"><b>${esc(UI.displayName(n.rsvp.profileId))}</b> invited you as their +1 to <a href="activity.html?id=${a.id}"><b>${esc(a.title)}</b></a><br><span class="small muted">${esc(UI.fmtRange(a))}</span>
+          <span class="row mt-sm"><button class="btn btn-sm btn-primary" data-invite="${n.guest.id}" data-yes>Accept</button><button class="btn btn-sm" data-invite="${n.guest.id}">Decline</button></span></span></div>`;
+      case "friend":
+        return `<div class="note">${UI.avatar(n.request.requesterId, "sm")}<span class="grow"><b>${UI.nameLink(n.request.requesterId)}</b> sent you a friend request
+          <span class="row mt-sm"><button class="btn btn-sm btn-primary" data-accept-friend="${n.request.id}">Accept</button><button class="btn btn-sm" data-decline-friend="${n.request.id}">Decline</button></span></span></div>`;
+      case "message": {
+        const other = Store.otherMember(n.convo), msgs = n.convo.messages || [], last = msgs[msgs.length - 1] || {};
+        return `<button class="note" data-open-convo="${n.convo.id}">${UI.avatar(other, "sm")}<span class="grow">${n.request ? "Message request from" : "New message from"} <b>${esc(UI.displayName(other))}</b>${last.body ? `<br><span class="small muted note-preview">${esc(last.body)}</span>` : ""}</span>${icon("right", "sm")}</button>`;
+      }
+    }
+    return "";
+  }
+  function notesPanel() {
+    const shown = notesOpen ? notes : notes.slice(0, NOTES_SHOWN);
+    return `<aside class="panel home-notes" aria-labelledby="notes-h">
+      <div class="row-between"><h2 class="mb0" id="notes-h">Notifications</h2>${notes.length ? `<span class="tag">${notes.length}</span>` : ""}</div>
+      ${notes.length
+        ? `<div class="notes mt">${shown.map(noteItem).join("")}</div>
+           ${notes.length > NOTES_SHOWN ? `<button class="btn btn-sm btn-ghost btn-block mt" id="notes-more" aria-expanded="${notesOpen}">${notesOpen ? "Show less" : `Show all (${notes.length})`}</button>` : ""}`
+        : `<p class="muted small mt mb0">You're all caught up.</p><a class="btn btn-sm mt" href="activities.html">Find an activity</a>`}
+    </aside>`;
+  }
+
   document.getElementById("main").innerHTML = `
     <p class="muted small mb0">${new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}</p>
     <h1>${greet}, ${esc(me.first)}</h1>
 
     <div class="home-grid mt">
-      <div class="stack">
+      <div class="stack home-top">
         <a class="streak-hero" href="streak.html" aria-label="Momentum ${s.streak}, ${UI.MOMENTUM_WORD[s.trend]}. Details">
           <span class="flame-badge mo-badge">${UI.momentumIcon(s.trend)}</span>
           <span class="grow">
@@ -53,23 +90,11 @@ UI.mount("home", function render() {
           <a class="btn" href="profile.html?compose=1">${icon("post")}Share a post</a>
         </div>
 
-        ${invites.map(({ guest, rsvp, activity: a }) => `
-          <section class="panel tight">
-            <p class="label">+1 invite</p>
-            <p class="mb0"><b>${esc(UI.displayName(rsvp.profileId))}</b> wants to bring you to <a href="activity.html?id=${a.id}"><b>${esc(a.title)}</b></a>.</p>
-            <p class="small muted">${esc(UI.fmtRange(a))}</p>
-            <div class="row"><button class="btn btn-sm btn-primary" data-invite="${guest.id}" data-yes>Accept</button><button class="btn btn-sm" data-invite="${guest.id}">Decline</button></div>
-          </section>`).join("")}
+      </div>
 
-        ${checkIns.map((a) => `
-          <section class="panel tight">
-            <p class="label">Did you go?</p>
-            <p class="mb0"><b>${esc(a.title)}</b> · ${esc(UI.fmtDay(a.startsAt))}</p>
-            <p class="small muted">Let us know whether you made it.</p>
-            <div class="row"><button class="btn btn-sm btn-primary" data-checkin="${a.id}" data-yes>Yes, I went</button><button class="btn btn-sm" data-checkin="${a.id}">I didn't make it</button></div>
-          </section>`).join("")}
+      ${notesPanel()}
 
-        <section class="panel" id="practice">
+        <section class="panel home-habits" id="practice">
           <div class="row-between">
             <div>${habitManage ? '<p class="label">Trail maintenance</p>' : ""}<h2 class="mb0">My habits</h2></div>
             <div class="row">
@@ -105,30 +130,6 @@ UI.mount("home", function render() {
             <p class="hint">Deleting a habit removes it and its check-ins for good. Your Momentum stays.</p>` : ""}
           ${habitManage ? `<form class="row mt" id="add-habit"><input type="text" class="grow" style="flex:1" placeholder="Add a habit, e.g. Read 10 pages before bed" maxlength="80" aria-label="New habit"><button class="btn">${icon("plus", "sm")}Add</button></form>` : ""}
         </section>
-      </div>
-
-      <aside class="stack">
-        <section>
-          <div class="row-between">
-            <p class="label mb0">Your next activities</p>
-          </div>
-          ${nextCommitted ? `<a class="panel tight mt" href="activity.html?id=${nextCommitted.id}">
-              <div class="row" style="flex-wrap:nowrap;gap:12px">${UI.dateBadge(nextCommitted.startsAt)}
-                <div class="grow"><p class="small muted mb0">Next activity you're committed to</p><h3 class="mb0">${esc(nextCommitted.title)}</h3><p class="small muted mb0">${esc(UI.fmtRange(nextCommitted))}</p><span class="tag ok">${icon("check", "sm")}Committed</span></div>${icon("right")}</div></a>`
-            : `<div class="panel tight mt"><p class="small muted mb0">No upcoming activities you're committed to.</p><a class="btn btn-sm mt" href="activities.html">Find an activity</a></div>`}
-          ${nextHosted ? `<a class="panel tight mt" href="activity.html?id=${nextHosted.id}">
-              <div class="row" style="flex-wrap:nowrap;gap:12px">${UI.dateBadge(nextHosted.startsAt)}
-                <div class="grow"><p class="small muted mb0">Next activity you're hosting</p><h3 class="mb0">${esc(nextHosted.title)}</h3><p class="small muted mb0">${esc(UI.fmtRange(nextHosted))}</p><span class="tag">${icon("calendar", "sm")}Hosting</span></div>${icon("right")}</div></a>`
-            : `<div class="panel tight mt"><p class="small muted mb0">You aren't hosting an upcoming activity.</p><a class="btn btn-sm mt" href="activity-new.html">Post an activity</a></div>`}
-        </section>
-        <section class="panel tight">
-          <p class="label">Explore</p>
-          <a class="tile" href="activities.html"><span class="ico">${icon("activity")}</span><span class="grow"><b>Activities</b><br><span class="small muted">Find something to do nearby</span></span>${icon("right", "sm")}</a>
-          <a class="tile" href="${lessonN ? "lesson.html?n=" + lessonN : "lessons.html"}"><span class="ico">${icon("book")}</span><span class="grow"><b>${lessonN ? "Lesson " + lessonN : "Lessons"}</b><br><span class="small muted">${s.lessonPercent}% complete</span></span>${icon("right", "sm")}</a>
-          <a class="tile" href="social.html"><span class="ico">${icon("users")}</span><span class="grow"><b>Social</b><br><span class="small muted">See what friends have been doing</span></span>${icon("right", "sm")}</a>
-          <a class="tile" href="calendar.html"><span class="ico">${icon("calendar")}</span><span class="grow"><b>Calendar</b><br><span class="small muted">${s.upcoming} upcoming commitment${s.upcoming === 1 ? "" : "s"}</span></span>${icon("right", "sm")}</a>
-        </section>
-      </aside>
     </div>`;
 
   // ---- Manage mode ----
@@ -164,7 +165,7 @@ UI.mount("home", function render() {
     finally { button.disabled = false; }
   };
   // These wait for the database (it has the final say on spots and check-ins)
-  const busy = (b) => b.closest(".row").querySelectorAll("button").forEach((x) => (x.disabled = true));
+  const busy = (b) => (b.closest(".row") || b.parentElement).querySelectorAll("button").forEach((x) => (x.disabled = true));
   document.querySelectorAll("[data-invite]").forEach((b) => (b.onclick = async () => {
     const yes = b.hasAttribute("data-yes"); busy(b);
     const r = await Store.respondPlusOne(b.dataset.invite, yes);
@@ -177,6 +178,26 @@ UI.mount("home", function render() {
     if (!r.ok) return UI.alertModal("Couldn't save", UI.esc(r.message || "Please try again."), { error: true });
     UI.toast(!went ? "Thanks for being honest." : r.gainedNow ? "You gained Momentum!" : "Attendance saved.");
   }));
+  document.querySelectorAll("[data-accept-friend], [data-decline-friend]").forEach((b) => (b.onclick = async () => {
+    const yes = b.hasAttribute("data-accept-friend"); busy(b);
+    const r = yes ? await Store.acceptFriend(b.dataset.acceptFriend) : await Store.declineFriend(b.dataset.declineFriend);
+    if (!r.ok) { UI.toast(r.message || "Please try again."); render(); }
+    else if (yes) UI.toast("You're now friends");
+  }));
+  document.querySelectorAll("[data-dismiss]").forEach((b) => (b.onclick = async () => {
+    b.disabled = true;
+    const r = await Store.dismissNotification(b.dataset.dismiss);
+    if (!r.ok) { UI.toast("Couldn't dismiss: " + r.message); b.disabled = false; }
+  }));
+  document.querySelectorAll("[data-open-convo]").forEach((b) => (b.onclick = () => UI.Messages.show("thread", b.dataset.openConvo)));
+  const more = document.getElementById("notes-more");
+  if (more) more.onclick = () => {
+    notesOpen = !notesOpen;
+    try { localStorage.setItem("momentum.notes.open", notesOpen ? "1" : "0"); } catch (e) { /* storage blocked */ }
+    render();
+  };
+  // "Starts in N min" stays current while Home is open
+  if (!notesTimer && typeof setInterval === "function") notesTimer = setInterval(() => { if (document.getElementById("notes-h")) render(); }, 60000);
 });
 
 // Hammer menu: Edit, Archive. Opens upward if there's no room below.

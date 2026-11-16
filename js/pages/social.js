@@ -13,7 +13,7 @@ window.Social = {
     const isOwner = own || p.authorId === Store.ME;
     return `<article class="panel">
       <div class="post-head">${UI.avatar(p.authorId, "", true)}<div class="who"><a class="name" href="profile.html?id=${p.authorId}">${esc(p.authorId === Store.ME ? Store.fullName(Store.ME) : UI.displayName(p.authorId))}</a><div class="tiny muted">${UI.fmtAgo(p.createdAt)} · Post</div></div>
-        ${isOwner ? '<span class="tag ok">Public</span>' : `<span class="tag grey">${UI.VIS[p.visibility] || "Public"}</span>`}</div>
+        ${isOwner ? UI.visSelect(p.visibility === "friends" ? "friends" : "public", `data-vis="${p.id}" aria-label="Who can see this post" class="vis-pick"`) : `<span class="tag grey">${UI.VIS[p.visibility] || "Public"}</span>`}</div>
       <p class="mb0" style="white-space:pre-wrap">${esc(p.caption)}</p>
       ${a ? `<a class="linked-activity" href="activity.html?id=${a.id}">${icon("activity")}<span class="grow"><span class="tiny muted">Activity</span><br><b>${esc(a.title)}</b> · <span class="small">${esc(UI.fmtDay(a.startsAt))}</span></span>${icon("right", "sm")}</a>` : ""}
       <div class="post-actions">
@@ -43,7 +43,12 @@ window.Social = {
   },
   bind() {
     document.querySelectorAll("[data-msg]").forEach((b) => (b.onclick = () => UI.Messages.openChat(b.dataset.msg, b.dataset.act || null)));
-    document.querySelectorAll("[data-vis]").forEach((s) => (s.onchange = () => { Store.setPostVisibility(s.dataset.vis, s.value); UI.toast("Visibility updated"); }));
+    document.querySelectorAll("[data-vis]").forEach((s) => (s.onchange = async () => {
+      s.disabled = true;
+      const r = await Store.setPostVisibility(s.dataset.vis, s.value);
+      s.disabled = false;
+      UI.toast(r.ok ? (s.value === "friends" ? "Only your friends can see this post now" : "Everyone can see this post now") : "Couldn't change visibility: " + r.message);
+    }));
     document.querySelectorAll("[data-del]").forEach((b) => (b.onclick = async () => {
       if (confirm("Delete this post? This cannot be undone.")) {
         const res = await Store.deletePost(b.dataset.del);

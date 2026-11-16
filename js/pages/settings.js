@@ -1,5 +1,7 @@
-/* Settings: General (privacy, notifications) + Profile. Changes save instantly. */
+/* Settings: General (privacy, blocked users, notifications, account) + Profile. General settings save to Supabase instantly. */
 let interestPicks = null; // interests picked on the Profile tab, until saved
+let pwDraft = null;       // what's typed in Change password, so a background refresh doesn't wipe it
+let pwErrors = {};        // field -> message, shown again after a refresh
 UI.mount("settings", function render() {
   const { icon, esc } = UI;
   const s = Store.state.settings, p = Store.profile(Store.ME);
@@ -20,8 +22,6 @@ UI.mount("settings", function render() {
       <h2>Privacy</h2>
       ${sel("postVisibility", "Posts", "Default for new posts", vis)}
       ${sel("activityVisibility", "Activities", "Default for new activities", vis)}
-      ${sel("friendsListVisibility", "Friends list", "Who can see your friends", vis)}
-      ${sel("attendeeDisplay", "On \"Who's going\" lists", "How people who aren't your friends see you", [["first_name", "Show my first name"], ["hidden", "Hide me from non-friends"]])}
     </section>
     <section class="panel mt" id="blocked-users-section">
       <h2>Blocked users</h2>
@@ -35,24 +35,29 @@ UI.mount("settings", function render() {
     </section>
     <section class="panel mt">
       <h2>Notifications</h2>
-      ${sw("notifyActivity", "Activity reminders", "30 minutes before anything you've committed to")}
-      ${sw("notifyHabits", "Habit and streak reminders")}
-      <label class="setting-row"><span class="grow">Daily check-in time</span><input type="time" data-k="checkinTime" value="${esc(s.checkinTime)}"></label>
+      <p class="small muted">These show in the Notifications panel on Home. Cancelled activities always show.</p>
+      ${sw("notifyActivity", "Activity reminders", "Your next activities, and a heads-up 30 minutes before")}
       ${sw("notifyFriends", "Friend requests and +1 invites")}
       ${sw("notifyMessages", "New messages")}
-      ${sw("remindersByEmail", "Send reminders by email instead of push")}
-    </section>
-    <section class="panel mt">
-      <h2>Mindful use</h2>
-      ${sw("pauseBeforeOpen", "Pause before opening", "A short check-in screen before the app opens")}
-      ${sw("weeklySummary", "Weekly progress summary")}
     </section>
     <section class="panel mt">
       <h2>Account</h2>
-      <div class="stack">
+      <p class="small muted">Signed in as ${esc(p.email || "")}. Member since ${new Date(p.memberSince).toLocaleDateString(undefined, { month: "long", year: "numeric" })}.</p>
+      <form id="pw-form" class="mt" novalidate>
+        <p class="label">Change password</p>
+        <div class="field" data-f="current"><label for="pw-current">Current password</label><input id="pw-current" type="password" autocomplete="current-password"><div class="err" hidden></div></div>
+        <div class="field" data-f="next"><label for="pw-next">New password</label><input id="pw-next" type="password" autocomplete="new-password" minlength="8"><div class="hint">At least 8 characters.</div><div class="err" hidden></div></div>
+        <div class="field" data-f="again"><label for="pw-again">New password again</label><input id="pw-again" type="password" autocomplete="new-password"><div class="err" hidden></div></div>
+        <button class="btn" id="pw-save" disabled>Change password</button>
+      </form>
+      <div class="stack mt-lg">
         <a class="btn btn-block" href="index.html" id="sign-out">Sign out</a>
       </div>
-      <p class="hint mt mb0">Signed in as ${esc(p.email || "")}. Member since ${new Date(p.memberSince).toLocaleDateString(undefined, { month: "long", year: "numeric" })}.</p>
+      <div class="danger-zone mt-lg">
+        <p class="label">Delete account</p>
+        <p class="small muted">Permanently deletes your profile, habits, Momentum, posts, messages and commitments. This can't be undone.</p>
+        <button type="button" class="btn btn-danger" id="delete-account">Delete my account</button>
+      </div>
     </section>`
     : `
     <form class="panel" id="profile-form" novalidate>
@@ -82,7 +87,63 @@ UI.mount("settings", function render() {
     </form>`}
   </div>`;
 
-  document.querySelectorAll("[data-k]").forEach((el) => (el.onchange = () => { Store.setSetting(el.dataset.k, el.type === "checkbox" ? el.checked : el.value); UI.toast("Saved"); }));
+  // Settings save to Supabase (user_settings) as soon as they change
+  document.querySelectorAll("[data-k]").forEach((el) => (el.onchange = async () => {
+    const r = await Store.setSetting(el.dataset.k, el.type === "checkbox" ? el.checked : el.value);
+    if (r.ok) UI.toast("Saved"); else { UI.toast("Couldn't save: " + r.message); render(); }
+  }));
+
+  // Change password: current one first (proves it's you), then the new one twice
+  const pw = document.getElementById("pw-form");
+  if (pw) {
+    const val = (id) => pw.querySelector("#" + id).value;
+    const clear = () => pw.querySelectorAll(".invalid").forEach((f) => { f.classList.remove("invalid"); f.querySelector(".err").hidden = true; });
+    const bad = (k, m) => { const f = pw.querySelector(`[data-f="${k}"]`); f.classList.add("invalid"); const e = f.querySelector(".err"); e.textContent = m; e.hidden = false; };
+    const btn = pw.querySelector("#pw-save");
+    const ids = ["pw-current", "pw-next", "pw-again"];
+    const refreshBtn = () => { btn.disabled = !ids.every((id) => val(id)); };
+    if (pwDraft) ids.forEach((id) => { pw.querySelector("#" + id).value = pwDraft[id] || ""; }); // survive re-renders
+    Object.entries(pwErrors).forEach(([k, m]) => bad(k, m));
+    refreshBtn();
+    pw.addEventListener("input", () => { pwDraft = Object.fromEntries(ids.map((id) => [id, val(id)])); refreshBtn(); });
+    pw.onsubmit = async (e) => {
+      e.preventDefault(); clear(); pwErrors = {};
+      if (val("pw-next") !== val("pw-again")) { pwErrors = { again: "The new passwords don't match." }; return bad("again", pwErrors.again); }
+      btn.disabled = true; btn.textContent = "Changing…";
+      const r = await Store.changePassword(val("pw-current"), val("pw-next"));
+      btn.textContent = "Change password";
+      if (!r.ok) { pwErrors = { [r.field || "next"]: r.message }; bad(r.field || "next", r.message); btn.disabled = false; return; }
+      pwDraft = null; pwErrors = {}; pw.reset(); btn.disabled = true; UI.toast("Password changed");
+    };
+  }
+
+  // Delete account: hosts clean up first, then type DELETE to confirm
+  const del = document.getElementById("delete-account");
+  if (del) del.onclick = () => {
+    const blocking = Store.blockingHostedActivities();
+    if (blocking.length) {
+      return UI.modal(`<h2 style="color:var(--danger)">Cancel your activities first</h2>
+        <p>People are going to ${blocking.length === 1 ? "an activity" : "activities"} you're hosting. Cancel ${blocking.length === 1 ? "it" : "them"} first so they're told:</p>
+        <ul>${blocking.map((a) => `<li><a href="activity.html?id=${a.id}">${esc(a.title)}</a> · ${esc(UI.fmtDay(a.startsAt))}</li>`).join("")}</ul>
+        <div class="modal-actions"><button class="btn btn-primary" data-close>OK</button></div>`);
+    }
+    UI.modal(`<h2>Delete your account?</h2>
+      <p>This permanently deletes your profile, habits, Momentum, posts, messages and commitments. Activities you host with nobody going are deleted too. <b>This can't be undone.</b></p>
+      <div class="field"><label for="del-confirm">Type <b>DELETE</b> to confirm</label><input id="del-confirm" type="text" autocomplete="off" autocapitalize="characters"></div>
+      <div class="alert" id="del-msg" hidden></div>
+      <div class="modal-actions"><button class="btn" data-close>Keep my account</button><button class="btn btn-danger solid" id="del-go" disabled>Delete my account</button></div>`,
+      { onMount: (m) => {
+        const input = m.querySelector("#del-confirm"), go = m.querySelector("#del-go"), msg = m.querySelector("#del-msg");
+        input.oninput = () => { go.disabled = input.value.trim() !== "DELETE"; };
+        input.focus();
+        go.onclick = async () => {
+          go.disabled = true; go.textContent = "Deleting…"; msg.hidden = true;
+          const r = await Store.deleteAccount();
+          if (!r.ok) { msg.textContent = r.message; msg.hidden = false; go.textContent = "Delete my account"; go.disabled = false; return; }
+          location.href = "index.html";
+        };
+      } });
+  };
   document.querySelectorAll("[data-unblock]").forEach((b) => (b.onclick = () => UI.confirmUnblock(b.dataset.unblock)));
   const so = document.getElementById("sign-out"); if (so) so.onclick = async (e) => { e.preventDefault(); await Store.auth.signOut(); location.href = "index.html"; };
   interestPicker(INTERESTS, picked, esc, icon, () => refreshSave());

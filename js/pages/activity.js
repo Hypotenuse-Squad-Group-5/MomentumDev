@@ -1,4 +1,4 @@
-/* Activity details: who's going, message host, commit (+1), cancel, add to calendar */
+/* Activity details: who's going, message host, commit (+1), cancel, add to calendar; hosts delete or cancel */
 UI.mount("activities", function render() {
   const { icon, esc } = UI;
   const main = document.getElementById("main");
@@ -12,14 +12,14 @@ UI.mount("activities", function render() {
   const people = seeList ? Store.attendees(a.id) : [];
   const taken = Store.spotsTaken(a.id), need = Math.max(0, a.min - taken), full = taken >= a.max;
   const addr = going || mine ? Store.address(a.id) : null;
+  const cancelled = Store.isCancelled(a);                  // host cancelled it with people going: stays visible, in red
+  const hostState = mine ? Store.hostCancelState(a.id) : { mode: null };
 
-  // Who's going: friends = full profile, non-friends = first name, hidden = counted only
-  let hidden = 0;
+  // Who's going: friends = full profile, everyone else = first name + photo
   const rows = people.map((p) => {
     const via = p.plusOneOf ? `<span class="tag grey">${esc(p.plusOneOf === Store.ME ? "Your" : UI.displayName(p.plusOneOf) + "'s")} +1</span>` : "";
     if (p.kind === "guest") return `<div class="attendee"><span class="avatar sm anon">${esc(p.name[0])}</span><span class="grow">${esc(p.name)}</span>${via}</div>`;
     const id = p.profileId;
-    if (id !== Store.ME && !Store.isFriend(id) && Store.profile(id).attendeeDisplay === "hidden") { hidden++; return ""; }
     return `<div class="attendee">${UI.avatar(id, "sm", Store.isFriend(id))}<span class="grow">${UI.nameLink(id)}${Store.isFriend(id) ? ' <span class="tag ok">Friend</span>' : ""}</span>${via}</div>`;
   }).join("");
 
@@ -35,10 +35,11 @@ UI.mount("activities", function render() {
   main.innerHTML = `
     <div class="narrow" style="max-width:720px">
     <a class="small" href="activities.html">‹ Back to activities</a>
-    <article class="stack mt">
+    ${cancelled ? `<div class="alert cancelled-banner mt">${icon("alert", "sm")}<span><b>Cancelled.</b> ${mine ? "You" : esc(UI.displayName(a.hostId))} cancelled this activity on ${esc(new Date(a.cancelledAt).toLocaleDateString(undefined, { month: "short", day: "numeric" }))}. ${mine ? "Everyone going was notified." : "It's not happening. It stays on your calendar so you know what changed."}</span></div>` : ""}
+    <article class="stack mt${cancelled ? " is-cancelled" : ""}">
       <div>
         <div class="row"><span class="tag">${esc(a.type)}</span>${a.visibility === "friends" ? '<span class="tag grey">Friends Only</span>' : ""}
-          ${past ? '<span class="tag grey">Ended</span>' : going ? `<span class="tag ok">${icon("check", "sm")}You're going</span>` : mine ? '<span class="tag flame">You\'re hosting</span>' : need ? `<span class="tag warn">Needs ${need} more to happen</span>` : full ? '<span class="tag grey">Full</span>' : ""}</div>
+          ${cancelled ? '<span class="tag danger">Cancelled</span>' : past ? '<span class="tag grey">Ended</span>' : going ? `<span class="tag ok">${icon("check", "sm")}You're going</span>` : mine ? '<span class="tag flame">You\'re hosting</span>' : need ? `<span class="tag warn">Needs ${need} more to happen</span>` : full ? '<span class="tag grey">Full</span>' : ""}</div>
         <h1 class="mt">${esc(a.title)}</h1>
         <div class="row-between">
           <div class="person">${UI.avatar(a.hostId, "", Store.isFriend(a.hostId) || mine)}<div><b>${UI.nameLink(a.hostId)}</b><div class="small muted">Host</div></div></div>
@@ -62,16 +63,18 @@ UI.mount("activities", function render() {
         <div class="row-between"><h2 class="mb0">Who's going</h2><span class="small muted">${taken} of ${a.max}</span></div>
         <div class="attendee">${UI.avatar(a.hostId, "sm", Store.isFriend(a.hostId))}<span class="grow">${UI.nameLink(a.hostId)}</span><span class="tag flame">Host</span></div>
         ${rows}
-        ${hidden ? `<div class="attendee"><span class="avatar sm anon">+${hidden}</span><span class="grow muted">${hidden} more ${hidden === 1 ? "person keeps their" : "people keep their"} name private</span></div>` : ""}
         ${seeList ? `<p class="hint mt mb0">Friends show with their full profile. Everyone else shows by first name only.</p>`
           : taken > 1 ? `<div class="attendee"><span class="avatar sm anon">${icon("users", "sm")}</span><span class="grow muted">${taken - 1} ${taken - 1 === 1 ? "person is" : "people are"} going</span></div><p class="hint mt mb0">${past ? "Only the host and people who went can see who went." : "Commit to see who's going."}</p>`
           : `<p class="hint mt mb0">${past ? "No one else went." : "No one else has committed yet."}</p>`}
       </section>
     </article>
 
-    ${past ? "" : `<div class="cta-bar">${
+    ${cancelled || (past && hostState.mode !== "delete") ? "" : `<div class="cta-bar">${
       invite && invite.status === "pending" ? `<p class="mb0 small"><b>${esc(UI.displayName(Store.state.rsvps.find((r) => r.id === invite.rsvpId).profileId))}</b> invited you as their +1.</p><div class="row mt"><button class="btn btn-primary grow" id="accept-invite">Accept and commit</button><button class="btn" id="decline-invite">Decline</button></div>`
-      : mine ? `<p class="mb0"><b>You're hosting.</b> ${need ? `${need} more ${need === 1 ? "person needs" : "people need"} to commit for this to happen.` : "You've hit the minimum. It's happening."}</p>`
+      : mine ? `<div class="row-between"><p class="mb0"><b>You're hosting.</b> ${past ? "Nobody else signed up." : need ? `${need} more ${need === 1 ? "person needs" : "people need"} to commit for this to happen.` : "You've hit the minimum. It's happening."}</p>
+          ${hostState.mode === "delete" ? `<button class="btn btn-sm btn-danger" id="host-remove">Delete activity</button>`
+            : `<button class="btn btn-sm btn-danger" id="host-remove"${hostState.ok ? "" : " disabled"} title="${esc(hostState.reason || "Cancel this activity")}">Cancel activity (${Store.cancellationsLeft()} left)</button>`}</div>
+          ${hostState.mode === "cancel" && !hostState.ok ? `<p class="hint mb0">${esc(hostState.reason)}</p>` : ""}`
       : going ? `<div class="row-between"><span><b>You're committed.</b>${myGuest ? ` <span class="small muted">+1: ${myGuest.guestFirstName ? esc(myGuest.guestFirstName) : esc(UI.displayName(myGuest.guestProfileId))} (${myGuest.status === "pending" ? "waiting for them to accept" : myGuest.status})</span>` : ""}</span>
           <div class="row"><button class="btn btn-sm" id="add-cal">${icon("calendar", "sm")}Add to calendar</button>${rsvp ? cancelButton() : ""}</div></div>${rsvp && cancelHint() ? `<p class="hint mb0">${cancelHint()}</p>` : ""}`
       : started ? `<button class="btn btn-block" disabled>This activity has already started</button>`
@@ -81,6 +84,24 @@ UI.mount("activities", function render() {
     </div>`;
 
   const $ = (id) => document.getElementById(id);
+  // Host: Delete (nobody going) or Cancel (people going: stays visible to them, marked cancelled)
+  if ($("host-remove")) $("host-remove").onclick = () => {
+    const st = Store.hostCancelState(a.id);
+    if (!st.ok) return UI.alertModal("You can't cancel this one", esc(st.reason || ""), { error: true });
+    const n = Store.peopleOn(a.id), left = Store.cancellationsLeft();
+    const body = st.mode === "delete"
+      ? `<h2>Delete this activity?</h2><p>Nobody else has committed, so it's removed for good.</p>`
+      : `<h2>Cancel this activity?</h2><p>${n} ${n === 1 ? "person is" : "people are"} going. They'll be notified, and it stays on their calendar marked <b>cancelled</b>.</p>
+         <div class="alert warn">${icon("alert", "sm")}<span>This uses 1 of your ${left} remaining cancellation${left === 1 ? "" : "s"} this month, and it can't be undone.</span></div>`;
+    UI.modal(`${body}<div class="modal-actions"><button class="btn" data-close>Keep it</button><button class="btn btn-danger solid" id="confirm-remove">${st.mode === "delete" ? "Delete activity" : "Cancel activity"}</button></div>`,
+      { onMount: (m, close) => (m.querySelector("#confirm-remove").onclick = async (e) => {
+        e.currentTarget.disabled = true; e.currentTarget.textContent = st.mode === "delete" ? "Deleting…" : "Cancelling…";
+        const r = await Store.cancelOrDeleteActivity(a.id); close();
+        if (!r.ok) return UI.alertModal("Couldn't cancel", esc(r.message), { error: true });
+        if (r.action === "deleted") { UI.flash("Activity deleted."); location.href = "activities.html"; }
+        else UI.toast("Activity cancelled. Everyone going was notified. " + r.left + " left this month.");
+      }) });
+  };
   if ($("msg-host")) $("msg-host").onclick = () => UI.Messages.openChat(a.hostId, a.id);
   if ($("add-cal")) $("add-cal").onclick = () => UI.addToCalendarModal(a);
   if ($("accept-invite")) $("accept-invite").onclick = async (e) => {

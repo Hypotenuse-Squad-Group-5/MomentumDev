@@ -56,8 +56,7 @@
             <button class="btn btn-sm btn-ghost" data-decline="${f.id}">Decline</button></div>`;
         }).join("")}</div>` : ""}
 
-        <div class="row-between mt-lg"><p class="label mb0">Your friends (${list.length})</p>
-          <label class="small row">Visible to ${UI.visSelect(Store.state.settings.friendsListVisibility, 'id="list-vis" style="width:auto;min-height:32px;padding:3px 8px"')}</label></div>
+        <div class="row-between mt-lg"><p class="label mb0">Your friends (${list.length})</p></div>
         <div class="stack mt">${list.map((f) => `
           <div class="panel tight person">${UI.avatar(f.id, "", true)}
             <span class="grow"><a href="profile.html?id=${f.id}"><b>${esc(Store.fullName(f.id))}</b></a><br><span class="small muted">${esc(metAt(f.metAt))}</span></span>
@@ -112,7 +111,6 @@
       }
       render();
     };
-    document.getElementById("list-vis").onchange = (e) => Store.setSetting("friendsListVisibility", e.target.value);
     document.querySelectorAll("[data-add]").forEach((b) => (b.onclick = async () => {
       b.disabled = true;
       const res = await Store.sendFriendRequest(b.dataset.add);
