@@ -123,3 +123,17 @@
   .steps { grid-template-columns: repeat(3, 1fr); }
   .note-band { grid-template-columns: 1.2fr .8fr; }
 }
+
+
+/* ---------- Public Momentum explainer ---------- */
+.preview .momentum-mark { background: var(--primary-soft); }
+.preview .momentum-mark svg { width: 28px; height: 28px; stroke-width: 2.4; }
+.momentum-explainer { display: grid; gap: 24px; align-items: center; }
+.momentum-example { display: flex; align-items: center; gap: 14px; padding: 18px; border-radius: 14px; background: var(--primary-soft); }
+.momentum-example-icon { display: grid; place-items: center; flex-shrink: 0; width: 58px; height: 58px; border-radius: 16px; background: var(--glass-strong); }
+.momentum-example-icon svg { width: 34px; height: 34px; stroke-width: 2.4; }
+.momentum-example strong, .momentum-example .small { display: block; }
+.momentum-copy h2 { margin-bottom: 10px; }
+.momentum-copy ul { margin: 0 0 14px; padding-left: 1.2rem; }
+.momentum-copy li + li { margin-top: 5px; }
+.momentum-copy p { color: var(--muted-fg); }
