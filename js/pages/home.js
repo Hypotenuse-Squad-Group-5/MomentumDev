@@ -111,7 +111,6 @@ UI.mount("home", function render() {
         <section>
           <div class="row-between">
             <p class="label mb0">Your next activities</p>
-            <a class="small" href="calendar.html">View calendar ${icon("right", "sm")}</a>
           </div>
           ${nextCommitted ? `<a class="panel tight mt" href="activity.html?id=${nextCommitted.id}">
               <div class="row" style="flex-wrap:nowrap;gap:12px">${UI.dateBadge(nextCommitted.startsAt)}
