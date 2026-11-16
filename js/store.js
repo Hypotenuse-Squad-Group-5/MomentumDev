@@ -227,7 +227,7 @@
   // Server-side rules the DB also enforces, checked here first for friendly messages.
   function validateActivity(f) {
     const errs = {};
-    const req = ["title", "typeId", "date", "start", "end", "location", "city", "address", "min", "max", "description"];
+    const req = ["title", "typeId", "date", "start", "end", "location", "city", "address", "description"];
     req.forEach((k) => { if (!String(f[k] ?? "").trim()) errs[k] = "Required."; });
     if (f.title && f.title.length > 50) errs.title = "Keep it to 50 characters or fewer.";
     const min = String(f.min ?? "").trim() === "" ? 3 : Number(f.min);
