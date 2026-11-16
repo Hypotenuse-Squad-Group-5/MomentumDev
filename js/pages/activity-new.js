@@ -119,8 +119,8 @@ UI.mount("activities", async function render() {
             </div>
           </div>
           <div class="grid-2">
-            <div class="field" data-f="min"><label for="min">Min. people</label><input id="min" type="number" min="3" max="20" value="3"><div class="err" hidden></div></div>
-            <div class="field" data-f="max"><label for="max">Max. people</label><input id="max" type="number" min="3" max="20" placeholder="20"><div class="err" hidden></div></div>
+            <div class="field" data-f="min"><label for="min">Min. people <span class="opt">(optional)</span></label><input id="min" type="number" min="3" max="100" placeholder="Default: 3"><div class="hint">Leave blank to require at least 3 people.</div><div class="err" hidden></div></div>
+            <div class="field" data-f="max"><label for="max">Max. people <span class="opt">(optional)</span></label><input id="max" type="number" min="3" max="100" placeholder="Default: 100"><div class="hint">Leave blank to allow up to 100 people.</div><div class="err" hidden></div></div>
           </div>
         </div>
       </details>
