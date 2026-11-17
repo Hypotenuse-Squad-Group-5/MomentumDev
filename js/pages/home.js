@@ -7,6 +7,10 @@ const NOTES_SHOWN = 4;
 let notesOpen = false;
 try { notesOpen = localStorage.getItem("momentum.notes.open") === "1"; } catch (e) { /* storage blocked */ }
 let notesTimer = null;
+// Phones stack Home in one column with habits first, so the urgent notifications (starting
+// soon, cancelled) move into a slim strip above the habits. Desktop shows everything in the panel.
+const WIDE = typeof matchMedia === "function" ? matchMedia("(min-width: 960px)") : null;
+const URGENT = ["soon", "cancelled"];
 const HABIT_ICONS = {
   wrench: '<svg class="i sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>',
   hammer: '<svg class="i sm" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 12-8.373 8.373a1 1 0 1 1-3-3L12 9"/><path d="m18 15 4-4"/><path d="m21.5 11.5-1.914-1.914A2 2 0 0 1 19 8.172V7l-2.26-2.26a6 6 0 0 0-4.202-1.756L9 2.96l.92.82A6.18 6.18 0 0 1 12 8.4V10l2 2h1.172a2 2 0 0 1 1.414.586L18.5 14.5"/></svg>',
@@ -22,7 +26,10 @@ UI.mount("home", function render() {
   const days = Store.lastDays(7);
   const habits = Store.habits();
   const doneCount = habits.filter((h) => Store.isHabitDone(h.id)).length;
-  const notes = Store.notificationsList();
+  const allNotes = Store.notificationsList();
+  const phone = WIDE ? !WIDE.matches : false;
+  const urgent = phone ? allNotes.filter((n) => URGENT.includes(n.kind)) : [];
+  const notes = phone ? allNotes.filter((n) => !URGENT.includes(n.kind)) : allNotes;
 
   // Momentum card message (no toast for these: the card shows today's state)
   const left = Math.max(0, s.habitsNeeded - s.habitsDone);
@@ -65,7 +72,7 @@ UI.mount("home", function render() {
       ${notes.length
         ? `<div class="notes mt">${shown.map(noteItem).join("")}</div>
            ${notes.length > NOTES_SHOWN ? `<button class="btn btn-sm btn-ghost btn-block mt" id="notes-more" aria-expanded="${notesOpen}">${notesOpen ? "Show less" : `Show all (${notes.length})`}</button>` : ""}`
-        : `<p class="muted small mt mb0">You're all caught up.</p><a class="btn btn-sm mt" href="activities.html">Find an activity</a>`}
+        : `<p class="muted small mt mb0">${urgent.length ? "Nothing else right now." : "You're all caught up."}</p><a class="btn btn-sm mt" href="activities.html">Find an activity</a>`}
     </aside>`;
   }
 
@@ -91,6 +98,8 @@ UI.mount("home", function render() {
         </div>
 
       </div>
+
+      ${urgent.length ? `<div class="notes urgent-strip" role="region" aria-label="Needs your attention">${urgent.map(noteItem).join("")}</div>` : ""}
 
       ${notesPanel()}
 
@@ -197,6 +206,7 @@ UI.mount("home", function render() {
     render();
   };
   // "Starts in N min" stays current while Home is open
+  if (WIDE && !WIDE.__home) { WIDE.__home = true; WIDE.addEventListener("change", () => { if (document.getElementById("notes-h")) render(); }); }
   if (!notesTimer && typeof setInterval === "function") notesTimer = setInterval(() => { if (document.getElementById("notes-h")) render(); }, 60000);
 });
 

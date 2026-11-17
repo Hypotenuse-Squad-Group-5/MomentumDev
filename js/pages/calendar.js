@@ -79,7 +79,7 @@
 
     const card = (a) => {
       const isPast = Store.isPast(a), r = Store.myRsvp(a.id), host = a.hostId === Store.ME, off = Store.isCancelled(a);
-      return `<details class="event${off ? " cancelled" : ""}" id="ev-${a.id}">
+      return `<details class="event${off ? " cancelled" : ""}" id="ev-${a.id}" name="cal-events">
         <summary>${UI.dateBadge(a.startsAt, isPast)}<div class="grow"><b>${esc(a.title)}</b><div class="small muted">${esc(UI.fmtTime(a.startsAt))} – ${esc(UI.fmtTime(a.endsAt))}</div></div>
           ${off ? '<span class="tag danger">Cancelled</span>' : host ? '<span class="tag flame">Hosting</span>' : isPast ? (r && r.attended === true ? '<span class="tag ok">Went</span>' : r && r.attended === false ? '<span class="tag grey">Missed</span>' : '<span class="tag warn">Check in</span>') : `<span class="tag ok">${icon("check", "sm")}Committed</span>`}</summary>
         <div class="event-body">
@@ -116,7 +116,15 @@
 
     document.getElementById("prev").onclick = () => { month = new Date(y, m - 1, 1); render(); };
     document.getElementById("next").onclick = () => { month = new Date(y, m + 1, 1); render(); };
-    document.querySelectorAll(".cal .ev").forEach((l) => (l.onclick = () => { const d = document.querySelector(l.getAttribute("href")); if (d) d.open = true; }));
+    // One activity open at a time (name="cal-events" does it in new browsers; this covers older ones)
+    const events = document.querySelectorAll("details.event");
+    events.forEach((d) => d.addEventListener("toggle", () => { if (d.open) events.forEach((o) => { if (o !== d && o.open) o.open = false; }); }));
+    // Tapping an activity in the calendar grid opens it below and scrolls to it
+    document.querySelectorAll(".cal .ev").forEach((l) => (l.onclick = (e) => {
+      const d = document.querySelector(l.getAttribute("href")); if (!d) return;
+      e.preventDefault(); d.open = true;
+      d.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
+    }));
     document.querySelectorAll("[data-cal]").forEach((b) => (b.onclick = () => UI.addToCalendarModal(Store.activity(b.dataset.cal))));
     const checkIn = async (b, id, went) => {
       b.closest(".row").querySelectorAll("button").forEach((x) => (x.disabled = true));

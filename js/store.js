@@ -724,6 +724,18 @@
     return { ok: true };
   }
 
+  // ---- Profile numbers: Activities · Friends · Momentum for any member (migration 025) ----
+  const statsByProfile = {};
+  function profileStats(id) { return statsByProfile[id] || null; }
+  async function loadProfileStats(id) {
+    try {
+      const { data, error } = await sb.rpc("profile_stats", { p_profile: id });
+      if (error || !data) { if (error) console.warn("Profile numbers didn't load (has migration 025 been run?):", error.message); return null; }
+      statsByProfile[id] = { activities: Number(data.activities) || 0, friends: Number(data.friends) || 0, momentum: Number(data.momentum) || 0 };
+      return statsByProfile[id];
+    } catch (e) { return null; }
+  }
+
   // ---- Account ----
   async function changePassword(current, next) {
     const email = (state.profiles[ME] && state.profiles[ME].email) || "";
@@ -938,7 +950,7 @@
   // (locked in by the database); TODAY is judged live on this device so the screen reacts instantly.
   // The number: +1 for each day gained, -2 for each day missed, never below 0. Today never counts
   // against you until it's over.
-  const MOMENTUM_GAIN = 1, MOMENTUM_DECAY = 2;
+  const MOMENTUM_GAIN = 1, MOMENTUM_DECAY = 1;
   const habitsNeeded = () => { const n = habits().length; return n ? Math.ceil(n / 2) : 0; };
   const habitsDoneToday = () => habits().filter((h) => isHabitDone(h.id)).length;
   function momentumDays() {
@@ -1705,7 +1717,7 @@
     loadActivities, allActivities: () => actCache || [], loadTypes, types: () => typeCache || [], loadSuggestions, activitySuggestions, validateActivity, createActivity, activity, isPast, attendees, spotsTaken,
     myRsvp, myGuestInvite, isGoing, myCommitments, myCommitmentIds, hosting, conflictFor, commit, cancel, canCancel, hasStarted, canSeeAttendees, loadCommitments, CANCEL_HOURS,
     peopleOn, hostCancelState, cancelOrDeleteActivity, isCancelled, loadNotifications, dismissNotification, notificationsList,
-    loadSettings, changePassword, deleteAccount, blockingHostedActivities,
+    loadSettings, changePassword, deleteAccount, blockingHostedActivities, profileStats, loadProfileStats,
     cancellationsLeft, plusOneInvites, respondPlusOne, checkIn, needsCheckIn, address: (id) => state.addresses[id] || null, loadAddress,
     // people
     profile, fullName, isFriend, friends, friendshipWith, incomingRequests, sentRequests, acceptFriend, declineFriend,

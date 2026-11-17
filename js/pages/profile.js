@@ -5,6 +5,7 @@
   let loadingProfile = false;
   let missingProfile = false;
   let profileLoadError = "";
+  let statsFor = null; // whose Activities · Friends · Momentum we've asked the database for
 
   UI.mount("profile", function render() {
     const { icon, esc } = UI;
@@ -67,6 +68,20 @@
     const metA = f && f.metAt && Store.activity(f.metAt);
     const pending = !own && !friend && Store.friendshipWith(id);
     const blockedByMe = !own && Store.hasBlocked && Store.hasBlocked(id);
+    // Left: one friend button that changes with the friendship; its options open in a small menu.
+    // Right: Message, always in the same spot ("Blocked" with Unblock if you've blocked them).
+    const menuButton = (label, items, cls = "") => `<div class="menu-wrap"><button type="button" class="btn ${cls}" data-menu aria-haspopup="menu" aria-expanded="false">${label}${icon("chevronDown", "sm")}</button>
+      <div class="menu" role="menu" hidden>${items.map(([itemId, text, danger]) => `<button type="button" role="menuitem" class="menu-item${danger ? " danger" : ""}" id="${itemId}">${text}</button>`).join("")}</div></div>`;
+    function friendButton() {
+      if (friend) return menuButton(`${icon("check", "sm")}Friends`, [["remove-friend", "Remove friend", true]]);
+      if (pending && pending.requesterId === Store.ME) return menuButton("Request sent", [["cancel-req", "Cancel request"]]);
+      if (pending && pending.addresseeId === Store.ME) return menuButton("Respond", [["accept-req", "Accept"], ["decline-req", "Decline"]], "btn-primary");
+      return `<button type="button" class="btn btn-primary" id="add">${icon("userPlus", "sm")}Add friend</button>`;
+    }
+    function messageButton() {
+      if (blockedByMe) return menuButton("Blocked", [["unblock-user", "Unblock"]]);
+      return `<button type="button" class="btn" id="msg">${icon("message", "sm")}Message</button>`;
+    }
     if (compose.visibility === null) compose.visibility = Store.state.settings.postVisibility;
 
     // Non-friends see public hosted activities and public posts
@@ -77,7 +92,12 @@
         (h.kind === "post" && h.post.visibility === "public")
       );
     }
-    const attended = own ? Store.stats().attended : Store.state.rsvps.filter((r) => r.profileId === id && r.status === "committed").length;
+    // Activities · Friends · Momentum, the same three on every profile (database: migration 025)
+    if (statsFor !== id) { statsFor = id; Store.loadProfileStats(id).then((r) => { if (r) render(); }); }
+    const ps = Store.profileStats(id);
+    const nActivities = ps ? ps.activities : own ? Store.stats().attended : "…";
+    const nFriends = own ? Store.friends().length : ps ? ps.friends : "…";
+    const nMomentum = own ? Store.stats().streak : ps ? ps.momentum : "…";
     const linkable = Store.myCommitments().concat(Store.hosting());
 
     document.getElementById("main").innerHTML = `
@@ -92,20 +112,13 @@
           ${(p.interests || []).length ? `<div class="chips mt">${p.interests.map((i) => `<span class="tag">${esc(i)}</span>`).join("")}</div>` : ""}
           ${own || friend ? "" : `<p class="muted small mt">You'll see more once you're friends.</p>`}
           <div class="profile-stats">
-            <div><b>${attended}</b><span>Activities</span></div>
-            <div><b>${own ? Store.friends().length : friend ? "Friend" : "-"}</b><span>${own ? "Friends" : "Status"}</span></div>
-            <div><b>${own ? Store.stats().streak : history.filter((h) => h.kind === "post").length}</b><span>${own ? "Momentum" : "Posts"}</span></div>
+            <div><b>${nActivities}</b><span>Activities</span></div>
+            <div><b>${nFriends}</b><span>Friends</span></div>
+            <div><b>${nMomentum}</b><span>Momentum</span></div>
           </div>
           <div class="row mt">${own
             ? `<button class="btn btn-primary" id="open-compose">${icon("post", "sm")}Share a post</button><a class="btn" href="activity-new.html">${icon("plus", "sm")}Post an activity</a><a class="btn btn-ghost" href="settings.html#profile">${icon("edit", "sm")}Edit profile</a>`
-            : friend
-              ? (blockedByMe
-                  ? `<span class="tag grey">Blocked</span><button class="btn btn-sm" id="unblock-user">Unblock</button><button class="btn btn-danger btn-sm" id="remove-friend">Remove friend</button>`
-                  : `<button class="btn btn-primary" id="msg">${icon("message", "sm")}Message</button><button class="btn btn-danger btn-sm" id="remove-friend">Remove friend</button>`)
-            : pending && pending.requesterId === Store.ME ? `<span class="tag grey">Request sent</span><button class="btn btn-ghost btn-sm" id="cancel-req">Cancel request</button>${blockedByMe ? `<span class="tag grey">Blocked</span><button class="btn btn-sm" id="unblock-user">Unblock</button>` : ""}`
-            : pending && pending.addresseeId === Store.ME ? `<button class="btn btn-primary btn-sm" id="accept-req">Accept friend request</button><button class="btn btn-ghost btn-sm" id="decline-req">Decline</button>${blockedByMe ? `<span class="tag grey">Blocked</span><button class="btn btn-sm" id="unblock-user">Unblock</button>` : ""}`
-            : blockedByMe ? `<button class="btn" id="add">${icon("userPlus", "sm")}Add friend</button><span class="tag grey">Blocked</span><button class="btn btn-sm" id="unblock-user">Unblock</button>`
-            : `<button class="btn" id="add">${icon("userPlus", "sm")}Add friend</button><button class="btn btn-ghost" id="msg">${icon("message", "sm")}${Store.requestStatusFor && Store.requestStatusFor(id).kind === "active" ? "Message" : "Message request"}</button>`}</div>
+            : `${friendButton()}${messageButton()}`}</div>
         </section>
 
         ${own && compose.open ? `
@@ -132,6 +145,21 @@
 
     Social.bind();
     const $ = (s) => document.getElementById(s);
+    // Friend / Blocked menus: open on tap, close on a second tap, outside tap, or Escape
+    document.querySelectorAll("[data-menu]").forEach((b) => (b.onclick = (e) => {
+      e.stopPropagation();
+      const menu = b.nextElementSibling, open = menu.hidden;
+      document.querySelectorAll(".menu").forEach((m) => { m.hidden = true; m.previousElementSibling.setAttribute("aria-expanded", "false"); });
+      menu.hidden = !open; b.setAttribute("aria-expanded", String(open));
+      if (open) menu.querySelector(".menu-item").focus();
+    }));
+    if (!window.__profileMenuClose) {
+      window.__profileMenuClose = true;
+      const closeAll = () => document.querySelectorAll(".menu").forEach((m) => { m.hidden = true; if (m.previousElementSibling) m.previousElementSibling.setAttribute("aria-expanded", "false"); });
+      document.addEventListener("click", (e) => { if (!e.target.closest(".menu-wrap")) closeAll(); });
+      document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeAll(); });
+    }
+    const refreshNumbers = () => Store.loadProfileStats(id).then((r) => { if (r) render(); });
     if ($("msg")) $("msg").onclick = () => UI.Messages.openChat(id);
     if ($("unblock-user")) $("unblock-user").onclick = () => UI.confirmUnblock(id);
     if ($("add")) $("add").onclick = async () => {
@@ -151,7 +179,7 @@
       const fRow = Store.friendshipWith(id);
       if (fRow) {
         const res = await Store.acceptFriend(fRow.id);
-        if (res.ok) UI.toast("You're now friends");
+        if (res.ok) { UI.toast("You're now friends"); refreshNumbers(); }
         else { UI.toast(res.message || "Could not accept request"); render(); }
       } else {
         render();
@@ -175,7 +203,7 @@
           btn.disabled = true;
           const res = await Store.removeFriend(id);
           close();
-          if (res.ok) UI.toast("Friend removed");
+          if (res.ok) { UI.toast("Friend removed"); refreshNumbers(); }
           else UI.toast(res.message || "Could not remove friend");
         })
       });

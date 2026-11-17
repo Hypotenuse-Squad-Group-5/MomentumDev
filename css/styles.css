@@ -557,6 +557,8 @@ details.form-section[open] .form-section-chevron {
 
 /* ---------- Home ---------- */
 .home-grid { display: grid; gap: 16px; }
+/* Phones: Momentum card, urgent strip, habits, then notifications (desktop places each by name) */
+.home-habits { order: 1; } .home-notes { order: 2; }
 .streak-hero {
   display: flex; align-items: center; gap: 16px;
   padding: 20px;
@@ -852,3 +854,19 @@ details.event.cancelled > summary b { color: var(--danger); }
 .danger-zone { border-top: 1px solid var(--border); padding-top: 16px; }
 .danger-zone .label { color: var(--danger); }
 select.vis-pick { width: auto; min-height: 30px; padding: 2px 8px; font-size: .8rem; }
+
+/* ---------- Calendar: the opened activity lands below the header ---------- */
+details.event { scroll-margin-top: calc(var(--header-h) + 16px); }
+
+/* ---------- Profile: friend / blocked menus ---------- */
+.menu-wrap { position: relative; display: inline-flex; }
+.menu-wrap > .btn svg.i:last-child { margin-left: 2px; margin-right: -4px; }
+.menu { position: absolute; top: calc(100% + 6px); left: 0; z-index: 40; min-width: 180px; padding: 6px;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); }
+.menu-item { display: block; width: 100%; padding: 9px 12px; border: 0; border-radius: 8px; background: none;
+  font: inherit; text-align: left; color: var(--fg); cursor: pointer; }
+.menu-item:hover, .menu-item:focus-visible { background: var(--primary-soft); outline: none; }
+.menu-item.danger { color: var(--danger); }
+.menu-item.danger:hover, .menu-item.danger:focus-visible { background: var(--danger-soft); }
+/* the card holding an open menu sits above the cards after it, so the menu isn't covered */
+.panel:has(.menu:not([hidden])) { position: relative; z-index: 50; }
