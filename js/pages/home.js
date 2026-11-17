@@ -49,7 +49,7 @@ UI.mount("home", function render() {
         </a>
 
         <div class="quick-actions">
-          <a class="btn btn-primary" href="activity-new.html">${icon("plus")}Post an activity</a>
+          <a class="btn btn-primary" href="activity-new.html">${icon("plus")}Host an activity</a>
           <a class="btn" href="profile.html?compose=1">${icon("post")}Share a post</a>
         </div>
 
@@ -119,7 +119,7 @@ UI.mount("home", function render() {
           ${nextHosted ? `<a class="panel tight mt" href="activity.html?id=${nextHosted.id}">
               <div class="row" style="flex-wrap:nowrap;gap:12px">${UI.dateBadge(nextHosted.startsAt)}
                 <div class="grow"><p class="small muted mb0">Next activity you're hosting</p><h3 class="mb0">${esc(nextHosted.title)}</h3><p class="small muted mb0">${esc(UI.fmtRange(nextHosted))}</p><span class="tag">${icon("calendar", "sm")}Hosting</span></div>${icon("right")}</div></a>`
-            : `<div class="panel tight mt"><p class="small muted mb0">You aren't hosting an upcoming activity.</p><a class="btn btn-sm mt" href="activity-new.html">Post an activity</a></div>`}
+            : `<div class="panel tight mt"><p class="small muted mb0">You aren't hosting an upcoming activity.</p><a class="btn btn-sm mt" href="activity-new.html">${icon("plus", "sm")}Host an activity</a></div>`}
         </section>
         <section class="panel tight">
           <p class="label">Explore</p>

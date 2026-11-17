@@ -21,7 +21,7 @@ UI.mount("activities", async function render() {
   document.getElementById("main").innerHTML = `
   <div style="max-width:720px">
     <a class="small" href="activities.html">‹ Cancel</a>
-    <div class="page-head mt"><div><h1>Post an activity</h1><p class="muted mb0">Bring people together, in person.</p></div></div>
+    <div class="page-head mt"><div><h1>Host an activity</h1><p class="muted mb0">Bring people together, in person.</p></div></div>
 
     <form class="panel" id="post-form" novalidate>
       <div class="alert" id="form-error" hidden></div>

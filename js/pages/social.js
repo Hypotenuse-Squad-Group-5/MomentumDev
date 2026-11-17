@@ -4,7 +4,7 @@ window.Social = {
   subnav(active) {
     const reqCount = typeof Store !== "undefined" && Store.incomingRequests ? Store.incomingRequests().length : 0;
     const badge = reqCount > 0 ? ` <span class="badge">${reqCount}</span>` : "";
-    return `<nav class="subnav" aria-label="Social">${[["feed", "social.html", "Feed"], ["friends", "friends.html", "Friends" + badge], ["me", "profile.html", "My profile"]]
+    return `<nav class="subnav" aria-label="Social">${[["feed", "social.html", "Feed"], ["friends", "friends.html", "Friends List" + badge], ["me", "profile.html", "My profile"]]
       .map(([k, h, l]) => `<a href="${h}"${k === active ? ' class="active" aria-current="page"' : ""}>${l}</a>`).join("")}</nav>`;
   },
   postCard(p, { own } = {}) {

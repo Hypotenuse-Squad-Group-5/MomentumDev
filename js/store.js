@@ -896,14 +896,13 @@
   }
 
 
-  // 10 most recent posts + activities from friends and public activities. No reshuffle, newest first.
+  // 10 most recent active activities and posts from friends (excluding own posts and activities). No reshuffle, newest first.
   function feed() {
     const fr = new Set(friends().map((f) => f.id));
-    fr.add(ME);
     const items = [];
     const pList = postCache !== null ? postCache : (state.posts || []);
     pList.filter((p) => fr.has(p.authorId)).forEach((p) => items.push({ kind: "post", at: p.createdAt, post: p }));
-    (actCache || []).filter((a) => a.visibility === "public" || fr.has(a.hostId)).forEach((a) => items.push({ kind: "activity", at: a.createdAt, activity: a }));
+    (actCache || []).filter((a) => fr.has(a.hostId) && !isPast(a)).forEach((a) => items.push({ kind: "activity", at: a.createdAt, activity: a }));
     return items.sort((a, b) => new Date(b.at) - new Date(a.at)).slice(0, 10);
   }
 
