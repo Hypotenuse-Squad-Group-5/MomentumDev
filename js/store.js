@@ -33,6 +33,7 @@
       // Saved in Supabase (user_settings); these are only the defaults until it loads
       activityVisibility: "public", // posts are always friends-only (migration 022), so there's no posts setting
       notifyActivity: true, notifyFriends: true, notifyMessages: true,
+      theme: (window.Theme && window.Theme.current()) || "default", // Settings › Appearance (migration 031)
     };
   }
   function blankState(me) {
@@ -778,23 +779,41 @@
   const SETTING_COLUMNS = {
     activityVisibility: "activity_visibility",
     notifyActivity: "notify_activity_reminders", notifyFriends: "notify_friend_requests", notifyMessages: "notify_messages",
+    theme: "theme",
   };
+  // theme loads on its own, so the other settings still load if migration 031 hasn't run yet
+  const CORE_SETTINGS = Object.keys(SETTING_COLUMNS).filter((k) => k !== "theme");
   // Extras that must never block signing in (the page still works with defaults)
   function optional(load) { return Promise.resolve().then(load).catch((e) => { console.warn(load.name + " failed:", e && e.message); return false; }); }
   async function loadSettings() {
     if (!ME) return false;
-    const { data, error } = await sb.from("user_settings").select(Object.values(SETTING_COLUMNS).join(",")).eq("profile_id", ME).maybeSingle();
+    const { data, error } = await sb.from("user_settings").select(CORE_SETTINGS.map((k) => SETTING_COLUMNS[k]).join(",")).eq("profile_id", ME).maybeSingle();
     if (error || !data) { if (error) console.warn("Settings didn't load:", error.message); return false; }
-    Object.entries(SETTING_COLUMNS).forEach(([k, col]) => { if (data[col] != null) state.settings[k] = data[col]; });
+    CORE_SETTINGS.forEach((k) => { const col = SETTING_COLUMNS[k]; if (data[col] != null) state.settings[k] = data[col]; });
     state.settings.activityVisibility = normalizeVisibility(state.settings.activityVisibility, "public");
+    await loadTheme();
     return true;
+  }
+  // Your account's theme wins over this browser's, so it follows you between devices
+  async function loadTheme() {
+    try {
+      const { data, error } = await sb.from("user_settings").select("theme").eq("profile_id", ME).maybeSingle();
+      if (error || !data || !data.theme) return;
+      state.settings.theme = data.theme;
+      if (window.Theme && !window.Theme.previewing && window.Theme.current() !== data.theme) window.Theme.apply(data.theme);
+    } catch (e) { /* before migration 031: keep the browser's theme */ }
   }
   async function setSetting(k, v) {
     if (!(k in SETTING_COLUMNS)) return { ok: false, message: "That setting doesn't exist." };
     const before = state.settings[k];
+    if (k === "theme" && window.Theme) window.Theme.apply(v); // switch right away (before save() redraws the page)
     state.settings[k] = v; save();
     const { error } = await sb.from("user_settings").update({ [SETTING_COLUMNS[k]]: v }).eq("profile_id", ME);
-    if (error) { state.settings[k] = before; save(); return { ok: false, message: error.message }; }
+    if (error) {
+      // the look stays on this device; it just won't follow you until migration 031 runs
+      if (k === "theme") return { ok: true, localOnly: true };
+      state.settings[k] = before; save(); return { ok: false, message: error.message };
+    }
     return { ok: true };
   }
 

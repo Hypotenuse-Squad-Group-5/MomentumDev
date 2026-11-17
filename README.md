@@ -95,7 +95,17 @@ node --test
 node --test tests/lessons.test.cjs
 node --test tests/activity-visibility.test.cjs
 node --test tests/friendships.test.cjs
+node --test tests/themes.test.cjs
 ```
+
+---
+
+## Themes (Settings › Appearance)
+Five looks: Default, Trailhead, Campus Pop, Quiet and Field Notes. Each one is a block of values in `css/styles.css`, so new features follow every theme for free **as long as you use the variables**:
+
+- In CSS, write `var(--primary)`, `var(--r-md)`, `var(--line)`, `var(--shadow)`… never a hard-coded color (`#0c8070`, `oklch(…)`, `rgba(…)`) or corner (`border-radius: 10px`). The list is at the top of `css/styles.css`; add a new variable there if none fits. `tests/themes.test.cjs` fails if a hard-coded value slips in.
+- To check a page in every theme, add `?theme=trailhead` (or `pop`, `quiet`, `field`, `default`) to its address. That previews without saving.
+- `js/theme.js` applies the saved theme before the page paints and loads only that theme's fonts. Adding a theme means: `js/theme.js`, a block in `css/styles.css`, and the allowed list in a new migration (see `database/031_user_theme.sql`).
 
 ---
 

@@ -28,7 +28,7 @@ UI.mount("lessons", function render() {
     const path = document.getElementById("path"), svg = document.getElementById("trail"); if (!path) return;
     const box = path.getBoundingClientRect();
     const pts = [...path.querySelectorAll(".orb")].map((o) => { const r = o.getBoundingClientRect(); return [r.left - box.left + r.width / 2, r.top - box.top + r.height / 2]; });
-    svg.innerHTML = pts.slice(1).map((p, i) => `<line x1="${pts[i][0]}" y1="${pts[i][1]}" x2="${p[0]}" y2="${p[1]}" stroke="oklch(0.82 0.03 200)" stroke-width="6" stroke-linecap="round" stroke-dasharray="1 14"/>`).join("");
+    svg.innerHTML = pts.slice(1).map((p, i) => `<line x1="${pts[i][0]}" y1="${pts[i][1]}" x2="${p[0]}" y2="${p[1]}" style="stroke:var(--trail)" stroke-width="6" stroke-linecap="round" stroke-dasharray="1 14"/>`).join("");
   });
 
   // Finishing a lesson adds a habit, so a NEW lesson needs a free habit slot (5 max). Point them to Home.
