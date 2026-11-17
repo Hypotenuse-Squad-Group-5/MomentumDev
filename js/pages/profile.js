@@ -96,7 +96,7 @@
             <div><b>${own ? Store.stats().streak : friend ? history.filter((h) => h.kind === "post").length : "-"}</b><span>${own ? "Momentum" : "Posts"}</span></div>
           </div>
           <div class="row mt">${own
-            ? `<button class="btn btn-primary" id="open-compose">${icon("post", "sm")}Share a post</button><a class="btn" href="activity-new.html">${icon("plus", "sm")}Post an activity</a><a class="btn btn-ghost" href="settings.html#profile">${icon("edit", "sm")}Edit profile</a>`
+            ? `<a class="btn btn-primary" href="activity-new.html">${icon("plus", "sm")}Host an activity</a><button class="btn" id="open-compose">${icon("post", "sm")}Share a post</button><a class="btn btn-ghost" href="settings.html#profile">${icon("edit", "sm")}Edit profile</a>`
             : friend
               ? (blockedByMe
                   ? `<span class="tag grey">Blocked</span><button class="btn btn-sm" id="unblock-user">Unblock</button><button class="btn btn-danger btn-sm" id="remove-friend">Remove friend</button>`
