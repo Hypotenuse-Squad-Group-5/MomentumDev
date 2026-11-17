@@ -25,6 +25,7 @@
     clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
     filter: '<path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z"/>',
     check: '<path d="M20 6 9 17l-5-5"/>',
+    chevronDown: '<polyline points="6 9 12 15 18 9"/>',
     lock: '<rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
     x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
     send: '<path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/>',
@@ -215,9 +216,8 @@
     const socialBadge = reqCount > 0 ? ' <span class="badge" aria-label="' + reqCount + ' pending friend requests">' + reqCount + "</span>" : "";
     const side = document.getElementById("app-sidebar");
     if (side) {
-      side.innerHTML = NAV.map((n) => '<a class="nav-item' + (n.key === pageKey ? " active" : "") + '" href="' + n.href + '"' + (n.key === pageKey ? ' aria-current="page"' : "") + ">" + icon(n.icon) + n.label + (n.key === "social" ? socialBadge : "") + "</a>").join("") +
-        '<a class="nav-item' + (pageKey === "profile" ? " active" : "") + '" href="profile.html">' + icon("user") + "My profile</a><hr>" +
-        '<a class="nav-item' + (pageKey === "settings" ? " active" : "") + '" href="settings.html">' + icon("settings") + "Settings</a>";
+      // Same five as the phone tab bar; your profile (avatar) and Settings (gear) are in the header
+      side.innerHTML = NAV.map((n) => '<a class="nav-item' + (n.key === pageKey ? " active" : "") + '" href="' + n.href + '"' + (n.key === pageKey ? ' aria-current="page"' : "") + ">" + icon(n.icon) + n.label + (n.key === "social" ? socialBadge : "") + "</a>").join("");
     }
     const tabs = document.getElementById("app-tabbar");
     if (tabs) {

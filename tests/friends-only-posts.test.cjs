@@ -122,10 +122,11 @@ test('profile.js composer removes visibility selector and includes friends-only 
   assert.match(code, /visibility:\s*"friends"/);
 });
 
-test('profile.js hides posts and shows "-" for Posts count when viewing non-friend profile', () => {
+test('profile.js hides posts from non-friends and shows Activities, Friends, Momentum on every profile', () => {
   const code = fs.readFileSync('js/pages/profile.js', 'utf8');
-  // Stat shows "-" for non-friends
-  assert.match(code, /friend \? history\.filter\(\(h\) => h\.kind === "post"\)\.length : "-"/);
+  // Every profile shows the same three numbers (decided 2026-11-16: no Status or Posts stat)
+  assert.match(code, /<span>Activities<\/span>[\s\S]*<span>Friends<\/span>[\s\S]*<span>Momentum<\/span>/);
+  assert.doesNotMatch(code, /<span>\$\{own \? "Momentum" : "Posts"\}<\/span>/);
   // History filter excludes posts for non-friends
   assert.match(code, /h\.kind === "activity" && h\.hosting && h\.activity\.visibility === "public"/);
   assert.doesNotMatch(code, /h\.kind === "post" && h\.post\.visibility === "public"/);

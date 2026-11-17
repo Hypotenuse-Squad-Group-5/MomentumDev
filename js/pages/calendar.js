@@ -74,14 +74,14 @@
       const evs = mine.filter((a) => Store.dayKey(a.startsAt) === key);
       const hArr = holidayEmojis(y, m, d);
       const hE = hArr ? pickEmoji(hArr, y, m, d) : '';
-      cells.push(`<div class="day${key === Store.today() ? " today" : ""}"><div class="d-row"><span class="d">${d}</span>${hE ? `<span class="h-emoji" title="${key}">${hE}</span>` : ''}</div>${evs.map((a) => `<a class="ev${Store.isPast(a) ? " past" : ""}" href="#ev-${a.id}" title="${esc(a.title)}">${UI.fmtTime(a.startsAt).replace(":00", "")}<span class="t"> ${esc(a.title)}</span></a>`).join("")}</div>`);
+      cells.push(`<div class="day${key === Store.today() ? " today" : ""}"><div class="d-row"><span class="d">${d}</span>${hE ? `<span class="h-emoji" title="${key}">${hE}</span>` : ''}</div>${evs.map((a) => `<a class="ev${Store.isCancelled(a) ? " cancelled" : Store.isPast(a) ? " past" : ""}" href="#ev-${a.id}" title="${esc(a.title)}">${UI.fmtTime(a.startsAt).replace(":00", "")}<span class="t"> ${esc(a.title)}</span></a>`).join("")}</div>`);
     }
 
     const card = (a) => {
-      const isPast = Store.isPast(a), r = Store.myRsvp(a.id), host = a.hostId === Store.ME;
-      return `<details class="event" id="ev-${a.id}">
+      const isPast = Store.isPast(a), r = Store.myRsvp(a.id), host = a.hostId === Store.ME, off = Store.isCancelled(a);
+      return `<details class="event${off ? " cancelled" : ""}" id="ev-${a.id}" name="cal-events">
         <summary>${UI.dateBadge(a.startsAt, isPast)}<div class="grow"><b>${esc(a.title)}</b><div class="small muted">${esc(UI.fmtTime(a.startsAt))} – ${esc(UI.fmtTime(a.endsAt))}</div></div>
-          ${host ? '<span class="tag flame">Hosting</span>' : isPast ? (r && r.attended === true ? '<span class="tag ok">Went</span>' : r && r.attended === false ? '<span class="tag grey">Missed</span>' : '<span class="tag warn">Check in</span>') : `<span class="tag ok">${icon("check", "sm")}Committed</span>`}</summary>
+          ${off ? '<span class="tag danger">Cancelled</span>' : host ? '<span class="tag flame">Hosting</span>' : isPast ? (r && r.attended === true ? '<span class="tag ok">Went</span>' : r && r.attended === false ? '<span class="tag grey">Missed</span>' : '<span class="tag warn">Check in</span>') : `<span class="tag ok">${icon("check", "sm")}Committed</span>`}</summary>
         <div class="event-body">
           <dl class="kv">
             <dt>Host</dt><dd>${UI.nameLink(a.hostId)}</dd>
@@ -89,11 +89,12 @@
             <dt>Group</dt><dd>${Store.spotsTaken(a.id)} ${isPast ? "signed up" : "going"} (min ${a.min}, max ${a.max})</dd>
             ${a.bring ? `<dt>Bring</dt><dd>${esc(a.bring)}</dd>` : ""}
           </dl>
-          ${!isPast ? `<p class="small mt">${icon("clock", "sm")} You'll get a reminder 30 minutes before the start.</p>` : ""}
+          ${off ? `<p class="small mt cancelled-note">${icon("alert", "sm")} ${host ? "You" : esc(UI.displayName(a.hostId))} cancelled this activity. It's not happening.</p>`
+            : !isPast ? `<p class="small mt">${icon("clock", "sm")} You'll see a reminder on Home 30 minutes before the start.</p>` : ""}
           <div class="row mt">
             <a class="btn btn-sm" href="activity.html?id=${a.id}">Full details</a>
-            ${!isPast ? `<button class="btn btn-sm" data-cal="${a.id}">${icon("calendar", "sm")}Add to calendar</button>` : ""}
-            ${isPast && r && r.attended === null ? `<button class="btn btn-sm btn-primary" data-went="${a.id}">I went</button><button class="btn btn-sm" data-missed="${a.id}">I didn't make it</button>` : ""}
+            ${!isPast && !off ? `<button class="btn btn-sm" data-cal="${a.id}">${icon("calendar", "sm")}Add to calendar</button>` : ""}
+            ${isPast && !off && r && r.attended === null ? `<button class="btn btn-sm btn-primary" data-went="${a.id}">I went</button><button class="btn btn-sm" data-missed="${a.id}">I didn't make it</button>` : ""}
           </div>
         </div></details>`;
     };
@@ -115,7 +116,15 @@
 
     document.getElementById("prev").onclick = () => { month = new Date(y, m - 1, 1); render(); };
     document.getElementById("next").onclick = () => { month = new Date(y, m + 1, 1); render(); };
-    document.querySelectorAll(".cal .ev").forEach((l) => (l.onclick = () => { const d = document.querySelector(l.getAttribute("href")); if (d) d.open = true; }));
+    // One activity open at a time (name="cal-events" does it in new browsers; this covers older ones)
+    const events = document.querySelectorAll("details.event");
+    events.forEach((d) => d.addEventListener("toggle", () => { if (d.open) events.forEach((o) => { if (o !== d && o.open) o.open = false; }); }));
+    // Tapping an activity in the calendar grid opens it below and scrolls to it
+    document.querySelectorAll(".cal .ev").forEach((l) => (l.onclick = (e) => {
+      const d = document.querySelector(l.getAttribute("href")); if (!d) return;
+      e.preventDefault(); d.open = true;
+      d.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
+    }));
     document.querySelectorAll("[data-cal]").forEach((b) => (b.onclick = () => UI.addToCalendarModal(Store.activity(b.dataset.cal))));
     const checkIn = async (b, id, went) => {
       b.closest(".row").querySelectorAll("button").forEach((x) => (x.disabled = true));

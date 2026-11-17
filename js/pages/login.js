@@ -35,7 +35,7 @@
         <div class="alert" id="form-msg" hidden></div>
         ${signup ? `<div class="grid-2">${field("first_name", "First name", text("first_name", "text", 'autocomplete="given-name" maxlength="40"'))}${field("last_name", "Last name", text("last_name", "text", 'autocomplete="family-name" maxlength="60"'), "Private. Only friends can see this.")}</div>` : ""}
         ${field("email", "Email", text("email", "email", 'autocomplete="email"'), signup ? "Private. Used to sign in." : "")}
-        ${field("password", "Password", pw("password", signup ? "new-password" : "current-password"), signup ? "--> Use upper and lowercase letters, a number, and a symbol." : "")}
+        ${field("password", "Password", pw("password", signup ? "new-password" : "current-password"), signup ? "--> Minimum 8 characters. Use upper and lowercase letters, a number, and a symbol." : "")}
         ${signup ? field("password_confirm", "Confirm password", pw("password_confirm", "new-password")) : ""}
         ${signup ? `
           ${field("sex", "Sex", `<select id="sex"><option value="">Choose</option>${[["male", "Male"], ["female", "Female"], ["prefer_not_to_say", "Prefer not to say"]].map(([v, l]) => `<option value="${v}"${saved.sex === v ? " selected" : ""}>${l}</option>`).join("")}</select>`, "Private. Only used for aggregate activity details.")}

@@ -116,8 +116,8 @@ test('Store normalizes legacy visibility settings', () => {
   const storeCode = fs.readFileSync('js/store.js', 'utf8');
   assert.match(storeCode, /function normalizeVisibility/);
   assert.match(storeCode, /restored\.settings\.activityVisibility = normalizeVisibility/);
-  assert.match(storeCode, /restored\.settings\.postVisibility = normalizeVisibility/);
-  assert.match(storeCode, /restored\.settings\.friendsListVisibility = normalizeVisibility/);
+  // (no posts setting any more: posts are always friends-only, migration 022)
+  // (the friends list visibility setting was removed in the settings cleanup: nothing used it)
 
   // Run the normalization logic in sandbox
   const match = storeCode.match(/function normalizeVisibility\([\s\S]*?^  \}/m);

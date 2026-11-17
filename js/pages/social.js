@@ -43,7 +43,12 @@ window.Social = {
   },
   bind() {
     document.querySelectorAll("[data-msg]").forEach((b) => (b.onclick = () => UI.Messages.openChat(b.dataset.msg, b.dataset.act || null)));
-    document.querySelectorAll("[data-vis]").forEach((s) => (s.onchange = () => { Store.setPostVisibility(s.dataset.vis, s.value); UI.toast("Visibility updated"); }));
+    document.querySelectorAll("[data-vis]").forEach((s) => (s.onchange = async () => {
+      s.disabled = true;
+      const r = await Store.setPostVisibility(s.dataset.vis, s.value);
+      s.disabled = false;
+      UI.toast(r.ok ? (s.value === "friends" ? "Only your friends can see this post now" : "Everyone can see this post now") : "Couldn't change visibility: " + r.message);
+    }));
     document.querySelectorAll("[data-del]").forEach((b) => (b.onclick = async () => {
       if (confirm("Delete this post? This cannot be undone.")) {
         const res = await Store.deletePost(b.dataset.del);

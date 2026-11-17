@@ -7,8 +7,8 @@
 
    Stored in Supabase: accounts, profiles, interests, habits + check-ins,
    lessons, activities, commitments (RSVPs) + +1s + attendance, friendships,
-   messages, and posts.
-   Likes and general settings stay browser-local.
+   messages, posts, general settings (user_settings) and notifications.
+   Likes stay browser-local.
    ===================================================================== */
 (function () {
   let KEY = null; // this user's browser data: "momentum.v1.user.<profile id>" (set in init)
@@ -30,17 +30,16 @@
   // =====================================================================
   function defaultSettings() {
     return {
-      postVisibility: "friends", activityVisibility: "public", friendsListVisibility: "friends",
-      attendeeDisplay: "first_name",
-      notifyActivity: true, notifyHabits: true, notifyFriends: true, notifyMessages: true,
-      remindersByEmail: false, checkinTime: "21:30", pauseBeforeOpen: false, weeklySummary: true,
+      // Saved in Supabase (user_settings); these are only the defaults until it loads
+      activityVisibility: "public", // posts are always friends-only (migration 022), so there's no posts setting
+      notifyActivity: true, notifyFriends: true, notifyMessages: true,
     };
   }
   function blankState(me) {
     return {
       version: 1, meId: me.id, signedIn: true, profiles: { [me.id]: me },
       friendships: [], blocks: [], activities: [], addresses: {}, rsvps: [], guests: [], posts: [],
-      conversations: [], lessonsDone: [], habits: [], checkins: [], momentum: [], cancellations: [],
+      conversations: [], lessonsDone: [], habits: [], checkins: [], momentum: [], cancellations: [], notifications: [],
       settings: defaultSettings(),
     };
   }
@@ -56,12 +55,13 @@
     const restored = blankState(me);
     if (saved && saved.version === 1) {
       // Commitments come from the database now (migration 018): never restore this browser's old copy.
-      const FROM_DATABASE = ["rsvps", "guests", "cancellations"];
+      const FROM_DATABASE = ["rsvps", "guests", "cancellations", "notifications"];
       Object.keys(restored).forEach((key) => { if (key in saved && !FROM_DATABASE.includes(key)) restored[key] = saved[key]; });
-      restored.settings = { ...defaultSettings(), ...restored.settings };
+      // keep only settings that still exist (the database copy replaces these once it loads)
+      const keep = defaultSettings();
+      Object.keys(keep).forEach((k) => { if (restored.settings && k in restored.settings) keep[k] = restored.settings[k]; });
+      restored.settings = keep;
       restored.settings.activityVisibility = normalizeVisibility(restored.settings.activityVisibility, "public");
-      restored.settings.postVisibility = normalizeVisibility(restored.settings.postVisibility, "friends");
-      restored.settings.friendsListVisibility = normalizeVisibility(restored.settings.friendsListVisibility, "friends");
     }
     return restored;
   }
@@ -94,7 +94,7 @@
     const prev = remoteProfiles[p.id] || {
       id: p.id, first: p.first_name || "Someone", last: "",
       bio: "", avatarUrl: null, memberSince: null,
-      interests: [], attendeeDisplay: "first_name",
+      interests: [],
     };
     remoteProfiles[p.id] = {
       ...prev,
@@ -116,6 +116,7 @@
       location: row.general_location, city: row.city, lat: row.latitude != null ? Number(row.latitude) : null,
       lng: row.longitude != null ? Number(row.longitude) : null, min: row.min_participants, max: row.max_participants,
       taken: row.spots_taken != null ? Number(row.spots_taken) : null, // host + people going + their +1s (migration 018)
+      cancelledAt: row.cancelled_at || null, // set when the host cancelled it with people going (migration 023)
       visibility: row.visibility, createdAt: row.created_at, source: "supabase",
     };
   }
@@ -548,6 +549,7 @@
   function canCancel(activityId) {
     const a = activity(activityId); const r = myRsvp(activityId);
     if (!a || !r || r.status !== "committed") return { ok: false, code: "not_committed", reason: "You're not committed to this activity." };
+    if (a.cancelledAt) return { ok: false, code: "activity_cancelled", reason: "The host cancelled this activity." };
     if (new Date(a.startsAt) - new Date() < CANCEL_HOURS * 36e5) return { ok: false, code: "cancel_window", reason: `Commitments can't be cancelled within ${CANCEL_HOURS} hours of the start.` };
     if (cancellationsLeft() === 0) return { ok: false, code: "no_cancels", reason: "You've used both cancellations for this month." };
     return { ok: true };
@@ -556,12 +558,13 @@
   function conflictFor(a) {
     const buf = BUFFER_MIN * 6e4;
     const s = new Date(a.startsAt).getTime(), e = new Date(a.endsAt).getTime();
-    return myCommitments().find((o) => o.id !== a.id && s < new Date(o.endsAt).getTime() + buf && e > new Date(o.startsAt).getTime() - buf) || null;
+    return myCommitments().find((o) => o.id !== a.id && !o.cancelledAt && s < new Date(o.endsAt).getTime() + buf && e > new Date(o.startsAt).getTime() - buf) || null;
   }
 
   async function commit(activityId, plusOne) {
     const a = activity(activityId);
     if (!a) return { ok: false, message: "That activity couldn't be found." };
+    if (a.cancelledAt) return { ok: false, code: "activity_cancelled", message: "The host cancelled this activity." };
     if (!state.signedIn) return { ok: false, code: "login", message: "Sign in to commit to an activity." };
     if (hasStarted(a)) return { ok: false, code: "started", message: isPast(a) ? "This activity has already happened." : "This activity has already started." };
     if (a.hostId === ME) return { ok: false, message: "You're hosting this one." };
@@ -592,7 +595,7 @@
   function plusOneInvites() {
     return state.guests.filter((g) => g.guestProfileId === ME && g.status === "pending").map((g) => {
       const r = state.rsvps.find((x) => x.id === g.rsvpId); return { guest: g, rsvp: r, activity: r && activity(r.activityId) };
-    }).filter((x) => x.rsvp && x.activity && !hasStarted(x.activity));
+    }).filter((x) => x.rsvp && x.activity && !hasStarted(x.activity) && !x.activity.cancelledAt);
   }
   async function respondPlusOne(guestId, accept) {
     const g = state.guests.find((x) => x.id === guestId); if (!g) return { ok: false, message: "That invite is no longer open." };
@@ -619,7 +622,149 @@
     save();
     return { ok: true, gainedNow: !!attended && !before && momentum().gainedToday };
   }
-  function needsCheckIn() { return myCommitments().filter((a) => isPast(a) && myRsvp(a.id) && myRsvp(a.id).status === "committed" && myRsvp(a.id).attended === null); }
+  // ---- Hosts: delete (nobody going) or cancel (people going) an activity (migration 023) ----
+  // Everyone the host would let down: committed people + their accepted or pending +1s
+  function peopleOn(activityId) {
+    const rs = state.rsvps.filter((r) => r.activityId === activityId && r.status === "committed");
+    return rs.length + state.guests.filter((g) => rs.some((r) => r.id === g.rsvpId) && (g.status === "accepted" || g.status === "pending")).length;
+  }
+  // What the host's button should do: { mode: "delete" | "cancel", ok, reason }
+  function hostCancelState(activityId) {
+    const a = activity(activityId);
+    if (!a || a.hostId !== ME || a.cancelledAt) return { mode: null, ok: false };
+    if (peopleOn(activityId) === 0) return { mode: "delete", ok: true };
+    if (hasStarted(a)) return { mode: "cancel", ok: false, code: "started", reason: "It already started, so it stays in everyone's history." };
+    if (new Date(a.startsAt) - new Date() < CANCEL_HOURS * 36e5) return { mode: "cancel", ok: false, code: "cancel_window", reason: `It starts within ${CANCEL_HOURS} hours. Message the people going instead.` };
+    if (cancellationsLeft() === 0) return { mode: "cancel", ok: false, code: "no_cancels", reason: "You've used both cancellations this month. They reset on the 1st." };
+    return { mode: "cancel", ok: true };
+  }
+  async function cancelOrDeleteActivity(activityId) {
+    const { data, error } = await sb.rpc("cancel_or_delete_activity", { p_activity: activityId });
+    if (!error && data && data.action === "deleted") { actCache = (actCache || []).filter((a) => a.id !== activityId); delete state.addresses[activityId]; }
+    await refreshCommitments();
+    if (error) return refusal(error);
+    return { ok: true, action: data.action, left: data.left };
+  }
+  function isCancelled(a) { return !!(a && a.cancelledAt); }
+
+  // ---- Notifications (Home panel) ----
+  // Saved ones come from the database (right now only "activity cancelled"); the rest are
+  // worked out from data already loaded, so they can't get out of date.
+  async function loadNotifications() {
+    if (!ME) return false;
+    const { data, error } = await sb.from("notifications").select("id,kind,title,body,link,send_at,read_at")
+      .is("read_at", null).order("send_at", { ascending: false }).limit(30);
+    if (error) { console.warn("Notifications didn't load (has migration 023 been run?):", error.message); return false; }
+    state.notifications = (data || []).map((n) => ({ id: n.id, kind: n.kind, title: n.title, body: n.body || "", link: n.link || "", at: n.send_at }));
+    return true;
+  }
+  async function dismissNotification(id) {
+    const before = state.notifications;
+    state.notifications = state.notifications.filter((n) => n.id !== id); save();
+    const { error } = await sb.from("notifications").update({ read_at: nowIso() }).eq("id", id);
+    if (error) { state.notifications = before; save(); return { ok: false, message: error.message }; }
+    return { ok: true };
+  }
+  const SOON_MIN = 30;    // "Starts in 25 min" from 30 minutes out
+  const NOTICE_DAYS = 14; // cancellation notices drop off 14 days after the activity's date
+  // Everything for the Home panel, most important first
+  function notificationsList() {
+    const set = state.settings, out = [], now = Date.now();
+    // Starting soon (rank 1) / coming up (rank 7): Activity reminders setting
+    if (set.notifyActivity) {
+      const nextGoing = myCommitments().find((a) => !a.cancelledAt && !hasStarted(a));
+      const nextHosting = hosting().filter((a) => !a.cancelledAt && !hasStarted(a)).sort((x, y) => new Date(x.startsAt) - new Date(y.startsAt))[0];
+      [[nextGoing, "going"], [nextHosting, "hosting"]].forEach(([a, role]) => {
+        if (!a) return;
+        const mins = Math.max(1, Math.round((new Date(a.startsAt) - now) / 6e4));
+        out.push(mins <= SOON_MIN ? { kind: "soon", rank: 1, activity: a, role, mins } : { kind: "upcoming", rank: 7, activity: a, role });
+      });
+    }
+    // Did you go? (always: it's how attended Momentum is earned)
+    needsCheckIn().forEach((a) => out.push({ kind: "checkin", rank: 2, activity: a }));
+    // Activity cancelled (always shown)
+    (state.notifications || []).filter((n) => n.kind === "activity_cancelled").forEach((n) => {
+      const id = (n.link.match(/id=([0-9a-f-]+)/) || [])[1], a = id ? activity(id) : null;
+      const until = new Date(a ? a.startsAt : n.at).getTime() + NOTICE_DAYS * 864e5;
+      if (until > now) out.push({ kind: "cancelled", rank: 3, note: n, activity: a });
+    });
+    // +1 invites and friend requests
+    if (set.notifyFriends) {
+      plusOneInvites().forEach((x) => out.push({ kind: "plusone", rank: 4, ...x }));
+      incomingRequests().forEach((f) => out.push({ kind: "friend", rank: 5, request: f }));
+    }
+    // New messages and message requests
+    if (set.notifyMessages) conversations().filter((c) => unread(c) || isRequestToMe(c)).forEach((c) => out.push({ kind: "message", rank: 6, convo: c, request: isRequestToMe(c) }));
+    return out.sort((x, y) => x.rank - y.rank);
+  }
+
+  // ---- Settings (Supabase: user_settings, one row per person, made at sign-up) ----
+  const SETTING_COLUMNS = {
+    activityVisibility: "activity_visibility",
+    notifyActivity: "notify_activity_reminders", notifyFriends: "notify_friend_requests", notifyMessages: "notify_messages",
+  };
+  // Extras that must never block signing in (the page still works with defaults)
+  function optional(load) { return Promise.resolve().then(load).catch((e) => { console.warn(load.name + " failed:", e && e.message); return false; }); }
+  async function loadSettings() {
+    if (!ME) return false;
+    const { data, error } = await sb.from("user_settings").select(Object.values(SETTING_COLUMNS).join(",")).eq("profile_id", ME).maybeSingle();
+    if (error || !data) { if (error) console.warn("Settings didn't load:", error.message); return false; }
+    Object.entries(SETTING_COLUMNS).forEach(([k, col]) => { if (data[col] != null) state.settings[k] = data[col]; });
+    state.settings.activityVisibility = normalizeVisibility(state.settings.activityVisibility, "public");
+    return true;
+  }
+  async function setSetting(k, v) {
+    if (!(k in SETTING_COLUMNS)) return { ok: false, message: "That setting doesn't exist." };
+    const before = state.settings[k];
+    state.settings[k] = v; save();
+    const { error } = await sb.from("user_settings").update({ [SETTING_COLUMNS[k]]: v }).eq("profile_id", ME);
+    if (error) { state.settings[k] = before; save(); return { ok: false, message: error.message }; }
+    return { ok: true };
+  }
+
+  // ---- Profile numbers: Activities · Friends · Momentum for any member (migration 025) ----
+  const statsByProfile = {};
+  function profileStats(id) { return statsByProfile[id] || null; }
+  async function loadProfileStats(id) {
+    try {
+      const { data, error } = await sb.rpc("profile_stats", { p_profile: id });
+      if (error || !data) { if (error) console.warn("Profile numbers didn't load (has migration 025 been run?):", error.message); return null; }
+      statsByProfile[id] = { activities: Number(data.activities) || 0, friends: Number(data.friends) || 0, momentum: Number(data.momentum) || 0 };
+      return statsByProfile[id];
+    } catch (e) { return null; }
+  }
+
+  // ---- Account ----
+  async function changePassword(current, next) {
+    const email = (state.profiles[ME] && state.profiles[ME].email) || "";
+    if (!current) return { ok: false, field: "current", message: "Enter your current password." };
+    if (!next || next.length < 8) return { ok: false, field: "next", message: "Use at least 8 characters." };
+    if (next === current) return { ok: false, field: "next", message: "Pick a password you haven't been using." };
+    // Prove it's you with a separate, throwaway sign-in so the real session isn't touched
+    const verifier = window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY,
+      { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false, storageKey: "momentum-password-check" } });
+    const check = await verifier.auth.signInWithPassword({ email, password: current });
+    if (check.error) return { ok: false, field: "current", message: "That isn't your current password." };
+    // current_password: needed when Supabase's "Require current password when changing password" is on
+    const { error } = await sb.auth.updateUser({ password: next, current_password: current });
+    if (error) return { ok: false, field: "next", message: error.message };
+    return { ok: true };
+  }
+  // Activities you host that people are going to: these block deleting your account
+  function blockingHostedActivities() { return hosting().filter((a) => !a.cancelledAt && !hasStarted(a) && peopleOn(a.id) > 0); }
+  async function deleteAccount() {
+    const blocking = blockingHostedActivities();
+    if (blocking.length) return { ok: false, code: "hosting", activities: blocking, message: "Cancel the activities you're hosting first." };
+    const me = state.profiles[ME] || {};
+    if (me.avatarUrl) { try { await deleteAvatar(); } catch (e) { /* the account goes either way */ } }
+    const { error } = await sb.rpc("delete_my_account");
+    if (error) return refusal(error);
+    try { Object.keys(localStorage).filter((k) => k.includes(ME) || k.startsWith("momentum")).forEach((k) => localStorage.removeItem(k)); } catch (e) { /* storage may be blocked */ }
+    try { await sb.auth.signOut(); } catch (e) { /* already gone */ }
+    return { ok: true };
+  }
+
+  function needsCheckIn() { return myCommitments().filter((a) => isPast(a) && !a.cancelledAt && myRsvp(a.id) && myRsvp(a.id).status === "committed" && myRsvp(a.id).attended === null); }
 
   // =====================================================================
   // Habits, lessons, streaks
@@ -803,7 +948,7 @@
   // (locked in by the database); TODAY is judged live on this device so the screen reacts instantly.
   // The number: +1 for each day gained, -2 for each day missed, never below 0. Today never counts
   // against you until it's over.
-  const MOMENTUM_GAIN = 1, MOMENTUM_DECAY = 2;
+  const MOMENTUM_GAIN = 1, MOMENTUM_DECAY = 1;
   const habitsNeeded = () => { const n = habits().length; return n ? Math.ceil(n / 2) : 0; };
   const habitsDoneToday = () => habits().filter((h) => isHabitDone(h.id)).length;
   function momentumDays() {
@@ -889,10 +1034,14 @@
     return { ok: true };
   }
 
-  function setPostVisibility(id, v) {
+  async function setPostVisibility(id, v) {
     const list = postCache !== null ? postCache : state.posts;
     const p = (list || []).find((x) => x.id === id);
-    if (p) { p.visibility = v; save(); }
+    if (!p) return { ok: false, message: "That post couldn't be found." };
+    const before = p.visibility; p.visibility = normalizeVisibility(v, before); save();
+    const { error } = await sb.from("posts").update({ visibility: p.visibility }).eq("id", id).eq("author_id", ME);
+    if (error) { p.visibility = before; save(); return { ok: false, message: error.message }; }
+    return { ok: true };
   }
 
 
@@ -902,7 +1051,7 @@
     const items = [];
     const pList = postCache !== null ? postCache : (state.posts || []);
     pList.filter((p) => fr.has(p.authorId)).forEach((p) => items.push({ kind: "post", at: p.createdAt, post: p }));
-    (actCache || []).filter((a) => fr.has(a.hostId) && !isPast(a)).forEach((a) => items.push({ kind: "activity", at: a.createdAt, activity: a }));
+    (actCache || []).filter((a) => fr.has(a.hostId) && !isPast(a) && !a.cancelledAt).forEach((a) => items.push({ kind: "activity", at: a.createdAt, activity: a }));
     return items.sort((a, b) => new Date(b.at) - new Date(a.at)).slice(0, 10);
   }
 
@@ -910,7 +1059,7 @@
     const pList = postCache !== null ? postCache : (state.posts || []);
     const items = pList.filter((p) => p.authorId === profileId).map((p) => ({ kind: "post", at: p.createdAt, post: p }));
     const going = profileId === ME ? new Set(myCommitmentIds()) : new Set(state.rsvps.filter((r) => r.profileId === profileId && r.status === "committed").map((r) => r.activityId));
-    (actCache || []).filter((a) => a.hostId === profileId || going.has(a.id)).forEach((a) => items.push({ kind: "activity", at: a.startsAt, activity: a, hosting: a.hostId === profileId }));
+    (actCache || []).filter((a) => !a.cancelledAt && (a.hostId === profileId || going.has(a.id))).forEach((a) => items.push({ kind: "activity", at: a.startsAt, activity: a, hosting: a.hostId === profileId }));
     return items.sort((a, b) => new Date(b.at) - new Date(a.at));
   }
 
@@ -1266,7 +1415,6 @@
   // =====================================================================
   // Settings + profile
   // =====================================================================
-  function setSetting(k, v) { state.settings[k] = v; if (k === "attendeeDisplay") state.profiles[ME].attendeeDisplay = v; save(); }
   // Signed in: saves to Supabase (public fields → profiles, private → profile_private).
   async function updateProfile(fields) {
     const pub = await sb.from("profiles").update({ first_name: fields.first, bio: fields.bio || null }).eq("id", ME);
@@ -1499,14 +1647,14 @@
       let saved = null;
       try { saved = JSON.parse(localStorage.getItem(KEY)); } catch (e) { /* ignore */ }
       const me = profileFromRows(p, pp);
-      state = restoreState(saved, { ...me, interests: [], attendeeDisplay: "first_name" });
+      state = restoreState(saved, { ...me, interests: [] });
       const old = { ...(state.profiles[ME] || {}) };
       ["phone", "address", "zip", "city", "state", "birthday"].forEach((k) => delete old[k]); // removed in migration 008: clear this browser's copy too
-      state.profiles[ME] = { ...old, ...me, interests: old.interests || [], attendeeDisplay: state.settings.attendeeDisplay };
+      state.profiles[ME] = { ...old, ...me, interests: old.interests || [] };
       if (state && state.settings) delete state.settings.messageRequestsFrom;
       if (!Array.isArray(state.blocks)) state.blocks = [];
       state.meId = ME; state.signedIn = true;
-      const [habitsLoaded, lessonsLoaded] = await Promise.all([loadHabitData(), loadLessonData(), loadPosts(), loadInterests(), loadFriendships(), loadConversations(), loadBlocks(), loadCommitments()]);
+      const [habitsLoaded, lessonsLoaded] = await Promise.all([loadHabitData(), loadLessonData(), loadPosts(), loadInterests(), loadFriendships(), loadConversations(), loadBlocks(), loadCommitments(), optional(loadSettings), optional(loadNotifications)]);
       if (!habitsLoaded || !lessonsLoaded) { loadError = "We couldn't load your saved habits and lesson progress. Please reload to try again."; return "syncerror"; }
       persist();
       return true;
@@ -1564,6 +1712,8 @@
     // activities
     loadActivities, allActivities: () => actCache || [], loadTypes, types: () => typeCache || [], loadSuggestions, activitySuggestions, validateActivity, createActivity, activity, isPast, attendees, spotsTaken,
     myRsvp, myGuestInvite, isGoing, myCommitments, myCommitmentIds, hosting, conflictFor, commit, cancel, canCancel, hasStarted, canSeeAttendees, loadCommitments, CANCEL_HOURS,
+    peopleOn, hostCancelState, cancelOrDeleteActivity, isCancelled, loadNotifications, dismissNotification, notificationsList,
+    loadSettings, changePassword, deleteAccount, blockingHostedActivities, profileStats, loadProfileStats,
     cancellationsLeft, plusOneInvites, respondPlusOne, checkIn, needsCheckIn, address: (id) => state.addresses[id] || null, loadAddress,
     // people
     profile, fullName, isFriend, friends, friendshipWith, incomingRequests, sentRequests, acceptFriend, declineFriend,

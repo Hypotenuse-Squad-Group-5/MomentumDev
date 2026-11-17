@@ -40,7 +40,7 @@ UI.mount("home", function render() {
         <li>Finish a lesson</li>
         <li>Show up to an activity</li>
       </ul>
-      <p class="mb0">Each day you gain it, your Momentum goes <b>up 1</b>. Each day you miss, it slows <b>down 2</b>, but it never drops below zero, and today never counts against you until it's over. Your top speed is the highest it's ever been.</p>
+      <p class="mb0">Each day you gain it, your Momentum goes <b>up 1</b>. Each day you miss, it slows <b>down 1</b>, but it never drops below zero, and today never counts against you until it's over. Your top speed is the highest it's ever been.</p>
     </section>
   </div>`;
 });
