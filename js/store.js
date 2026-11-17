@@ -269,6 +269,65 @@
     return { ok: true, id };
   }
 
+  // Update an activity only while it is still upcoming and only by its host.
+  async function updateActivity(id, f) {
+    const a = activity(id);
+    if (!a || a.hostId !== ME) return { ok: false, message: "You can only edit activities you're hosting." };
+    if (hasStarted(a)) return { ok: false, message: "This activity has already started and can no longer be edited." };
+
+    const errs = validateActivity(f);
+    if (Object.keys(errs).length) return { ok: false, errors: errs };
+
+    const starts = new Date(f.date + "T" + f.start).toISOString();
+    const ends = new Date(f.date + "T" + f.end).toISOString();
+    const payload = {
+      type_id: Number(f.typeId),
+      title: f.title.trim(),
+      activity_name: f.title.trim(),
+      description: f.description.trim(),
+      what_to_bring: f.bring.trim() || null,
+      starts_at: starts,
+      ends_at: ends,
+      general_location: f.location.trim(),
+      city: f.city.trim(),
+      min_participants: String(f.min ?? "").trim() === "" ? 3 : Number(f.min),
+      max_participants: String(f.max ?? "").trim() === "" ? 100 : Number(f.max),
+      visibility: f.visibility,
+    };
+
+    const { data, error } = await sb.from("activities")
+      .update(payload)
+      .eq("id", id)
+      .eq("host_id", ME)
+      .select("id")
+      .maybeSingle();
+    if (error) return { ok: false, message: error.message };
+    if (!data) return { ok: false, message: "The activity could not be updated. It may have started, or you may no longer be its host." };
+
+    // The exact address is stored separately and remains private to the host and attendees.
+    const addressUpdate = await sb.from("activity_addresses")
+      .update({ exact_address: f.address.trim() })
+      .eq("activity_id", id)
+      .select("activity_id")
+      .maybeSingle();
+    if (addressUpdate.error) {
+      return { ok: false, message: "The activity details were saved, but its exact address could not be updated: " + addressUpdate.error.message };
+    }
+    if (!addressUpdate.data) {
+      const addressInsert = await sb.from("activity_addresses")
+        .insert({ activity_id: id, exact_address: f.address.trim() });
+      if (addressInsert.error) {
+        return { ok: false, message: "The activity details were saved, but its exact address could not be saved: " + addressInsert.error.message };
+      }
+    }
+
+    state.addresses[id] = f.address.trim();
+    actCache = null;
+    await loadActivities(true);
+    save();
+    return { ok: true, id };
+  }
+
   // =====================================================================
   // People + friends
   // =====================================================================
@@ -1562,7 +1621,7 @@
     subscribe: (fn) => { listeners.add(fn); return () => listeners.delete(fn); },
     today, dayKey, addDays,
     // activities
-    loadActivities, allActivities: () => actCache || [], loadTypes, types: () => typeCache || [], loadSuggestions, activitySuggestions, validateActivity, createActivity, activity, isPast, attendees, spotsTaken,
+    loadActivities, allActivities: () => actCache || [], loadTypes, types: () => typeCache || [], loadSuggestions, activitySuggestions, validateActivity, createActivity, updateActivity, activity, isPast, attendees, spotsTaken,
     myRsvp, myGuestInvite, isGoing, myCommitments, myCommitmentIds, hosting, conflictFor, commit, cancel, canCancel, hasStarted, canSeeAttendees, loadCommitments, CANCEL_HOURS,
     cancellationsLeft, plusOneInvites, respondPlusOne, checkIn, needsCheckIn, address: (id) => state.addresses[id] || null, loadAddress,
     // people
