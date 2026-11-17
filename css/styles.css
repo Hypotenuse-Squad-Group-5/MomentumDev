@@ -870,3 +870,17 @@ details.event { scroll-margin-top: calc(var(--header-h) + 16px); }
 .menu-item.danger:hover, .menu-item.danger:focus-visible { background: var(--danger-soft); }
 /* the card holding an open menu sits above the cards after it, so the menu isn't covered */
 .panel:has(.menu:not([hidden])) { position: relative; z-index: 50; }
+
+/* ---------- Lesson map: each lesson's name sits beside its circle, clear of the trail ---------- */
+.lesson-node { width: 78px; }
+.lesson-node .t { position: absolute; top: 50%; transform: translateY(-50%); width: max-content;
+  max-width: min(180px, calc(50vw - 72px)); text-align: left; }
+.lesson-node.label-right .t { left: calc(100% + 14px); }
+.lesson-node.label-left .t { right: calc(100% + 14px); text-align: right; }
+.lesson-path { gap: 34px; }
+/* Phones: the circles run in a straight column near the left, every label to its right */
+@media (max-width: 639px) {
+  .lesson-path { align-items: flex-start; padding-left: 28px; }
+  .lesson-node { transform: none !important; }
+  .lesson-node.label-left .t, .lesson-node.label-right .t { left: calc(100% + 16px); right: auto; text-align: left; max-width: calc(100vw - 32px - 28px - 78px - 16px); }
+}

@@ -1,4 +1,5 @@
 /* Activity details: who's going, message host, commit (+1), cancel, add to calendar; hosts delete or cancel */
+const addressAsked = new Set(); // exact addresses already fetched on this page
 UI.mount("activities", function render() {
   const { icon, esc } = UI;
   const main = document.getElementById("main");
@@ -12,6 +13,8 @@ UI.mount("activities", function render() {
   const people = seeList ? Store.attendees(a.id) : [];
   const taken = Store.spotsTaken(a.id), need = Math.max(0, a.min - taken), full = taken >= a.max;
   const addr = going || mine ? Store.address(a.id) : null;
+  // Hosts (and people going) see the exact address: fetch it once if this device doesn't have it yet
+  if ((going || mine) && !addr && !addressAsked.has(a.id)) { addressAsked.add(a.id); Store.loadAddress(a.id).then((v) => { if (v) render(); }); }
   const cancelled = Store.isCancelled(a);                  // host cancelled it with people going: stays visible, in red
   const hostState = mine ? Store.hostCancelState(a.id) : { mode: null };
 
@@ -26,9 +29,11 @@ UI.mount("activities", function render() {
   // Cancel button with a live counter: "Cancel (2 left)". Grey once they're used up or it's within 3 hours.
   const canC = rsvp ? Store.canCancel(a.id) : { ok: false };
   function cancelButton() {
+    if (canC.free) return `<button class="btn btn-sm btn-danger" id="cancel" title="The host changed the plan, so this won't use a cancellation">Cancel (free)</button>`;
     return `<button class="btn btn-sm btn-danger" id="cancel"${canC.ok ? "" : " disabled"} title="${esc(canC.ok ? "Cancel your commitment" : canC.reason || "")}">Cancel (${Store.cancellationsLeft()} left)</button>`;
   }
   function cancelHint() {
+    if (canC.free) return "The host changed the date, time or place, so cancelling won't use one of your cancellations.";
     return canC.code === "cancel_window" ? `Cancelling closes ${Store.CANCEL_HOURS} hours before the start.` : canC.code === "no_cancels" ? "You've used both cancellations this month. They reset on the 1st." : "";
   }
 
@@ -39,18 +44,19 @@ UI.mount("activities", function render() {
     <article class="stack mt${cancelled ? " is-cancelled" : ""}">
       <div>
         <div class="row"><span class="tag">${esc(a.type)}</span>${a.visibility === "friends" ? '<span class="tag grey">Friends Only</span>' : ""}
+          ${!cancelled && a.editedAt ? `<span class="tag grey" title="Edited ${esc(new Date(a.editedAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }))}">Edited</span>` : ""}
           ${cancelled ? '<span class="tag danger">Cancelled</span>' : past ? '<span class="tag grey">Ended</span>' : going ? `<span class="tag ok">${icon("check", "sm")}You're going</span>` : mine ? '<span class="tag flame">You\'re hosting</span>' : need ? `<span class="tag warn">Needs ${need} more to happen</span>` : full ? '<span class="tag grey">Full</span>' : ""}</div>
         <h1 class="mt">${esc(a.title)}</h1>
         <div class="row-between">
           <div class="person">${UI.avatar(a.hostId, "", Store.isFriend(a.hostId) || mine)}<div><b>${UI.nameLink(a.hostId)}</b><div class="small muted">Host</div></div></div>
-          ${mine ? (!started ? '<a class="btn btn-sm" href="activity-new.html?edit=' + a.id + '">' + icon("edit", "sm") + 'Edit event</a>' : "") : `<button class="btn btn-sm" id="msg-host">${icon("message", "sm")}Message host</button>`}
+          ${mine ? (!started && !cancelled ? '<a class="btn btn-sm" href="activity-new.html?edit=' + a.id + '">' + icon("edit", "sm") + 'Edit event</a>' : "") : `<button class="btn btn-sm" id="msg-host">${icon("message", "sm")}Message host</button>`}
         </div>
       </div>
 
       <div class="panel">
         <dl class="kv">
           <dt>${icon("clock", "sm")}When</dt><dd>${esc(UI.fmtRange(a))}</dd>
-          <dt>${icon("activity", "sm")}Where</dt><dd>${esc(a.location)}${UI.distanceMi(a) != null ? ` <span class="muted">· ${UI.fmtMi(UI.distanceMi(a))} away</span>` : ""}<br>
+          <dt>${icon("activity", "sm")}Where</dt><dd>${esc(a.location)}<br>
             ${addr ? `<span class="tag ok">${icon("lock", "sm")}Address unlocked</span> <b>${esc(addr)}</b>` : `<span class="small muted">${icon("lock", "sm")} The exact address appears after you commit.</span>`}</dd>
           <dt>${icon("users", "sm")}Group</dt><dd>${taken} going · needs at least ${a.min} · max ${a.max}</dd>
           ${a.bring ? `<dt>${icon("check", "sm")}Bring</dt><dd>${esc(a.bring)}</dd>` : ""}
@@ -126,7 +132,7 @@ UI.mount("activities", function render() {
         e.currentTarget.disabled = true; e.currentTarget.textContent = "Cancelling…";
         const r = await Store.cancel(a.id); close();
         if (r.ok) {
-          const msg = "Commitment cancelled. " + r.left + " left this month.";
+          const msg = r.free ? "Commitment cancelled. This one was free since the plan changed." : "Commitment cancelled. " + r.left + " left this month.";
           if (a.visibility === "friends" && !Store.isFriend(a.hostId)) {
             UI.flash(msg);
             location.replace("activities.html");

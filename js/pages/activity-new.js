@@ -32,6 +32,7 @@ UI.mount("activities", async function render() {
     <a class="small" href="${editingActivity ? "activity.html?id=" + editingActivity.id : "activities.html"}">‹ Cancel</a>
     <div class="page-head mt"><div><h1>${editingActivity ? "Edit activity" : "Host an activity"}</h1><p class="muted mb0">${editingActivity ? "Update the details so everyone has the right information." : "Bring people together, in person."}</p></div></div>
 
+    ${editingActivity && Store.peopleOn(editingActivity.id) > 0 ? `<div class="alert warn" style="margin-bottom:14px">${icon("alert", "sm")}<span><b>${Store.peopleOn(editingActivity.id)} ${Store.peopleOn(editingActivity.id) === 1 ? "person is" : "people are"} going.</b> If you change the date, time or place, they'll be notified and can cancel for free. Those lock ${Store.CANCEL_HOURS} hours before the start.</span></div>` : ""}
     <form class="panel" id="post-form" novalidate>
       <div class="alert" id="form-error" hidden></div>
 
