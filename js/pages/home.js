@@ -122,14 +122,14 @@ UI.mount("home", function render() {
               if (habitManage) {
                 return `<div class="habit manage" data-id="${h.id}">
                   <button class="grip" data-grip aria-label="Reorder ${esc(h.title)}. Drag, or use the arrow keys." title="Hold and drag to reorder">${HABIT_ICONS.grip}</button>
-                  <span class="grow"><span class="title">${esc(h.title)}</span>${h.lessonNumber ? `<br><span class="tag grey">From Lesson ${h.lessonNumber}</span>` : ""}</span>
+                  <span class="grow"><span class="title clip" title="${esc(h.title)}">${esc(h.title)}</span>${h.lessonNumber ? `<span class="tag grey habit-from">From Lesson ${h.lessonNumber}</span>` : ""}</span>
                   <button class="icon-btn" data-tools="${h.id}" aria-label="Options for ${esc(h.title)}" aria-haspopup="menu" style="width:34px;height:34px">${HABIT_ICONS.hammer}</button>
                 </div>`;
               }
               const done = Store.isHabitDone(h.id);
               return `<button class="habit${done ? " done" : ""}" data-habit="${h.id}" aria-pressed="${done}">
                 <span class="box">${done ? icon("check", "sm") : ""}</span>
-                <span class="grow"><span class="title">${esc(h.title)}</span>${h.lessonNumber ? `<br><span class="tag grey">From Lesson ${h.lessonNumber}</span>` : ""}</span>
+                <span class="grow"><span class="title clip" title="${esc(h.title)}">${esc(h.title)}</span>${h.lessonNumber ? `<span class="tag grey habit-from">From Lesson ${h.lessonNumber}</span>` : ""}</span>
                 </button>`;
             }).join("")}
             ${habitManage
@@ -139,7 +139,7 @@ UI.mount("home", function render() {
           </div>
           ${habitManage && Store.archivedHabits().length ? `
             <p class="label mt-lg">Archived · ${Store.archivedHabits().length} of ${Store.MAX_ARCHIVED_HABITS}</p>
-            <div class="stack">${Store.archivedHabits().map((h) => `<div class="row-between soft"><span class="muted grow">${esc(h.title)}</span><div class="row"><button class="btn btn-sm" data-restore="${h.id}">Restore</button><button class="btn btn-sm btn-danger solid" data-delete="${h.id}">Delete</button></div></div>`).join("")}</div>
+            <div class="stack">${Store.archivedHabits().map((h) => `<div class="row-between soft"><span class="muted grow clip" title="${esc(h.title)}">${esc(h.title)}</span><div class="row"><button class="btn btn-sm" data-restore="${h.id}">Restore</button><button class="btn btn-sm btn-danger solid" data-delete="${h.id}">Delete</button></div></div>`).join("")}</div>
             <p class="hint">Deleting a habit removes it and its check-ins for good. Your Momentum stays.</p>` : ""}
           ${habitManage ? `<form class="row mt" id="add-habit"><input type="text" class="grow" style="flex:1" placeholder="Add a habit, e.g. Read 10 pages before bed" maxlength="80" aria-label="New habit"><button class="btn">${icon("plus", "sm")}Add</button></form>` : ""}
         </section>
