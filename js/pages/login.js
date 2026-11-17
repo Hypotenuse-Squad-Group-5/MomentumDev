@@ -10,6 +10,28 @@
   let pendingEmail = "";
   const saved = {};          // keeps typed values when the form re-renders
 
+  // Password rules (same as the Supabase project's settings). The checklist ticks them off as you type.
+  const PW_RULES = [
+    ["len", "8+ characters", (v) => v.length >= 8],
+    ["lower", "lowercase letter", (v) => /[a-z]/.test(v)],
+    ["upper", "uppercase letter", (v) => /[A-Z]/.test(v)],
+    ["digit", "number", (v) => /[0-9]/.test(v)],
+    ["symbol", "symbol (like ! or #)", (v) => /[!@#$%^&*()_+\-=\[\]{};':"\\|<>?,.\/`~]/.test(v)],
+  ];
+  const pwMissing = (v) => PW_RULES.filter(([, , ok]) => !ok(v || ""));
+  const PW_CHECKLIST = `<ul class="pw-rules" id="pw-rules" aria-label="Password needs">${PW_RULES.map(([k, label]) => `<li data-rule="${k}">${label}</li>`).join("")}</ul>`;
+  function updateChecklist() {
+    const list = $("pw-rules"); if (!list) return;
+    const v = $("password").value;
+    PW_RULES.forEach(([k, , ok]) => list.querySelector(`[data-rule="${k}"]`).classList.toggle("ok", ok(v)));
+  }
+  // "Still needs an uppercase letter and a symbol."
+  function pwNeeds(missing) {
+    const words = missing.map(([k, label]) => (k === "len" ? "at least 8 characters" : (/^[aeiou]/.test(label) ? "an " : "a ") + label));
+    const list = words.length > 1 ? words.slice(0, -1).join(", ") + " and " + words[words.length - 1] : words[0];
+    return "Still needs " + list + ".";
+  }
+
   const field = (id, label, input, hint = "") =>
     `<div class="field" data-f="${id}"><label for="${id}">${label}</label>${input}${hint ? `<div class="hint">${hint}</div>` : ""}<div class="err" hidden></div></div>`;
   const EYE = '<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>';
@@ -35,7 +57,7 @@
         <div class="alert" id="form-msg" hidden></div>
         ${signup ? `<div class="grid-2">${field("first_name", "First name", text("first_name", "text", 'autocomplete="given-name" maxlength="40"'))}${field("last_name", "Last name", text("last_name", "text", 'autocomplete="family-name" maxlength="60"'), "Private. Only friends can see this.")}</div>` : ""}
         ${field("email", "Email", text("email", "email", 'autocomplete="email"'), signup ? "Private. Used to sign in." : "")}
-        ${field("password", "Password", pw("password", signup ? "new-password" : "current-password"), signup ? "--> Minimum 8 characters. Use upper and lowercase letters, a number, and a symbol." : "")}
+        ${field("password", "Password", pw("password", signup ? "new-password" : "current-password"), signup ? PW_CHECKLIST : "")}
         ${signup ? field("password_confirm", "Confirm password", pw("password_confirm", "new-password")) : ""}
         ${signup ? `
           ${field("sex", "Sex", `<select id="sex"><option value="">Choose</option>${[["male", "Male"], ["female", "Female"], ["prefer_not_to_say", "Prefer not to say"]].map(([v, l]) => `<option value="${v}"${saved.sex === v ? " selected" : ""}>${l}</option>`).join("")}</select>`, "Private. Only used for aggregate activity details.")}
@@ -76,6 +98,14 @@
     return errs;
   }
 
+  // Which field a Supabase error belongs to, so it's highlighted there instead of only at the top
+  function errorField(error) {
+    const m = (error && error.message) || "";
+    if (/password/i.test(m)) return "password";
+    if (/email/i.test(m) && !/not confirmed|rate limit/i.test(m)) return "email";
+    return null;
+  }
+
   // Supabase's messages, in plain words
   function friendly(error) {
     const m = (error && error.message) || "";
@@ -100,7 +130,22 @@
     $("switch").onclick = (e) => { e.preventDefault(); mode = mode === "signup" ? "signin" : "signup"; render(); };
     const form = $("auth");
     const isPw = (id) => id === "password" || id === "password_confirm";
-    form.querySelectorAll("input, select").forEach((el) => (el.oninput = () => { if (!isPw(el.id)) saved[el.id] = el.type === "checkbox" ? el.checked : el.value; if (isPw(el.id)) checkMatch(); }));
+    const signup = mode === "signup";
+    form.querySelectorAll("input, select").forEach((el) => (el.oninput = el.onchange = () => {
+      if (!isPw(el.id)) saved[el.id] = el.type === "checkbox" ? el.checked : el.value;
+      if (isPw(el.id)) checkMatch();
+      if (el.id === "password" && signup) updateChecklist();
+      // Fixed it? Take the red off this field right away
+      const f = el.closest(".field.invalid");
+      if (f && el.id !== "password_confirm") {
+        const fixed = el.type === "checkbox" ? el.checked : el.id === "password" && signup ? !pwMissing(el.value).length : !!el.value;
+        if (fixed) clearField(el.id);
+      }
+      // Everything fixed: the "fix the highlighted fields" note at the top can go too
+      const msg = $("form-msg");
+      if (!form.querySelector(".field.invalid") && msg.textContent.startsWith("Fix the highlighted")) msg.hidden = true;
+    }));
+    if (signup) updateChecklist();
     // Flag a mismatch as soon as the confirm box has something in it
     function checkMatch() {
       const c = $("password_confirm"); if (!c) return;
@@ -139,6 +184,7 @@
       }
 
       const errs = validateSignup(v);
+      if (v.password && pwMissing(v.password).length) errs.password = pwNeeds(pwMissing(v.password)); // password rules
       if (Object.keys(errs).length) {
         Object.entries(errs).forEach(([k, m]) => fieldError(k, m));
         showMsg("Fix the highlighted fields. Everything you typed is still here.");
@@ -149,7 +195,15 @@
         first_name: v.first_name, last_name: v.last_name, sex: v.sex, age_confirmed: v.age_ok === true,
       });
       busy(false);
-      if (error) return showMsg(friendly(error));
+      if (error) {
+        const where = errorField(error);
+        if (where) {
+          fieldError(where, friendly(error));
+          showMsg("Fix the highlighted fields. Everything you typed is still here.");
+          return $(where).focus();
+        }
+        return showMsg(friendly(error));
+      }
       // With email confirmation on, Supabase hides whether an email is already registered:
       // an existing address comes back as a "user" with no identities.
       if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
