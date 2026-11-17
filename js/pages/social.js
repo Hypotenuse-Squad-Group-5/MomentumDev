@@ -18,7 +18,7 @@ window.Social = {
       ${a ? `<a class="linked-activity" href="activity.html?id=${a.id}">${icon("activity")}<span class="grow"><span class="tiny muted">Activity</span><br><b>${esc(a.title)}</b> · <span class="small">${esc(UI.fmtDay(a.startsAt))}</span></span>${icon("right", "sm")}</a>` : ""}
       <div class="post-actions">
         ${isOwner
-          ? `<button class="btn btn-sm btn-ghost" data-del="${p.id}" style="color:var(--danger, #d9383a)">${icon("trash", "sm")}Delete</button>`
+          ? `<button class="btn btn-sm btn-ghost" data-del="${p.id}" style="color:var(--danger)">${icon("trash", "sm")}Delete</button>`
           : `<button class="btn btn-sm btn-ghost" data-msg="${p.authorId}">${icon("message", "sm")}Message ${esc(Store.profile(p.authorId).first)}</button>`}
       </div>
     </article>`;

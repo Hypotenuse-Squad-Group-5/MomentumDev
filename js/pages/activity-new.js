@@ -44,9 +44,9 @@ UI.mount("activities", async function render() {
         </label>
         <div id="reuse-picker" hidden style="margin-top:10px">
           <p class="small muted mb0" style="margin-bottom:6px">Select an activity to pre-fill everything except the date:</p>
-          <div class="stack" id="reuse-list" style="max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;padding:6px">
+          <div class="stack" id="reuse-list" style="max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--r-md);padding:6px">
             ${pastHosted.map((a) => `
-              <button type="button" class="reuse-item" data-reuse-id="${esc(a.id)}" aria-pressed="false" style="display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:8px 10px;border:0;background:none;border-radius:8px;cursor:pointer;font-size:.88rem;color:inherit">
+              <button type="button" class="reuse-item" data-reuse-id="${esc(a.id)}" aria-pressed="false" style="display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:8px 10px;border:0;background:none;border-radius:var(--r-sm);cursor:pointer;font-size:.88rem;color:inherit">
                 <span style="font-size:1.1rem" aria-hidden="true">${esc(typeEmoji(a.type))}</span>
                 <span class="grow"><b>${esc(a.title)}</b><br><span class="small muted">${esc(a.activityName || "")} · ${esc(a.location || "")} · ${esc(new Date(a.startsAt).toLocaleDateString())}</span></span>
               </button>

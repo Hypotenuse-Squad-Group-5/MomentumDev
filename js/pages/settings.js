@@ -13,12 +13,29 @@ UI.mount("settings", function render() {
   const blockedList = Store.blockedUsers ? Store.blockedUsers() : [];
   if (!interestPicks) interestPicks = (p.interests || []).slice(); // unsaved picks survive a re-render
   const picked = interestPicks;
+  const themes = window.Theme ? Theme.ids : ["default"];
+  const currentTheme = window.Theme ? Theme.current() : "default";
+  if (tab === "general" && window.Theme) Theme.loadAllFonts();
   document.getElementById("main").innerHTML = `
   <div style="max-width:720px">
     <h1>Settings</h1>
     <nav class="subnav" aria-label="Settings sections"><a href="#general"${tab === "general" ? ' class="active"' : ""}>General</a><a href="#profile"${tab === "profile" ? ' class="active"' : ""}>Profile</a></nav>
     ${tab === "general" ? `
-    <section class="panel">
+    <section class="panel" id="appearance">
+      <h2>Appearance</h2>
+      <p class="small muted mb0">Pick a look. It changes colors, corners and fonts, and follows your account to every device.</p>
+      <div class="theme-picker" role="radiogroup" aria-label="Theme">
+        ${themes.map((id) => `<label class="theme-opt">
+          <input type="radio" name="theme" value="${id}" data-k="theme"${id === currentTheme ? " checked" : ""}>
+          <span class="theme-frame"><span class="theme-swatch" data-theme="${id}" aria-hidden="true">
+            <span class="ts-aa">Aa</span><span class="ts-hero"></span>
+            <span class="ts-row"><span class="ts-dot"></span><span class="ts-line"></span></span><span class="ts-btn"></span>
+          </span></span>
+          <span class="theme-name">${esc(window.Theme ? Theme.name(id) : id)}</span>
+        </label>`).join("")}
+      </div>
+    </section>
+    <section class="panel mt">
       <h2>Privacy</h2>
       ${sel("activityVisibility", "Activities", "Default for new activities", vis)}
     </section>
@@ -89,7 +106,7 @@ UI.mount("settings", function render() {
   // Settings save to Supabase (user_settings) as soon as they change
   document.querySelectorAll("[data-k]").forEach((el) => (el.onchange = async () => {
     const r = await Store.setSetting(el.dataset.k, el.type === "checkbox" ? el.checked : el.value);
-    if (r.ok) UI.toast("Saved"); else { UI.toast("Couldn't save: " + r.message); render(); }
+    if (r.ok) UI.toast(r.localOnly ? "Saved on this device" : "Saved"); else { UI.toast("Couldn't save: " + r.message); render(); }
   }));
 
   // Change password: current one first (proves it's you), then the new one twice
