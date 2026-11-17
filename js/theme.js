@@ -25,6 +25,30 @@
     try { return localStorage.getItem(KEY); } catch (e) { return null; }
   }
 
+  // Browser-tab icon in the theme's logo colors (read from styles.css, so they're set in one place).
+  // Default keeps img/favicon.svg. The installed app icon (manifest) always stays teal.
+  function setIcon(id) {
+    var links = document.querySelectorAll('link[rel~="icon"]'); // the PNG and SVG tab icons
+    if (!links.length) return;
+    links.forEach(function (l) { if (!l.hasAttribute("data-default-href")) l.setAttribute("data-default-href", l.getAttribute("href")); });
+    if (id === "default") { links.forEach(function (l) { l.setAttribute("href", l.getAttribute("data-default-href")); l.type = l.getAttribute("data-default-type") || l.type; }); return; }
+    if (document.readyState !== "complete") {  // wait until styles.css has loaded
+      window.addEventListener("load", function () { if (current === id) setIcon(id); }, { once: true });
+      return;
+    }
+    var css = getComputedStyle(document.documentElement);
+    var c = function (name) { return css.getPropertyValue(name).trim(); };
+    if (!c("--logo-tile")) return;
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="23" fill="' + c("--logo-tile") + '"/>' +
+      '<g transform="translate(4 -1.5) scale(0.92)"><path d="M12 78 L38 34 L64 78 Z" fill="' + c("--logo-back") + '" stroke="' + c("--logo-back") + '" stroke-width="6" stroke-linejoin="round"/>' +
+      '<path d="M36 78 L62 34 L88 78 Z" fill="' + c("--logo-front") + '" stroke="' + c("--logo-front") + '" stroke-width="6" stroke-linejoin="round"/></g></svg>';
+    var href = "data:image/svg+xml," + encodeURIComponent(svg);
+    links.forEach(function (l) {
+      if (!l.hasAttribute("data-default-type")) l.setAttribute("data-default-type", l.type || "");
+      l.type = "image/svg+xml"; l.setAttribute("href", href);
+    });
+  }
+
   function apply(id, remember) {
     if (!THEMES[id]) id = "default";
     var html = document.documentElement;
@@ -41,6 +65,7 @@
 
     var meta = document.querySelector('meta[name="theme-color"]');
     if (meta) meta.setAttribute("content", THEMES[id].color);
+    setIcon(id);
 
     if (remember !== false) { try { localStorage.setItem(KEY, id); } catch (e) {} }
     return id;

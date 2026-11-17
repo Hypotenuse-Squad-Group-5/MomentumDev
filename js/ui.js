@@ -174,9 +174,13 @@
     { key: "social", href: "social.html", label: "Social", icon: "users" },
   ];
 
+  // The logo, drawn inline so its colors follow the theme (--logo-* in styles.css).
+  // img/logo.svg stays teal for the app icon and README.
+  const LOGO = '<svg class="logo" viewBox="0 0 100 100" aria-hidden="true" focusable="false"><rect class="lg-tile" width="100" height="100" rx="23"/><g transform="translate(10.4 10.4) scale(0.792)"><circle class="lg-sun" cx="50" cy="27" r="9"/><path class="lg-back" d="M12 78 L38 34 L64 78 Z" stroke-width="5" stroke-linejoin="round"/><path class="lg-front" d="M36 78 L62 34 L88 78 Z" stroke-width="5" stroke-linejoin="round"/></g></svg>';
+
   function headerHtml() {
     const s = Store.stats(); const u = Store.unreadCount();
-    return '<a href="home.html" class="brand" aria-label="Momentum home"><span class="brand-mark"><img src="img/logo.svg" alt=""></span><span class="brand-name">Momentum</span></a>' +
+    return '<a href="home.html" class="brand" aria-label="Momentum home"><span class="brand-mark">' + LOGO + '</span><span class="brand-name">Momentum</span></a>' +
       '<a href="streak.html" class="streak-chip mo-chip-' + (MOMENTUM_WORD[s.trend] ? s.trend : "flat") + '" title="Momentum ' + s.streak + ", " + MOMENTUM_WORD[s.trend || "flat"] + '" aria-label="Momentum ' + s.streak + ", " + MOMENTUM_WORD[s.trend || "flat"] + '">' + momentumIcon(s.trend, "sm") + s.streak + "</a>" +
       '<button class="icon-btn" id="msg-toggle" aria-label="Messages" aria-expanded="false">' + icon("message") + (u ? '<span class="badge">' + u + "</span>" : "") + "</button>" +
       '<a href="settings.html" class="icon-btn" aria-label="Settings">' + icon("settings") + "</a>" +
@@ -188,8 +192,8 @@
   const shellKey = () => { const id = Store.savedLogin(); return id && id !== "saved" ? "momentum.shell." + id : null; };
   function readShell() { try { const k = shellKey(); return k ? JSON.parse(localStorage.getItem(k)) : null; } catch (e) { return null; } }
   function saveShell(data) { try { const k = shellKey(); if (k) localStorage.setItem(k, JSON.stringify(data)); } catch (e) { /* ignore */ } }
-  const BRAND_ONLY = '<a href="home.html" class="brand" aria-label="Momentum home"><span class="brand-mark"><img src="img/logo.svg" alt=""></span><span class="brand-name">Momentum</span></a>';
-  const LOADER = '<div class="page-loader" role="status" aria-label="Loading"><span class="brand-mark loader-mark"><img src="img/logo.svg" alt=""></span></div>';
+  const BRAND_ONLY = '<a href="home.html" class="brand" aria-label="Momentum home"><span class="brand-mark">' + LOGO + '</span><span class="brand-name">Momentum</span></a>';
+  const LOADER = '<div class="page-loader" role="status" aria-label="Loading"><span class="brand-mark loader-mark">' + LOGO + '</span></div>';
 
   let currentPageKey = null, shellReady = false;
   function buildShell(pageKey) {
@@ -738,6 +742,7 @@
   }
 
   window.UI = {
+    LOGO,
     icon, momentumIcon, MOMENTUM_WORD, attention, HOME_TABS, esc, fmtDay, fmtTime, fmtRange, fmtAgo, dateBadge, VIS, visSelect, distanceMi, fmtMi, qs, words,
     avatar, displayName, nameLink, initials, toast, flash, modal, alertModal, confirmUnblock, addToCalendarModal, calendarLinks,
     Messages, mount, renderHeader,

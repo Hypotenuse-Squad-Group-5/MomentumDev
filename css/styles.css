@@ -107,6 +107,8 @@
   --r-xl: 18px;
   --r-pill: 999px;
   --r-dot: 50%;      /* habit checkboxes and the week dots (square in some themes) */
+  /* the logo (drawn inline by UI.LOGO; also the browser-tab icon via js/theme.js) */
+  --logo-tile: #00917e; --logo-sun: #ffd27a; --logo-back: #9fd8ce; --logo-front: #ffffff;
 }
 
 * { box-sizing: border-box; }
@@ -168,6 +170,11 @@ svg.i.lg { width: 28px; height: 28px; }
   width: 34px; height: 34px; border-radius: 23%;
 }
 .brand-mark img { display: block; width: 100%; height: 100%; }
+.brand-mark svg { display: block; width: 100%; height: 100%; }
+.lg-tile { fill: var(--logo-tile); }
+.lg-sun { fill: var(--logo-sun); }
+.lg-back { fill: var(--logo-back); stroke: var(--logo-back); }
+.lg-front { fill: var(--logo-front); stroke: var(--logo-front); }
 .brand-mark.on-primary { box-shadow: 0 0 0 1.5px var(--on-color-line); } /* teal tile on a teal panel (login) */
 .brand-name { font-family: var(--font-display); font-size: 1.12rem; font-weight: 600; }
 .icon-btn {
@@ -995,6 +1002,7 @@ details.event { scroll-margin-top: calc(var(--header-h) + 16px); }
   --shadow: 0 1px 2px rgba(60, 40, 20, .08); --shadow-hover: 0 2px 8px rgba(60, 40, 20, .12);
   --line: 1px solid #e2d8c6; --control-line: 1px solid #d4c6ae;
   --r: 8px; --r-sm: 6px; --r-md: 6px; --r-xs: 3px; --r-s: 4px; --r-xl: 12px; --r-pill: 6px;
+  --logo-tile: #2f5d46; --logo-sun: #e8b27a; --logo-back: #8fb3a0; --logo-front: #fbf8f2;
 }
 [data-theme="trailhead"] h1, [data-theme="trailhead"] h2 { font-weight: 600; letter-spacing: -.01em; }
 /* Source Sans runs small next to Inter, so this theme reads one step bigger */
@@ -1020,12 +1028,14 @@ html[data-theme="trailhead"] { font-size: 17px; }
   --shadow: 4px 4px 0 #1b1530; --shadow-hover: 6px 6px 0 #1b1530; --shadow-menu: 4px 4px 0 #1b1530; --shadow-toast: 4px 4px 0 #1b1530;
   --line: 2px solid #1b1530; --control-line: 2px solid #1b1530;
   --r: 20px; --r-sm: 14px; --r-md: 14px; --r-xs: 6px; --r-s: 10px; --r-xl: 24px; --r-pill: 999px;
+  --logo-tile: #6d3ae8; --logo-sun: #ffd23f; --logo-back: #c9b5fa; --logo-front: #ffffff;
 }
 [data-theme="pop"] .btn { border-radius: var(--r-pill); box-shadow: 3px 3px 0 var(--fg); }
 [data-theme="pop"] .btn:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--fg); }
 [data-theme="pop"] .btn-ghost { box-shadow: none; }
 [data-theme="pop"] .streak-chip[class] { color: var(--fg); background: var(--gold); border: 2px solid var(--fg); box-shadow: 2px 2px 0 var(--fg); }
 [data-theme="pop"] h1, [data-theme="pop"] h2 { font-weight: 800; letter-spacing: -.02em; }
+[data-theme="pop"] .brand-mark { box-shadow: 0 0 0 2px var(--fg); }
 
 /* ---------- Quiet: flat white, hairlines, one muted slate color, nearly square ---------- */
 [data-theme="quiet"] {
@@ -1045,6 +1055,7 @@ html[data-theme="trailhead"] { font-size: 17px; }
   --shadow: none; --shadow-hover: none; --shadow-primary-sm: none; --shadow-primary-md: none;
   --line: 1px solid #e6e6e3; --control-line: 1px solid #dadad6;
   --r: 4px; --r-sm: 4px; --r-md: 4px; --r-xs: 2px; --r-s: 3px; --r-xl: 8px;
+  --logo-tile: #262626; --logo-sun: #d9d9d6; --logo-back: #9a9a96; --logo-front: #ffffff;
 }
 [data-theme="quiet"] h1, [data-theme="quiet"] h2, [data-theme="quiet"] h3 { font-weight: 500; letter-spacing: -.01em; }
 
@@ -1068,6 +1079,7 @@ html[data-theme="trailhead"] { font-size: 17px; }
   --shadow: 3px 3px 0 rgba(30, 42, 68, .18); --shadow-hover: 4px 4px 0 rgba(30, 42, 68, .25);
   --line: 1.5px solid #1e2a44; --control-line: 1.5px solid #1e2a44;
   --r: 2px; --r-sm: 2px; --r-md: 2px; --r-xs: 1px; --r-s: 2px; --r-xl: 4px; --r-pill: 3px; --r-dot: 2px;
+  --logo-tile: #1f3a93; --logo-sun: #e07a6e; --logo-back: #8a9bd1; --logo-front: #fdfcf8;
 }
 [data-theme="field"] body { background-size: 16px 16px; }
 [data-theme="field"] :is(.btn, .tag, .tabbar a, .streak-chip, h2) { font-family: var(--font-mono); letter-spacing: .04em; }

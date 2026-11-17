@@ -113,6 +113,13 @@ test('every page loads js/theme.js in <head> and no fixed font link', () => {
   }
 });
 
+test('the in-app logo is drawn inline (UI.LOGO) so it follows the theme', () => {
+  const files = ['js/ui.js', ...fs.readdirSync('js/pages').map((f) => 'js/pages/' + f), ...fs.readdirSync('.').filter((x) => x.endsWith('.html'))];
+  const using = files.filter((f) => /<img[^>]+img\/logo\.svg/.test(fs.readFileSync(f, 'utf8')));
+  assert.deepEqual(using, [], 'Use UI.LOGO (or the inline <svg class="logo"> in static pages) instead of <img src="img/logo.svg">');
+  for (const id of THEMES) assert.ok(resolve(themeVars(id), '--logo-tile'), `the "${id}" theme needs --logo-* colors`);
+});
+
 // ---------- 3. readable text in every theme ----------
 // [text, background, minimum]. 4.5 = normal text; 3 = big/bold text and controls.
 const PAIRS = [
