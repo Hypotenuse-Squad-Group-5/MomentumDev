@@ -352,6 +352,13 @@ a.panel:hover, button.panel:hover { background: var(--glass-strong); }
 .opt { font-weight: 400; color: var(--muted-fg); }
 .hint { margin-top: 4px; font-size: .78rem; color: var(--muted-fg); }
 .err { margin-top: 4px; font-size: .8rem; font-weight: 600; color: var(--danger); }
+/* Sign-up password checklist: each rule ticks green as it's met */
+.pw-rules { display: flex; flex-wrap: wrap; gap: 4px 12px; list-style: none; margin: 0; padding: 0; }
+.pw-rules li { display: inline-flex; align-items: center; gap: 5px; }
+.pw-rules li::before { content: ""; width: 7px; height: 7px; border-radius: var(--r-pill); border: 1.5px solid currentColor; }
+.pw-rules li.ok { color: var(--up); }
+.pw-rules li.ok::before { content: "✓"; width: auto; height: auto; border: 0; font-weight: 700; }
+.invalid .pw-rules li:not(.ok) { color: var(--danger); font-weight: 600; }
 input[type=text], input[type=email], input[type=password], input[type=search], input[type=number],
 input[type=date], input[type=time], input[type=tel], select, textarea {
   width: 100%; min-height: 42px; padding: 9px 12px;
