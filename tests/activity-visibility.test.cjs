@@ -117,7 +117,7 @@ test('Store normalizes legacy visibility settings', () => {
   assert.match(storeCode, /function normalizeVisibility/);
   assert.match(storeCode, /restored\.settings\.activityVisibility = normalizeVisibility/);
   assert.match(storeCode, /restored\.settings\.postVisibility = normalizeVisibility/);
-  assert.match(storeCode, /restored\.settings\.friendsListVisibility = normalizeVisibility/);
+  // (the friends list visibility setting was removed in the settings cleanup: nothing used it)
 
   // Run the normalization logic in sandbox
   const match = storeCode.match(/function normalizeVisibility\([\s\S]*?^  \}/m);

@@ -735,7 +735,8 @@
       { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false, storageKey: "momentum-password-check" } });
     const check = await verifier.auth.signInWithPassword({ email, password: current });
     if (check.error) return { ok: false, field: "current", message: "That isn't your current password." };
-    const { error } = await sb.auth.updateUser({ password: next });
+    // current_password: needed when Supabase's "Require current password when changing password" is on
+    const { error } = await sb.auth.updateUser({ password: next, current_password: current });
     if (error) return { ok: false, field: "next", message: error.message };
     return { ok: true };
   }

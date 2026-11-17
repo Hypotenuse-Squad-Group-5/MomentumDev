@@ -46,7 +46,7 @@ UI.mount("settings", function render() {
       <form id="pw-form" class="mt" novalidate>
         <p class="label">Change password</p>
         <div class="field" data-f="current"><label for="pw-current">Current password</label><input id="pw-current" type="password" autocomplete="current-password"><div class="err" hidden></div></div>
-        <div class="field" data-f="next"><label for="pw-next">New password</label><input id="pw-next" type="password" autocomplete="new-password" minlength="8"><div class="hint">At least 8 characters.</div><div class="err" hidden></div></div>
+        <div class="field" data-f="next"><label for="pw-next">New password</label><input id="pw-next" type="password" autocomplete="new-password" minlength="8"><div class="hint">--> Minimum 8 characters. Use upper and lowercase letters, a number, and a symbol.</div><div class="err" hidden></div></div>
         <div class="field" data-f="again"><label for="pw-again">New password again</label><input id="pw-again" type="password" autocomplete="new-password"><div class="err" hidden></div></div>
         <button class="btn" id="pw-save" disabled>Change password</button>
       </form>
