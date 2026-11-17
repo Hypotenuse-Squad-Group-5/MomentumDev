@@ -38,7 +38,7 @@ window.Social = {
       <h3>${esc(a.title)}</h3>
       <div class="meta"><span>${icon("clock", "sm")}${esc(UI.fmtRange(a))}</span><span>${icon("activity", "sm")}${esc(a.location)}</span><span>${icon("users", "sm")}${Store.spotsTaken(a.id)} of ${a.max} going</span></div>
       <p class="mb0">${esc(a.description)}</p>
-      <div class="post-actions"><a class="btn btn-sm btn-primary" href="activity.html?id=${a.id}">${Store.isGoing(a.id) ? "You're going" : "View & commit"}</a>${a.hostId !== Store.ME ? `<button class="btn btn-sm btn-ghost" data-msg="${a.hostId}" data-act="${a.id}">${icon("message", "sm")}Message host</button>` : ""}</div>
+      <div class="post-actions"><a class="btn btn-sm btn-primary" href="activity.html?id=${a.id}">${a.hostId === Store.ME ? "View event" : Store.isGoing(a.id) ? "You're going" : "View & commit"}</a>${a.hostId !== Store.ME ? `<button class="btn btn-sm btn-ghost" data-msg="${a.hostId}" data-act="${a.id}">${icon("message", "sm")}Message host</button>` : ""}</div>
     </article>`;
   },
   bind() {
