@@ -13,7 +13,9 @@ UI.mount("lessons", function render() {
         <svg class="trail" id="trail"></svg>
         ${window.LESSONS.map((l, i) => {
           const st = Store.isLessonDone(l.n) ? "done" : Store.isLessonUnlocked(l.n) ? "current" : "locked";
-          return `<a class="lesson-node ${st}" href="lesson.html?n=${l.n}" data-n="${l.n}" style="transform:translateX(${offsets[i % offsets.length]}px)" ${st === "locked" ? 'aria-disabled="true"' : ""}>
+          // Label beside the circle, on the side with more room (left when the path swings right)
+          const side = offsets[i % offsets.length] > 0 ? "label-left" : "label-right";
+          return `<a class="lesson-node ${st} ${side}" href="lesson.html?n=${l.n}" data-n="${l.n}" style="transform:translateX(${offsets[i % offsets.length]}px)" ${st === "locked" ? 'aria-disabled="true"' : ""}>
             ${st === "current" ? '<span class="start">START</span>' : ""}
             <span class="orb">${st === "done" ? icon("check", "lg") : st === "locked" ? icon("lock") : l.n}</span>
             <span class="t">${l.n}. ${esc(l.title)}<br><span class="tiny muted">${st === "done" ? "Completed" : l.minutes + " min · Read & practice"}</span></span></a>`;

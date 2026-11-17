@@ -10,7 +10,7 @@ let notesTimer = null;
 // Phones stack Home in one column with habits first, so the urgent notifications (starting
 // soon, cancelled) move into a slim strip above the habits. Desktop shows everything in the panel.
 const WIDE = typeof matchMedia === "function" ? matchMedia("(min-width: 960px)") : null;
-const URGENT = ["soon", "cancelled"];
+const URGENT = ["soon", "cancelled", "changed"];
 const HABIT_ICONS = {
   wrench: '<svg class="i sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>',
   hammer: '<svg class="i sm" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 12-8.373 8.373a1 1 0 1 1-3-3L12 9"/><path d="m18 15 4-4"/><path d="m21.5 11.5-1.914-1.914A2 2 0 0 1 19 8.172V7l-2.26-2.26a6 6 0 0 0-4.202-1.756L9 2.96l.92.82A6.18 6.18 0 0 1 12 8.4V10l2 2h1.172a2 2 0 0 1 1.414.586L18.5 14.5"/></svg>',
@@ -49,6 +49,9 @@ UI.mount("home", function render() {
       case "checkin":
         return `<div class="note warn">${icon("check", "sm")}<span class="grow">Did you go to <b>${esc(a.title)}</b>?<br><span class="small muted">${esc(UI.fmtDay(a.startsAt))}</span>
           <span class="row mt-sm"><button class="btn btn-sm btn-primary" data-checkin="${a.id}" data-yes>Yes, I went</button><button class="btn btn-sm" data-checkin="${a.id}">I didn't make it</button></span></span></div>`;
+      case "changed":
+        return `<div class="note warn">${icon("clock", "sm")}<span class="grow"><b>${esc(n.note.title)}</b><br><span class="small">${esc(n.note.body)}</span>
+          ${a ? `<br><a class="small" href="activity.html?id=${a.id}">View activity</a>` : ""}</span><button class="icon-btn sm" data-dismiss="${n.note.id}" aria-label="Dismiss" title="Dismiss">${icon("x", "sm")}</button></div>`;
       case "cancelled":
         return `<div class="note danger">${icon("alert", "sm")}<span class="grow"><b>${esc(n.note.title)}</b><br><span class="small">${esc(n.note.body)}</span>
           ${a ? `<br><a class="small" href="activity.html?id=${a.id}">View activity</a>` : ""}</span><button class="icon-btn sm" data-dismiss="${n.note.id}" aria-label="Dismiss" title="Dismiss">${icon("x", "sm")}</button></div>`;

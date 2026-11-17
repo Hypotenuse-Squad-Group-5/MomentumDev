@@ -116,7 +116,9 @@
       location: row.general_location, city: row.city, lat: row.latitude != null ? Number(row.latitude) : null,
       lng: row.longitude != null ? Number(row.longitude) : null, min: row.min_participants, max: row.max_participants,
       taken: row.spots_taken != null ? Number(row.spots_taken) : null, // host + people going + their +1s (migration 018)
-      cancelledAt: row.cancelled_at || null, // set when the host cancelled it with people going (migration 023)
+      cancelledAt: row.cancelled_at || null, // set when the host cancelled it with people going (migration 025)
+      editedAt: row.edited_at || null,       // the host edited it ("Edited" label, migration 030)
+      changedAt: row.changed_at || null,     // the host changed the date, time or place with people going (030)
       visibility: row.visibility, createdAt: row.created_at, source: "supabase",
     };
   }
@@ -276,6 +278,7 @@
     if (!a || a.hostId !== ME) return { ok: false, message: "You can only edit activities you're hosting." };
     if (hasStarted(a)) return { ok: false, message: "This activity has already started and can no longer be edited." };
 
+    if (a.cancelledAt) return { ok: false, message: "Cancelled activities can't be edited." };
     const errs = validateActivity(f);
     const max = String(f.max ?? "").trim() === "" ? 100 : Number(f.max);
     if (Number.isInteger(max) && max < spotsTaken(id)) errs.max = "Max can't be lower than the number of people already going (" + spotsTaken(id) + ").";
@@ -283,6 +286,13 @@
 
     const starts = new Date(f.date + "T" + f.start).toISOString();
     const ends = new Date(f.date + "T" + f.end).toISOString();
+    // With people going, the date, time and place lock 3 hours before the start (the database enforces this too)
+    const planChanged = new Date(starts).getTime() !== new Date(a.startsAt).getTime() || new Date(ends).getTime() !== new Date(a.endsAt).getTime()
+      || f.location.trim() !== a.location || f.city.trim() !== a.city || f.address.trim() !== (state.addresses[id] || "").trim();
+    const soon = (iso) => new Date(iso) - new Date() < CANCEL_HOURS * 36e5;
+    if (planChanged && peopleOn(id) > 0 && (soon(a.startsAt) || soon(starts))) {
+      return { ok: false, message: `People are going, so the date, time and place are locked within ${CANCEL_HOURS} hours of the start. Message them instead.` };
+    }
     const payload = {
       type_id: Number(f.typeId),
       title: f.title.trim(),
@@ -606,11 +616,15 @@
     const now = new Date();
     return state.cancellations.filter((c) => new Date(c.cancelledAt).getMonth() === now.getMonth() && new Date(c.cancelledAt).getFullYear() === now.getFullYear()).length;
   }
+  function planChangedSince(a, r) { return !!(a && r && a.changedAt && r.createdAt && new Date(a.changedAt) > new Date(r.createdAt)); }
   function cancellationsLeft() { return Math.max(0, CANCELS_PER_MONTH - cancellationsUsed()); }
   function canCancel(activityId) {
     const a = activity(activityId); const r = myRsvp(activityId);
     if (!a || !r || r.status !== "committed") return { ok: false, code: "not_committed", reason: "You're not committed to this activity." };
     if (a.cancelledAt) return { ok: false, code: "activity_cancelled", reason: "The host cancelled this activity." };
+    if (hasStarted(a)) return { ok: false, code: "started", reason: "This activity already started." };
+    // The host changed the date, time or place after you committed: cancelling is free (migration 030)
+    if (planChangedSince(a, r)) return { ok: true, free: true };
     if (new Date(a.startsAt) - new Date() < CANCEL_HOURS * 36e5) return { ok: false, code: "cancel_window", reason: `Commitments can't be cancelled within ${CANCEL_HOURS} hours of the start.` };
     if (cancellationsLeft() === 0) return { ok: false, code: "no_cancels", reason: "You've used both cancellations for this month." };
     return { ok: true };
@@ -649,7 +663,7 @@
     const { data, error } = await sb.rpc("cancel_commitment", { p_activity: activityId });
     await refreshCommitments();
     if (error) return refusal(error);
-    return { ok: true, left: data && data.left != null ? data.left : cancellationsLeft() };
+    return { ok: true, free: !!(data && data.free), left: data && data.left != null ? data.left : cancellationsLeft() };
   }
 
   // Incoming +1 invites (a friend asked me along)
@@ -743,11 +757,12 @@
     }
     // Did you go? (always: it's how attended Momentum is earned)
     needsCheckIn().forEach((a) => out.push({ kind: "checkin", rank: 2, activity: a }));
-    // Activity cancelled (always shown)
-    (state.notifications || []).filter((n) => n.kind === "activity_cancelled").forEach((n) => {
+    // Activity cancelled or changed by the host (always shown)
+    (state.notifications || []).filter((n) => n.kind === "activity_cancelled" || n.kind === "activity_changed").forEach((n) => {
       const id = (n.link.match(/id=([0-9a-f-]+)/) || [])[1], a = id ? activity(id) : null;
       const until = new Date(a ? a.startsAt : n.at).getTime() + NOTICE_DAYS * 864e5;
-      if (until > now) out.push({ kind: "cancelled", rank: 3, note: n, activity: a });
+      if (n.kind === "activity_changed" && a && (a.cancelledAt || hasStarted(a) || !isGoing(a.id))) return; // old news
+      if (until > now) out.push({ kind: n.kind === "activity_cancelled" ? "cancelled" : "changed", rank: 3, note: n, activity: a });
     });
     // +1 invites and friend requests
     if (set.notifyFriends) {
@@ -1774,7 +1789,7 @@
     loadActivities, allActivities: () => actCache || [], loadTypes, types: () => typeCache || [], loadSuggestions, activitySuggestions, validateActivity, createActivity, updateActivity, activity, isPast, attendees, spotsTaken,
     myRsvp, myGuestInvite, isGoing, myCommitments, myCommitmentIds, hosting, conflictFor, commit, cancel, canCancel, hasStarted, canSeeAttendees, loadCommitments, CANCEL_HOURS,
     peopleOn, hostCancelState, cancelOrDeleteActivity, isCancelled, loadNotifications, dismissNotification, notificationsList,
-    loadSettings, changePassword, deleteAccount, blockingHostedActivities, profileStats, loadProfileStats,
+    loadSettings, changePassword, deleteAccount, blockingHostedActivities, profileStats, loadProfileStats, planChangedSince,
     cancellationsLeft, plusOneInvites, respondPlusOne, checkIn, needsCheckIn, address: (id) => state.addresses[id] || null, loadAddress,
     // people
     profile, fullName, isFriend, friends, friendshipWith, incomingRequests, sentRequests, acceptFriend, declineFriend,

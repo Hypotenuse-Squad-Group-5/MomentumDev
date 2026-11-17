@@ -446,5 +446,6 @@ test('button text and ordering: "Host an activity" (green, left) and "Share a po
   assert.match(activitiesCode, /host your own/);
 
   // Activity-new: <h1> heading says Host an activity
-  assert.match(activityNewCode, /<h1>Host an activity<\/h1>/);
+  // (in edit mode the same heading reads "Edit activity")
+  assert.match(activityNewCode, /<h1>\$\{editingActivity \? "Edit activity" : "Host an activity"\}<\/h1>/);
 });

@@ -1,3 +1,5 @@
+-- NOTE (2026-11-16): renumbered from 023 to 029 (023 was already taken by 023_okr_views).
+-- Same contents. If it was already run in the live database, no need to run it again.
 -- Allow hosts to edit their own activities before they start.
 -- Ownership and timing are enforced by Row Level Security, not only by the website UI.
 begin;
