@@ -276,6 +276,8 @@
     if (hasStarted(a)) return { ok: false, message: "This activity has already started and can no longer be edited." };
 
     const errs = validateActivity(f);
+    const max = String(f.max ?? "").trim() === "" ? 100 : Number(f.max);
+    if (Number.isInteger(max) && max < spotsTaken(id)) errs.max = "Max can't be lower than the number of people already going (" + spotsTaken(id) + ").";
     if (Object.keys(errs).length) return { ok: false, errors: errs };
 
     const starts = new Date(f.date + "T" + f.start).toISOString();
