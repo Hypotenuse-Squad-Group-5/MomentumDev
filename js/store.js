@@ -328,6 +328,36 @@
     return { ok: true, id };
   }
 
+  async function updateActivity(id, f) {
+    const a = activity(id);
+    if (!a || a.hostId !== ME) return { ok: false, message: "Only the host can edit this activity." };
+    if (hasStarted(a)) return { ok: false, message: "This activity can no longer be edited because it has already started." };
+    const errs = validateActivity(f);
+    if (Object.keys(errs).length) return { ok: false, errors: errs };
+    const starts = new Date(f.date + "T" + f.start).toISOString();
+    const ends = new Date(f.date + "T" + f.end).toISOString();
+    const { error } = await sb.from("activities").update({
+      type_id: Number(f.typeId), title: f.title.trim(), activity_name: f.title.trim(),
+      description: f.description.trim(), what_to_bring: f.bring.trim() || null,
+      starts_at: starts, ends_at: ends, general_location: f.location.trim(),
+      city: f.city.trim(), min_participants: String(f.min ?? "").trim() === "" ? 3 : Number(f.min),
+      max_participants: String(f.max ?? "").trim() === "" ? 100 : Number(f.max),
+      visibility: f.visibility,
+    }).eq("id", id);
+    if (error) return { ok: false, message: error.message };
+    const addressUpdate = await sb.from("activity_addresses")
+      .update({ exact_address: f.address.trim() }).eq("activity_id", id).select("activity_id").maybeSingle();
+    if (addressUpdate.error) return { ok: false, message: addressUpdate.error.message };
+    if (!addressUpdate.data) {
+      const addressInsert = await sb.from("activity_addresses").insert({ activity_id: id, exact_address: f.address.trim() });
+      if (addressInsert.error) return { ok: false, message: addressInsert.error.message };
+    }
+    state.addresses[id] = f.address.trim();
+    actCache = null;
+    await loadActivities(true);
+    save();
+    return { ok: true, id };
+  }
   // =====================================================================
   // People + friends
   // =====================================================================
