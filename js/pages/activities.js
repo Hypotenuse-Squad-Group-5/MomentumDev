@@ -58,7 +58,7 @@
     document.getElementById("main").innerHTML = `
       <div class="page-head">
         <div><h1>Activities</h1><p class="muted mb0">Things happening near you. Commit, then show up.</p></div>
-        <div class="row"><button class="btn" id="toggle-filter" aria-expanded="${f.open}">${icon("filter", "sm")}Filter${activeCount ? " (" + activeCount + ")" : ""}</button><a class="btn btn-primary" href="activity-new.html">${icon("plus", "sm")}Post an activity</a></div>
+        <div class="row"><button class="btn" id="toggle-filter" aria-expanded="${f.open}">${icon("filter", "sm")}Filter${activeCount ? " (" + activeCount + ")" : ""}</button><a class="btn btn-primary" href="activity-new.html">${icon("plus", "sm")}Host an activity</a></div>
       </div>
       ${Store.loadError ? `<div class="alert">${icon("alert", "sm")}<span>Couldn't load activities from Supabase: ${esc(Store.loadError)}</span></div>` : ""}
 
@@ -116,7 +116,7 @@
               <div class="row-between small"><span>${taken} of ${a.max} going</span><span class="muted">Host: ${esc(UI.displayName(a.hostId))}</span></div>
               <div class="capacity"><i style="width:${Math.min(100, (taken / a.max) * 100)}%"></i></div>
             </div></a>`;
-        }).join("") || `<div class="panel center"><p><b>Nothing matches those filters.</b></p><p class="muted small">Try adjusting your filters, or post your own.</p><a class="btn btn-primary" href="activity-new.html">Post an activity</a></div>`}
+        }).join("") || `<div class="panel center"><p><b>Nothing matches those filters.</b></p><p class="muted small">Try adjusting your filters, or host your own.</p><a class="btn btn-primary" href="activity-new.html">${icon("plus", "sm")}Host an activity</a></div>`}
       </section>`;
 
     document.getElementById("toggle-filter").onclick = () => { f.open = !f.open; render(); };

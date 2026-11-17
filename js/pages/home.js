@@ -72,7 +72,8 @@ UI.mount("home", function render() {
       ${notes.length
         ? `<div class="notes mt">${shown.map(noteItem).join("")}</div>
            ${notes.length > NOTES_SHOWN ? `<button class="btn btn-sm btn-ghost btn-block mt" id="notes-more" aria-expanded="${notesOpen}">${notesOpen ? "Show less" : `Show all (${notes.length})`}</button>` : ""}`
-        : `<p class="muted small mt mb0">${urgent.length ? "Nothing else right now." : "You're all caught up."}</p><a class="btn btn-sm mt" href="activities.html">Find an activity</a>`}
+        : `<p class="muted small mt mb0">${urgent.length ? "Nothing else right now." : "You're all caught up."}</p>
+           <div class="row mt"><a class="btn btn-sm" href="activities.html">Find an activity</a><a class="btn btn-sm" href="activity-new.html">${icon("plus", "sm")}Host an activity</a></div>`}
     </aside>`;
   }
 
@@ -93,7 +94,7 @@ UI.mount("home", function render() {
         </a>
 
         <div class="quick-actions">
-          <a class="btn btn-primary" href="activity-new.html">${icon("plus")}Post an activity</a>
+          <a class="btn btn-primary" href="activity-new.html">${icon("plus")}Host an activity</a>
           <a class="btn" href="profile.html?compose=1">${icon("post")}Share a post</a>
         </div>
 

@@ -20,7 +20,6 @@ UI.mount("settings", function render() {
     ${tab === "general" ? `
     <section class="panel">
       <h2>Privacy</h2>
-      ${sel("postVisibility", "Posts", "Default for new posts", vis)}
       ${sel("activityVisibility", "Activities", "Default for new activities", vis)}
     </section>
     <section class="panel mt" id="blocked-users-section">

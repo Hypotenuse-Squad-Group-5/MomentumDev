@@ -4,7 +4,7 @@ window.Social = {
   subnav(active) {
     const reqCount = typeof Store !== "undefined" && Store.incomingRequests ? Store.incomingRequests().length : 0;
     const badge = reqCount > 0 ? ` <span class="badge">${reqCount}</span>` : "";
-    return `<nav class="subnav" aria-label="Social">${[["feed", "social.html", "Feed"], ["friends", "friends.html", "Friends" + badge], ["me", "profile.html", "My profile"]]
+    return `<nav class="subnav" aria-label="Social">${[["feed", "social.html", "Feed"], ["friends", "friends.html", "Friends List" + badge], ["me", "profile.html", "My profile"]]
       .map(([k, h, l]) => `<a href="${h}"${k === active ? ' class="active" aria-current="page"' : ""}>${l}</a>`).join("")}</nav>`;
   },
   postCard(p, { own } = {}) {
@@ -13,7 +13,7 @@ window.Social = {
     const isOwner = own || p.authorId === Store.ME;
     return `<article class="panel">
       <div class="post-head">${UI.avatar(p.authorId, "", true)}<div class="who"><a class="name" href="profile.html?id=${p.authorId}">${esc(p.authorId === Store.ME ? Store.fullName(Store.ME) : UI.displayName(p.authorId))}</a><div class="tiny muted">${UI.fmtAgo(p.createdAt)} · Post</div></div>
-        ${isOwner ? UI.visSelect(p.visibility === "friends" ? "friends" : "public", `data-vis="${p.id}" aria-label="Who can see this post" class="vis-pick"`) : `<span class="tag grey">${UI.VIS[p.visibility] || "Public"}</span>`}</div>
+        <span class="tag grey">Friends Only</span></div>
       <p class="mb0" style="white-space:pre-wrap">${esc(p.caption)}</p>
       ${a ? `<a class="linked-activity" href="activity.html?id=${a.id}">${icon("activity")}<span class="grow"><span class="tiny muted">Activity</span><br><b>${esc(a.title)}</b> · <span class="small">${esc(UI.fmtDay(a.startsAt))}</span></span>${icon("right", "sm")}</a>` : ""}
       <div class="post-actions">

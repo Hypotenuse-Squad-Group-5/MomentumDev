@@ -31,7 +31,7 @@
   function defaultSettings() {
     return {
       // Saved in Supabase (user_settings); these are only the defaults until it loads
-      postVisibility: "friends", activityVisibility: "public",
+      activityVisibility: "public", // posts are always friends-only (migration 022), so there's no posts setting
       notifyActivity: true, notifyFriends: true, notifyMessages: true,
     };
   }
@@ -62,7 +62,6 @@
       Object.keys(keep).forEach((k) => { if (restored.settings && k in restored.settings) keep[k] = restored.settings[k]; });
       restored.settings = keep;
       restored.settings.activityVisibility = normalizeVisibility(restored.settings.activityVisibility, "public");
-      restored.settings.postVisibility = normalizeVisibility(restored.settings.postVisibility, "friends");
     }
     return restored;
   }
@@ -150,7 +149,7 @@
       authorId: row.author_id,
       caption: row.caption,
       activityId: row.activity_id || null,
-      visibility: row.visibility || "public",
+      visibility: row.visibility || "friends",
       createdAt: row.created_at,
       source: "supabase",
     };
@@ -701,7 +700,7 @@
 
   // ---- Settings (Supabase: user_settings, one row per person, made at sign-up) ----
   const SETTING_COLUMNS = {
-    postVisibility: "post_visibility", activityVisibility: "activity_visibility",
+    activityVisibility: "activity_visibility",
     notifyActivity: "notify_activity_reminders", notifyFriends: "notify_friend_requests", notifyMessages: "notify_messages",
   };
   // Extras that must never block signing in (the page still works with defaults)
@@ -712,7 +711,6 @@
     if (error || !data) { if (error) console.warn("Settings didn't load:", error.message); return false; }
     Object.entries(SETTING_COLUMNS).forEach(([k, col]) => { if (data[col] != null) state.settings[k] = data[col]; });
     state.settings.activityVisibility = normalizeVisibility(state.settings.activityVisibility, "public");
-    state.settings.postVisibility = normalizeVisibility(state.settings.postVisibility, "friends");
     return true;
   }
   async function setSetting(k, v) {
@@ -1002,21 +1000,20 @@
   // =====================================================================
   async function createPost({ caption, activityId, visibility }) {
     if (!caption || !caption.trim()) return { ok: false, message: "Write something before posting." };
-    visibility = normalizeVisibility(visibility || state.settings.postVisibility, "friends"); // the database enforces Friends Only (migration 023)
     if (caption.trim().length > 500) return { ok: false, message: "Posts can be up to 500 characters." };
     let post;
     let res = await sb.from("posts").insert({
       author_id: ME,
       caption: caption.trim(),
       activity_id: activityId || null,
-      visibility,
+      visibility: "friends",
     }).select("id, author_id, caption, activity_id, visibility, created_at, author:profiles!posts_author_id_fkey(first_name,avatar_url,created_at)").single();
     if (res.error) {
       res = await sb.from("posts").insert({
         author_id: ME,
         caption: caption.trim(),
         activity_id: activityId || null,
-        visibility,
+        visibility: "friends",
       }).select().single();
     }
     if (res.error) return { ok: false, message: res.error.message };
@@ -1048,14 +1045,13 @@
   }
 
 
-  // 10 most recent posts + activities from friends and public posts. No reshuffle, newest first.
+  // 10 most recent active activities and posts from friends (excluding own posts and activities). No reshuffle, newest first.
   function feed() {
     const fr = new Set(friends().map((f) => f.id));
-    fr.add(ME);
     const items = [];
     const pList = postCache !== null ? postCache : (state.posts || []);
-    pList.filter((p) => p.visibility === "public" || fr.has(p.authorId)).forEach((p) => items.push({ kind: "post", at: p.createdAt, post: p }));
-    (actCache || []).filter((a) => !a.cancelledAt && (a.visibility === "public" || fr.has(a.hostId))).forEach((a) => items.push({ kind: "activity", at: a.createdAt, activity: a }));
+    pList.filter((p) => fr.has(p.authorId)).forEach((p) => items.push({ kind: "post", at: p.createdAt, post: p }));
+    (actCache || []).filter((a) => fr.has(a.hostId) && !isPast(a) && !a.cancelledAt).forEach((a) => items.push({ kind: "activity", at: a.createdAt, activity: a }));
     return items.sort((a, b) => new Date(b.at) - new Date(a.at)).slice(0, 10);
   }
 
