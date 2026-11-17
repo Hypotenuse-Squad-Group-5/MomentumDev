@@ -436,7 +436,7 @@ UI.mount("activities", async function render() {
       });
       if (firstBadSection) firstBadSection.open = true;
       const n = Object.keys(r.errors).length;
-      banner.innerHTML = `${icon("alert", "sm")}<span>Fix ${n} field${n === 1 ? "" : "s"} to post. Everything you typed is still here.</span>`;
+      banner.innerHTML = `${icon("alert", "sm")}<span>Fix ${n} field${n === 1 ? "" : "s"} to ${editingActivity ? "save" : "post"}. Everything you typed is still here.</span>`;
     } else {
       banner.innerHTML = `${icon("alert", "sm")}<span>Supabase didn't accept it: ${esc(r.message)}</span>`;
     }
