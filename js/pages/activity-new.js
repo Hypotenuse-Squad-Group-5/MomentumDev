@@ -157,31 +157,6 @@ UI.mount("activities", async function render() {
   </div>`;
 
   const form = document.getElementById("post-form");
-  if (editingActivity) {
-    const setVal = (id, value) => { const el = form.querySelector("#" + id); if (el) el.value = value ?? ""; };
-    setVal("title", editingActivity.title);
-    setVal("location", editingActivity.location);
-    setVal("city", editingActivity.city);
-    setVal("address", editingAddress);
-    setVal("description", editingActivity.description);
-    setVal("bring", editingActivity.bring);
-    setVal("min", editingActivity.min);
-    setVal("max", editingActivity.max);
-    const matched = types.find((t) => t.name === editingActivity.type);
-    if (matched) {
-      setVal("typeId", matched.id);
-      typeChips.forEach((chip) => chip.classList.toggle("active", String(chip.dataset.id) === String(matched.id)));
-    }
-    const localDate = new Date(editingActivity.startsAt);
-    setVal("date", localDate.getFullYear() + "-" + String(localDate.getMonth() + 1).padStart(2, "0") + "-" + String(localDate.getDate()).padStart(2, "0"));
-    const to12 = (iso) => { const d = new Date(iso), h = d.getHours(); return { h: h % 12 || 12, m: d.getMinutes(), ampm: h >= 12 ? "PM" : "AM" }; };
-    const sT = to12(editingActivity.startsAt), eT = to12(editingActivity.endsAt);
-    startTimeCtrl.setTime(sT.h, sT.m, sT.ampm);
-    endTimeCtrl.setTime(eT.h, eT.m, eT.ampm);
-    const visibilityRadio = form.querySelector(`input[name=visibility][value="${editingActivity.visibility}"]`);
-    if (visibilityRadio) visibilityRadio.checked = true;
-    form.querySelectorAll("details.form-section").forEach((section) => { section.open = section.querySelector("#title") !== null; });
-  }
 
   // Keep single-open accordion behavior across all browsers
   form.querySelectorAll("details.form-section").forEach((sec) => {
@@ -264,6 +239,33 @@ UI.mount("activities", async function render() {
 
   const startTimeCtrl = initTimeControl("start", "PM");
   const endTimeCtrl = initTimeControl("end", "PM");
+
+  if (editingActivity) {
+    const setVal = (id, value) => { const el = form.querySelector("#" + id); if (el) el.value = value ?? ""; };
+    setVal("title", editingActivity.title);
+    setVal("location", editingActivity.location);
+    setVal("city", editingActivity.city);
+    setVal("address", editingAddress);
+    setVal("description", editingActivity.description);
+    setVal("bring", editingActivity.bring);
+    setVal("min", editingActivity.min);
+    setVal("max", editingActivity.max);
+    const matched = types.find((t) => t.name === editingActivity.type);
+    if (matched) {
+      setVal("typeId", matched.id);
+      typeChips.forEach((chip) => chip.classList.toggle("active", String(chip.dataset.id) === String(matched.id)));
+    }
+    const localDate = new Date(editingActivity.startsAt);
+    setVal("date", localDate.getFullYear() + "-" + String(localDate.getMonth() + 1).padStart(2, "0") + "-" + String(localDate.getDate()).padStart(2, "0"));
+    const to12 = (iso) => { const d = new Date(iso), h = d.getHours(); return { h: h % 12 || 12, m: d.getMinutes(), ampm: h >= 12 ? "PM" : "AM" }; };
+    const sT = to12(editingActivity.startsAt), eT = to12(editingActivity.endsAt);
+    startTimeCtrl.setTime(sT.h, sT.m, sT.ampm);
+    endTimeCtrl.setTime(eT.h, eT.m, eT.ampm);
+    const visibilityRadio = form.querySelector(`input[name=visibility][value="${editingActivity.visibility}"]`);
+    if (visibilityRadio) visibilityRadio.checked = true;
+    form.querySelectorAll("details.form-section").forEach((section) => { section.open = section.querySelector("#title") !== null; });
+  }
+
 
   // Auto-fill end time to exactly 1 hour after start time
   const startSelect = form.querySelector("#start-time");
