@@ -3,6 +3,15 @@
    PL-6: missing/invalid fields block posting, are flagged, and everything typed stays put. */
 UI.mount("activities", async function render() {
   const { icon, esc } = UI;
+  const editId = UI.qs("edit");
+  await Store.loadActivities(true);
+  const editingActivity = editId ? Store.activity(editId) : null;
+  if (editId && (!editingActivity || editingActivity.hostId !== Store.ME || Store.hasStarted(editingActivity))) {
+    UI.flash("Only the host can edit an activity before it starts.");
+    location.replace(editingActivity ? "activity.html?id=" + editId : "activities.html");
+    return;
+  }
+  const editingAddress = editingActivity ? await Store.loadAddress(editId) : "";
   const [types] = await Promise.all([Store.loadTypes()]);
   const s = Store.state.settings;
   const tomorrow = new Date(Date.now() + 864e5).toISOString().slice(0, 10);
@@ -20,13 +29,13 @@ UI.mount("activities", async function render() {
 
   document.getElementById("main").innerHTML = `
   <div style="max-width:720px">
-    <a class="small" href="activities.html">‹ Cancel</a>
-    <div class="page-head mt"><div><h1>Host an activity</h1><p class="muted mb0">Bring people together, in person.</p></div></div>
+    <a class="small" href="${editingActivity ? "activity.html?id=" + editingActivity.id : "activities.html"}">‹ Cancel</a>
+    <div class="page-head mt"><div><h1>${editingActivity ? "Edit activity" : "Host an activity"}</h1><p class="muted mb0">${editingActivity ? "Update the details so everyone has the right information." : "Bring people together, in person."}</p></div></div>
 
     <form class="panel" id="post-form" novalidate>
       <div class="alert" id="form-error" hidden></div>
 
-      ${pastHosted.length ? `
+      ${!editingActivity && pastHosted.length ? `
       <!-- Re-use a previous activity -->
       <div class="field reuse-field" style="margin-bottom:16px">
         <label class="reuse-toggle" style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:600">
@@ -74,7 +83,7 @@ UI.mount("activities", async function render() {
 
           <div class="grid-2">
             <div class="field" data-f="location"><label for="location">General location</label><input id="location" maxlength="50" type="text" placeholder="e.g. Kiwanis Park"><div class="hint">Shown publicly on the feed and map.</div><div class="err" hidden></div></div>
-            <div class="field" data-f="city"><label for="city">City</label><input id="city" maxlength="20" type="text" value="Provo"><div class="err" hidden></div></div>
+            <div class="field" data-f="city"><label for="city">City</label><input id="city" maxlength="20" type="text" value="${editingActivity ? esc(editingActivity.city) : "Provo"}"><div class="err" hidden></div></div>
           </div>
           <div class="field" data-f="address"><label for="address">Exact address</label><input id="address" maxlength="150" type="text" placeholder="Street address"><div class="hint">${icon("lock", "sm")} Only shown to people after they commit.</div><div class="err" hidden></div></div>
           <div class="field" data-f="description"><label for="description">Description</label><textarea id="description" maxlength="1000" placeholder="What will you do? Who is it good for?"></textarea><div class="err" hidden></div></div>
@@ -91,7 +100,7 @@ UI.mount("activities", async function render() {
           <span class="form-section-chevron"></span>
         </summary>
         <div class="form-section-body">
-          <div class="field" data-f="date"><label for="date">Date</label><input id="date" type="date" min="${new Date().toISOString().slice(0, 10)}" value="${tomorrow}"><div class="err" hidden></div></div>
+          <div class="field" data-f="date"><label for="date">Date</label><input id="date" type="date" min="${new Date().toISOString().slice(0, 10)}" value="${editingActivity ? new Date(editingActivity.startsAt).toLocaleDateString("en-CA") : tomorrow}"><div class="err" hidden></div></div>
           <div class="grid-2 time-grid">
             <div class="field" data-f="start">
               <label for="start-time">Starts</label>
@@ -143,11 +152,36 @@ UI.mount("activities", async function render() {
         </div>
       </details>
 
-      <button class="btn btn-primary btn-block" id="submit">Post activity</button>
+      <button class="btn btn-primary btn-block" id="submit">${editingActivity ? "Save changes" : "Post activity"}</button>
     </form>
   </div>`;
 
   const form = document.getElementById("post-form");
+  if (editingActivity) {
+    const setVal = (id, value) => { const el = form.querySelector("#" + id); if (el) el.value = value ?? ""; };
+    setVal("title", editingActivity.title);
+    setVal("location", editingActivity.location);
+    setVal("city", editingActivity.city);
+    setVal("address", editingAddress);
+    setVal("description", editingActivity.description);
+    setVal("bring", editingActivity.bring);
+    setVal("min", editingActivity.min);
+    setVal("max", editingActivity.max);
+    const matched = types.find((t) => t.name === editingActivity.type);
+    if (matched) {
+      setVal("typeId", matched.id);
+      typeChips.forEach((chip) => chip.classList.toggle("active", String(chip.dataset.id) === String(matched.id)));
+    }
+    const localDate = new Date(editingActivity.startsAt);
+    setVal("date", localDate.getFullYear() + "-" + String(localDate.getMonth() + 1).padStart(2, "0") + "-" + String(localDate.getDate()).padStart(2, "0"));
+    const to12 = (iso) => { const d = new Date(iso), h = d.getHours(); return { h: h % 12 || 12, m: d.getMinutes(), ampm: h >= 12 ? "PM" : "AM" }; };
+    const sT = to12(editingActivity.startsAt), eT = to12(editingActivity.endsAt);
+    startTimeCtrl.setTime(sT.h, sT.m, sT.ampm);
+    endTimeCtrl.setTime(eT.h, eT.m, eT.ampm);
+    const visibilityRadio = form.querySelector(`input[name=visibility][value="${editingActivity.visibility}"]`);
+    if (visibilityRadio) visibilityRadio.checked = true;
+    form.querySelectorAll("details.form-section").forEach((section) => { section.open = section.querySelector("#title") !== null; });
+  }
 
   // Keep single-open accordion behavior across all browsers
   form.querySelectorAll("details.form-section").forEach((sec) => {
@@ -368,7 +402,7 @@ UI.mount("activities", async function render() {
     form.querySelectorAll("[data-f]").forEach((f) => { f.classList.remove("invalid"); f.querySelector(".err").hidden = true; });
     form.querySelectorAll("details.form-section").forEach((s) => s.classList.remove("has-error"));
     const banner = document.getElementById("form-error"); banner.hidden = true;
-    const btn = document.getElementById("submit"); btn.disabled = true; btn.textContent = "Posting…";
+    const btn = document.getElementById("submit"); btn.disabled = true; btn.textContent = editingActivity ? "Saving…" : "Posting…";
 
     const TIME = /^([01]\d|2[0-3]):[0-5]\d$/; // a real 24-hour time, e.g. 18:30
     const timeErrs = {};
@@ -377,11 +411,11 @@ UI.mount("activities", async function render() {
     let r;
     if (Object.keys(timeErrs).length) r = { ok: false, errors: { ...Store.validateActivity(data), ...timeErrs } };
     else {
-      try { r = await Store.createActivity(data); }
+      try { r = editingActivity ? await Store.updateActivity(editingActivity.id, data) : await Store.createActivity(data); }
       catch (err) { console.error(err); r = { ok: false, message: err.message || "Something went wrong. Please try again." }; } // never leave the button spinning
     }
-    btn.disabled = false; btn.textContent = "Post activity";
-    if (r.ok) { UI.flash("Activity posted"); location.href = "activity.html?id=" + r.id; return; }
+    btn.disabled = false; btn.textContent = editingActivity ? "Save changes" : "Post activity";
+    if (r.ok) { UI.flash(editingActivity ? "Activity updated" : "Activity posted"); location.href = "activity.html?id=" + (r.id || editingActivity.id); return; }
     if (r.errors) {
       let firstBadSection = null;
       Object.entries(r.errors).forEach(([k, msg]) => {
