@@ -1,6 +1,11 @@
 /* Activities: filterable feed of upcoming activities (PL-7, PL-8, PL-9) */
 (function () {
-  const f = { open: window.matchMedia("(min-width: 960px)").matches, timeOfDay: "any", dateRange: "upcoming", commitment: "any", visibility: "all", types: [], name: "", min: "3", max: "" };
+  // Filters reset every visit: open on desktop, closed on phone (the Filter button only shows/hides them)
+  const DEFAULTS = { timeOfDay: "any", dateRange: "upcoming", commitment: "any", visibility: "all", types: [], name: "", min: "3", max: "" };
+  const f = { open: window.matchMedia("(min-width: 960px)").matches, ...DEFAULTS, types: [] };
+  const FILTER_KEYS = Object.keys(DEFAULTS);
+  // Compare two filter sets (order of categories doesn't matter)
+  const sameFilters = (a, b) => FILTER_KEYS.every((k) => (k === "types" ? [...a.types].sort().join("|") === [...b.types].sort().join("|") : String(a[k]) === String(b[k])));
 
   const inDateRange = (activity, range) => {
     const start = new Date(activity.startsAt);
@@ -51,7 +56,7 @@
       (!f.name || (a.activityName + " " + a.title).toLowerCase().includes(f.name.toLowerCase())) &&
       (!f.min || a.min >= Number(f.min)) &&
       (!f.max || a.max <= Number(f.max)));
-    const activeCount = (f.timeOfDay !== "any" ? 1 : 0) + (f.dateRange !== "upcoming" ? 1 : 0) + (f.visibility !== "all" ? 1 : 0) + (f.commitment !== "any" ? 1 : 0) + f.types.length + (f.name ? 1 : 0) + (f.min ? 1 : 0) + (f.max ? 1 : 0);
+    const activeCount = (f.timeOfDay !== "any" ? 1 : 0) + (f.dateRange !== "upcoming" ? 1 : 0) + (f.visibility !== "all" ? 1 : 0) + (f.commitment !== "any" ? 1 : 0) + f.types.length + (f.name ? 1 : 0) + (f.min && f.min !== DEFAULTS.min ? 1 : 0) + (f.max ? 1 : 0); // the default min (3) isn't a filter
 
     const types = Store.types().map((t) => t.name); // from the activity_types table
 
@@ -62,8 +67,8 @@
       </div>
       ${Store.loadError ? `<div class="alert">${icon("alert", "sm")}<span>Couldn't load activities from Supabase: ${esc(Store.loadError)}</span></div>` : ""}
 
-      <section class="stack">
-        <form class="panel" id="filters" ${f.open ? "" : "hidden"}>
+      <div class="act-layout${f.open ? " with-filters" : ""}">
+        <form class="panel act-filters" id="filters" aria-label="Filter activities" ${f.open ? "" : "hidden"}>
           <div class="filter-panel">
             <div class="field"><label for="f-time">Time of day</label>
               <select id="f-time">
@@ -92,14 +97,17 @@
                 <option value="committed"${f.commitment === "committed" ? " selected" : ""}>Committed to</option>
                 <option value="not-committed"${f.commitment === "not-committed" ? " selected" : ""}>Not committed to</option>
               </select></div>
-            <div class="field"><label for="f-min">Min. group size</label><input id="f-min" type="number" min="3" max="100" value="${esc(f.min)}" placeholder="Any"></div>
-            <div class="field"><label for="f-max">Max. group size</label><input id="f-max" type="number" min="3" max="100" value="${esc(f.max)}" placeholder="Any"></div>
+            <div class="filter-pair">
+              <div class="field"><label for="f-min">Min. group size</label><input id="f-min" type="number" min="3" max="100" value="${esc(f.min)}" placeholder="Any"></div>
+              <div class="field"><label for="f-max">Max. group size</label><input id="f-max" type="number" min="3" max="100" value="${esc(f.max)}" placeholder="Any"></div>
+            </div>
             <div class="field"><label for="f-name">Activity title</label><input id="f-name" type="search" maxlength="50" value="${esc(f.name)}" placeholder="e.g. board games, hiking"></div>
           </div>
           <div class="field"><span class="flabel">Activity category</span><div class="chips">${types.map((t) => `<label class="chip"><input type="checkbox" value="${esc(t)}"${f.types.includes(t) ? " checked" : ""}>${esc(t)}</label>`).join("")}</div></div>
-          <div class="row"><button class="btn btn-primary">Show activities</button><button type="button" class="btn btn-ghost" id="clear">Clear filters</button></div>
+          <div class="row filter-actions"><button class="btn btn-primary" id="apply" disabled>Show activities</button><button type="button" class="btn btn-ghost" id="clear">Clear filters</button></div>
         </form>
 
+        <section class="stack act-list">
         <div class="row-between">
           <span class="small muted">${list.length} activit${list.length === 1 ? "y" : "ies"}</span>
         </div>
@@ -117,24 +125,41 @@
               <div class="capacity"><i style="width:${Math.min(100, (taken / a.max) * 100)}%"></i></div>
             </div></a>`;
         }).join("") || `<div class="panel center"><p><b>Nothing matches those filters.</b></p><p class="muted small">Try adjusting your filters, or host your own.</p><a class="btn btn-primary" href="activity-new.html">${icon("plus", "sm")}Host an activity</a></div>`}
-      </section>`;
+      </section>
+      </div>`;
 
     document.getElementById("toggle-filter").onclick = () => { f.open = !f.open; render(); };
     const form = document.getElementById("filters");
+    const applyBtn = document.getElementById("apply"), clearBtn = document.getElementById("clear");
+    const fromForm = () => ({
+      timeOfDay: form.querySelector("#f-time").value,
+      dateRange: form.querySelector("#f-date").value,
+      visibility: form.querySelector("#f-vis").value,
+      commitment: form.querySelector("#f-commitment").value,
+      name: form.querySelector("#f-name").value.trim(),
+      min: form.querySelector("#f-min").value, max: form.querySelector("#f-max").value,
+      types: [...form.querySelectorAll(".chip input:checked")].map((x) => x.value),
+    });
+    // "Show activities" only lights up when the form differs from what's applied;
+    // "Clear filters" only when something isn't at its default
+    const refreshButtons = () => {
+      const now = fromForm();
+      applyBtn.disabled = sameFilters(now, f);
+      clearBtn.disabled = sameFilters(now, DEFAULTS) && sameFilters(f, DEFAULTS);
+    };
+    form.oninput = form.onchange = refreshButtons;
+    refreshButtons();
     form.onsubmit = (e) => {
       e.preventDefault();
-      f.timeOfDay = form.querySelector("#f-time").value;
-      f.dateRange = form.querySelector("#f-date").value;
-      f.visibility = form.querySelector("#f-vis").value;
-      f.commitment = form.querySelector("#f-commitment").value;
-      f.name = form.querySelector("#f-name").value.trim();
-      f.min = form.querySelector("#f-min").value; f.max = form.querySelector("#f-max").value;
-      f.types = [...form.querySelectorAll(".chip input:checked")].map((x) => x.value);
+      if (applyBtn.disabled) return; // nothing changed (e.g. Enter in the title box)
+      Object.assign(f, fromForm());
       render();
+      UI.toast("Activities filtered");
     };
-    document.getElementById("clear").onclick = () => {
-      Object.assign(f, { timeOfDay: "any", dateRange: "upcoming", commitment: "any", visibility: "all", types: [], name: "", min: "3", max: "" });
+    clearBtn.onclick = () => {
+      Object.assign(f, DEFAULTS, { types: [] });
       render();
+      UI.toast("Filters cleared");
     };
   });
 })();
