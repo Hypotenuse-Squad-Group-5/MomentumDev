@@ -1,75 +1,124 @@
-# Momentum
+# Momentum (Hypotenuse-Squad--Group-5)
 
-Momentum helps students build intentional phone habits, practice six short lessons, and plan time together offline. The app uses buildless HTML/CSS/JavaScript, GitHub Pages, and Supabase Auth/Postgres.
+## App Summary
+Young, isolated college students in Provo spend too much time on their phones rather than forming real connections and do not have effective resources to help them develop better habits and find long-term satisfaction. This increased amount of screen time frequently leads them to feeling alone, worsens their mental health, and makes it more difficult to form real-life social support networks during challenging college years. They need to find meaningful ways to spend their free time, especially in the evenings, to avoid doom scrolling. This website should motivate them to have less desire to unintentionally waste time throughout down time each day. They will be able to RSVP to various activities, post their own, communicate with others who are attending events in Provo, learn more about the effects of social media, and create and apply realistic goals or habits.
 
-## Lessons and habits
+---
 
-The site includes curriculum version 2:
+## Tech Stack
+We decided to use **HTML/CSS/JavaScript** for our frontend. Our hosting service is **GitHub Pages**, and as our backend database and authentication service we are using **Supabase** (PostgreSQL). We decided to go this route for several reasons:
+- **Simplicity & Maintainability**: HTML, CSS, and modern JavaScript require no complex build systems, transpilers, or bundlers, making team collaboration and direct editing seamless.
+- **Robust Backend**: Supabase gives us real-time PostgreSQL database features, Row Level Security (RLS) to enforce data privacy at the database layer, secure Supabase Auth, and Storage buckets for user uploads.
+- **Cost-Effective**: We wanted to avoid recurring paid infrastructure or consuming expensive AI service tokens quickly, though we leveraged AI assistance (like Claude) to help organize and refine our code with the resources provided.
+- **Ease of Colaboration**: Hosting the site live through GitHub Pages makes it very easy for our team members to access and edit the code, as well as test the live site.
 
-1. Habits & Goals
-2. Your Phone’s Pull
-3. Scroll Less, Sleep Better
-4. Find Your Offline
-5. Build Real Connection
-6. Make Plans That Stick
+---
 
-Each unfinished lesson ends with a reflection (no word minimum, 1,000 characters maximum; a nonblank response is required), a daily habit name (1–80 characters), and Finish lesson. Finishing while signed in saves the reflection, completion and linked habit in one database transaction. Retrying does not create another habit. The app waits for confirmation and preserves typed answers on failure.
+## Key Features
+- **Interactive Habit Curriculum**: 6 structured interactive lessons covering phone habits, cues, screen reduction, and offline connections with reflection prompts and habit formation.
+- **Habit & Momentum Tracking**: Set daily habits and maintain daily check-in streaks tracked dynamically through Supabase.
+- **In-Person Activities & Commitments**: Browse, filter, host, and RSVP to local activities (supporting up to 100 participants) with host address privacy controls and capacity limits.
+- **Social Connection & Friends**: Send and accept friend requests, discover mutual connections, and filter activity visibility between Public and Friends-Only.
+- **Friends-Only Feed**: Share and view text posts with friends.
+- **Direct Messaging**: Direct 1-on-1 private messaging with integrated user blocking for safety.
+- **User Profiles & Avatars**: Customizable user profiles with interests and profile picture uploads stored in Supabase Storage.
 
-Lesson 1 is available first. Each later lesson unlocks after the previous lesson is completed; Supabase independently rejects completion if any earlier lesson is unfinished.
+---
 
-Home and the completed lesson display the same habit record. Renaming or archiving it on Home is reflected when the lesson is reopened. Habits and completion records are scoped to the authenticated user's profile, and reload/sign-in restores progress from Supabase. Practice quizzes and planner fields are not individually stored; a plan is included in the saved reflection only when the learner chooses to add it.
+## How to Get It Running
 
-Old five-lesson database records and existing habits are preserved as curriculum version 1. They are not automatically marked as completions of the reordered six-lesson curriculum. Lesson numbers in URLs are curriculum positions, not database IDs.
+### Deploying to GitHub Pages
+To host the frontend live on GitHub Pages:
+1. Push or fork the repository to your GitHub account.
+2. In your GitHub repository, navigate to **Settings** > **Pages** (in the left sidebar).
+3. Under **Build and deployment** > **Source**, choose **"Deploy from a branch"**.
+4. Under **Branch**, select `main` (or default branch) and `/ (root)` directory, then click **Save**.
+5. Wait 1–2 minutes; GitHub will provide your live URL (e.g., `https://<your-username>.github.io/<repo-name>/`).
 
-## Running locally
+---
 
-From this directory run `python3 -m http.server 8765`, then open `http://localhost:8765/`.
+### Setting Up a New Supabase Backend (From Scratch)
+If you wish to host and run Momentum against your own independent Supabase project rather than the shared team database:
 
-- With configured publishable credentials in `js/config.js`, sign in with a real Supabase account. Actions can write real database records.
-- For an isolated demo, use a separate copy of the site and set `window.MOMENTUM_CONFIG = {};` in that copy's config. Demo data stays in that browser and does not test database sync.
-- Reload with Cmd+Shift+R after source changes. A fresh private window gives a fresh demo session.
-- Never put a Supabase service-role/secret key in frontend files.
+1. **Create a Supabase Project:**
+   - Go to [supabase.com](https://supabase.com), log in, and click **New Project**.
+   - Select your organization, choose a database password, and pick a nearby region.
 
-## Account creation and recovery
+2. **Initialize Database Schema & Tables:**
+   - In your Supabase dashboard, open the **SQL Editor** from the left sidebar.
+   - Click **New query**, paste the entire contents of [`database/schema.sql`], and click **Run**.
+   - This sets up the base tables, security policies, and initial seed data.
 
-The public landing page is `index.html`. Sign-in lives at `login.html`; `login.html#signup` opens account creation. The landing page links to both.
+3. **Apply Database Migrations:**
+   - Run the migration files located in [`database/`] in sequential order (`001_accounts.sql` through `022_friends_only_posts.sql`), along with [`supabase/migrations/20261116000000_activity_capacity_100.sql`].
+   - Key migrations include:
+     - `001_accounts.sql`: Links Supabase Auth to profile records and configures per-user RLS.
+     - `007_lesson_sync.sql` & `008_reflection_character_limit.sql`: Version-2 interactive curriculum with atomic habit completion and reflection limits.
+     - `007_profile_photos.sql`: Sets up the `avatars` storage bucket and photo permissions.
+     - `010_friendships.sql`, `011_messaging.sql`, `015_user_blocks.sql`: Social graph, real-time messaging, and blocking.
+     - `018_commitments.sql`, `019_friends_activity_visibility.sql`, `020_fix_friends_activity_rls.sql`: Activity RSVPs, guest attendance, and Friends-Only visibility.
+     - `022_friends_only_posts.sql`: Enforces friends-only post security.
 
-The current signup form requires first name, last name, email, password, sex, and an explicit 18-or-older confirmation on the signup form. The live schema no longer stores profile city/state, address, phone, or birthdate; account reads and updates must not request these deleted columns. The signup metadata must include `age_confirmed: true` only after the user checks the age-confirmation box.
+4. **Verify Storage Bucket:**
+   - Go to **Storage** in the Supabase dashboard.
+   - Ensure an `avatars` bucket exists, is set to **Public**, and has a 1MB file size limit for profile photos (configured by migration 007).
 
-Supabase Auth accounts and application profiles are separate records. Deleting a `profile_private` or `profiles` row does not free the login email or rerun the signup trigger. A deliberate account reset should be handled by an authorized operator through Auth account removal and verified cascading app-data cleanup, including Storage API cleanup if files exist. This is permanent; do not use it merely to test lesson UI. Sign out of old sessions and use a fresh private window when recreating a removed account.
+5. **Configure Supabase Authentication Settings:**
+   - Go to **Authentication** > **URL Configuration**:
+     - **Site URL**: Enter your local server or GitHub Pages URL (e.g., `http://localhost:8000` or `https://<your-username>.github.io/<repo-name>/`).
+     - **Redirect URLs**: Add `http://localhost:*/**`, `http://127.0.0.1:*/**`, and your GitHub Pages domain.
+   - *(Optional for frictionless grading/testing)*: Under **Authentication** > **Providers** > **Email**, toggle **"Confirm email"** to **Off** so new accounts can log in immediately without waiting for confirmation emails.
 
-## Database deployment
+6. **Connect the Frontend (`js/config.js`):**
+   - In Supabase, go to **Project Settings** > **API** (or Data API).
+   - Copy your **Project URL** and the **anon / public** key (`sb_publishable_...` or JWT).
+   - Open [`js/config.js`] in your repository and update:
+     ```javascript
+     window.MOMENTUM_CONFIG = {
+       SUPABASE_URL: "https://your-project-id.supabase.co",
+       SUPABASE_ANON_KEY: "your-anon-publishable-key",
+     };
+     ```
+   > [CAUTION]
+   > Never place the `service_role` (secret) key in `config.js` or frontend files. The `anon` key is designed to be public because data security is enforced through PostgreSQL Row Level Security (RLS).
 
-Read [database/README.md](database/README.md) before applying anything. The lesson integration is `database/007_lesson_sync.sql`; it must be applied before deploying the sync code. Apply `database/008_reflection_character_limit.sql` afterward for the current paragraph-length limit. It adds versioned lesson metadata and a restricted completion function while preserving existing rows.
+---
 
-**Do not re-run `database/schema.sql` or historical account cleanup scripts on a live project.** `schema.sql` drops tables; older files describe historical setup, not a safe production reset or an exact snapshot of today's database. Use reviewed, incremental migrations for an existing project.
+## Running Automated Tests
+The repository includes unit and integration tests covering lesson progression, friend requests, visibility rules, and store methods using Node.js's built-in test runner:
 
-The SQL in this repository follows the team's numbered-file convention. Supabase migration history records production applications separately; do not blindly replay numbered files already installed on a project.
+```bash
+# Run all test suites
+node --test
 
-## Verification
+# Or run a specific test suite
+node --test tests/lessons.test.cjs
+node --test tests/activity-visibility.test.cjs
+node --test tests/friendships.test.cjs
+```
 
-- `node --test tests/*.test.cjs`: offline progression and mocked live integration/error handling.
-- `database/internal/verify_lesson_sync.sql`: authorized-operator test of real database functions, account isolation, all six lessons, and retries. It rolls back test writes; use accounts without v2 completions as described in the file.
-- Manual: finish lesson 1, check Home, rename/archive the habit, reopen the lesson, then sign in from another browser and verify restoration. Test a second account for isolation. A temporary offline preview does not establish that live sync works.
+---
 
-## Other existing features
+## Generating / Viewing the ERD in Lucidchart
+Lucidchart can import your database schema directly to generate the exact ERD:
+1. In a Lucidchart document, select **File** > **Import Data** > **Entity Relationship (ERD)**.
+2. Select **PostgreSQL** as the source. Lucidchart displays an SQL query.
+3. In Supabase, go to **SQL Editor** > **New query**, paste Lucidchart's query, and click **Run**.
+4. In the query results panel, export the result as **CSV**.
+5. Back in Lucidchart, upload the CSV and drag the `public` schema tables onto your canvas. Foreign key relationship lines will draw themselves automatically.
+*(Alternatively, view the live database visualizer inside Supabase under **Database** > **Schema Visualizer**).*
 
-The merged site preserves the public landing and About & Privacy pages, current account forms, profile-photo upload/removal, activities, text posts, interests, habit check-ins, and habit ordering/archiving. Other screens still include browser-local behavior; do not assume messaging, RSVP flows, or all social features are fully synchronized. Posts and activity features have their own migrations and permissions. Their behavior is outside this lesson migration.
+---
 
-## Team handoff
+## ERD
+<img width="1652" height="1277" alt="Momentum_ERD_FInal_page-0001" src="https://github.com/user-attachments/assets/324e5491-9231-4aa4-bef9-58fdee511903" />
 
-- [Lesson integration notes](docs/interactive-lessons-handoff.md)
-- [Database operations and rollback](database/README.md)
-- [Internal reporting](database/internal/README.md)
-
-The interactive lesson slice is integrated into `main` while preserving its newer landing, account, and profile-photo work. `lesson/progress-sync` remains a separate historical branch; coordinate with its owner before merging overlapping Store changes.
+---
 
 ## Level 0 Diagram
 <img width="2337" height="1528" alt="Sprint Retrospective (Team 2-5)" src="https://github.com/user-attachments/assets/1e953dd6-277e-478c-8f67-e3c58d4461ae" />
 
+---
+
 ## Level 1 Diagram
 <img width="2555" height="1774" alt="Sprint Retrospective (Team 2-5) (1)" src="https://github.com/user-attachments/assets/c736f8a3-dc73-46a6-ab38-5f302c60eac0" />
-
-## Current progress tracking
-
-Lessons show percent complete. Habits keep daily check-ins and streaks. Deploy this frontend before applying `database/016_remove_points.sql`; the migration removes reward tables and replaces the habit validator and lesson completion function without deleting activity, post, habit, check-in, or lesson records. Historical SQL files describe earlier deployments and must not be replayed on the live database.
