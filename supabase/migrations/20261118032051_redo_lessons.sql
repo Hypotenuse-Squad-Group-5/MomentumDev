@@ -55,3 +55,5 @@ returns jsonb language sql security invoker set search_path = '' as $$
 $$;
 revoke all on function public.redo_momentum_lesson(integer,text,text,integer) from public, anon;
 grant execute on function public.redo_momentum_lesson(integer,text,text,integer) to authenticated;
+
+notify pgrst, 'reload schema';
