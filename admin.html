@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Admin | Momentum</title>
+<link rel="icon" href="img/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="icon" href="img/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="img/apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#00917e">
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<script src="js/theme.js?v=themes-2"></script><!-- picks the saved theme and loads its fonts -->
+<link rel="stylesheet" href="css/styles.css?v=admin-1">
+</head>
+<body data-page="admin">
+<main id="main" class="page"></main>
+<script src="js/config.js"></script>
+<script src="js/vendor/supabase.js"></script>
+<script src="js/store.js?v=admin-1"></script>
+<script src="js/ui.js?v=admin-1"></script>
+<!-- The Admin page: admin.js first (tabs + shared helpers), then one file per tab. -->
+<script src="js/pages/admin.js?v=admin-1"></script>
+<script src="js/pages/admin-accounts.js?v=admin-1"></script>   <!-- Accounts -->
+<script src="js/pages/admin-posts.js?v=admin-1"></script>      <!-- Posts & announcements -->
+<script src="js/pages/admin-activities.js?v=admin-1"></script> <!-- Activities & official events -->
+<script src="js/pages/admin-lists.js?v=admin-1"></script>      <!-- App lists -->
+<script src="js/pages/admin-admins.js?v=admin-1"></script>     <!-- Admins (worked example) -->
+</body>
+</html>

@@ -784,6 +784,41 @@
   // theme loads on its own, so the other settings still load if migration 031 hasn't run yet
   const CORE_SETTINGS = Object.keys(SETTING_COLUMNS).filter((k) => k !== "theme");
   // Extras that must never block signing in (the page still works with defaults)
+  // =====================================================================
+  // Admin (migration 032). Who's an admin is decided in Supabase only (momentum_private.admins).
+  // "Admin mode" is just a view switch in Settings: off by default, kept only for this browser tab
+  // (sessionStorage), never saved. The database checks admin rights on every admin action anyway.
+  // =====================================================================
+  // Checked only where it matters (Settings, the Admin page, or when Admin mode is already on in this tab),
+  // so regular users never pay for an extra request on every page.
+  let admin = null; // null until checked
+  let adminCheck = null;
+  const ADMIN_MODE_KEY = "momentum.adminMode";
+  async function loadAdmin() {
+    const { data, error } = await sb.rpc("is_admin");
+    admin = !error && data === true;
+    if (!admin) setAdminMode(false);
+    return admin;
+  }
+  function checkAdmin() {
+    if (!adminCheck) adminCheck = loadAdmin().catch(() => { admin = false; return false; });
+    return adminCheck;
+  }
+  function adminModeFlag() { try { return sessionStorage.getItem(ADMIN_MODE_KEY) === "1"; } catch (e) { return false; } }
+  function setAdminMode(on) {
+    try { if (on && admin) sessionStorage.setItem(ADMIN_MODE_KEY, "1"); else sessionStorage.removeItem(ADMIN_MODE_KEY); } catch (e) { /* ignore */ }
+  }
+  // Before the check finishes, trust this tab's switch (only an admin could have turned it on); after, require admin
+  const adminMode = () => adminModeFlag() && admin !== false;
+  // Call an admin database function: Store.admin.call("admin_list_admins", { ...args })
+  // -> { ok: true, data } or { ok: false, message }
+  async function adminCall(fn, args = {}) {
+    if (!admin) return { ok: false, message: "Admins only." };
+    const { data, error } = await sb.rpc(fn, args);
+    if (error) return { ok: false, message: error.message };
+    return { ok: true, data };
+  }
+
   function optional(load) { return Promise.resolve().then(load).catch((e) => { console.warn(load.name + " failed:", e && e.message); return false; }); }
   async function loadSettings() {
     if (!ME) return false;
@@ -1763,7 +1798,7 @@
       if (state && state.settings) delete state.settings.messageRequestsFrom;
       if (!Array.isArray(state.blocks)) state.blocks = [];
       state.meId = ME; state.signedIn = true;
-      const [habitsLoaded, lessonsLoaded] = await Promise.all([loadHabitData(), loadLessonData(), loadPosts(), loadInterests(), loadFriendships(), loadConversations(), loadBlocks(), loadCommitments(), optional(loadSettings), optional(loadNotifications)]);
+      const [habitsLoaded, lessonsLoaded] = await Promise.all([loadHabitData(), loadLessonData(), loadPosts(), loadInterests(), loadFriendships(), loadConversations(), loadBlocks(), loadCommitments(), optional(loadSettings), optional(loadNotifications), adminModeFlag() ? checkAdmin() : null]);
       if (!habitsLoaded || !lessonsLoaded) { loadError = "We couldn't load your saved habits and lesson progress. Please reload to try again."; return "syncerror"; }
       persist();
       return true;
@@ -1797,6 +1832,7 @@
       // Offline or server error: still sign out on this device by clearing the saved session.
       if (failed) { try { localStorage.removeItem(sb.auth.storageKey); } catch (e) { /* ignore */ } }
       try { Object.keys(localStorage).filter((k) => k.startsWith("momentum.shell.")).forEach((k) => localStorage.removeItem(k)); } catch (e) { /* ignore */ }
+      try { sessionStorage.removeItem("momentum.adminMode"); } catch (e) { /* ignore */ } // admin mode never outlives the login
     },
   };
 
@@ -1815,6 +1851,8 @@
 
   window.Store = {
     get ME() { return ME; }, LESSON_COUNT, CANCELS_PER_MONTH, auth, init, savedLogin,
+    // admin (migration 032)
+    isAdmin: () => admin === true, adminChecked: () => admin !== null, checkAdmin, adminMode, setAdminMode, admin: { call: adminCall },
     get state() { return state; }, get loadError() { return loadError; },
     subscribe: (fn) => { listeners.add(fn); return () => listeners.delete(fn); },
     today, dayKey, addDays,

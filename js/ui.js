@@ -44,6 +44,7 @@
     star: '<path d="M12 3l2.6 5.6 6.1.7-4.5 4.2 1.2 6L12 16.6 6.6 19.5l1.2-6L3.3 9.3l6.1-.7z"/>',
     trash: '<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/>',
     refresh: '<path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/>',
+    shield: '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/>',
     ban: '<circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/>',
   };
   const icon = (name, cls = "") => '<svg class="i ' + cls + '" viewBox="0 0 24 24" aria-hidden="true">' + (ICONS[name] || "") + "</svg>";
@@ -173,6 +174,9 @@
     { key: "lessons", href: "lessons.html", label: "Lessons", icon: "book" },
     { key: "social", href: "social.html", label: "Social", icon: "users" },
   ];
+  // A 6th item for admins, only while Admin mode is on (Settings › Admin)
+  const ADMIN_NAV = { key: "admin", href: "admin.html", label: "Admin", icon: "shield" };
+  const navItems = () => (Store.adminMode() ? NAV.concat(ADMIN_NAV) : NAV);
 
   // The logo, drawn inline so its colors follow the theme (--logo-* in styles.css).
   // img/logo.svg stays teal for the app icon and README.
@@ -221,11 +225,11 @@
     const side = document.getElementById("app-sidebar");
     if (side) {
       // Same five as the phone tab bar; your profile (avatar) and Settings (gear) are in the header
-      side.innerHTML = NAV.map((n) => '<a class="nav-item' + (n.key === pageKey ? " active" : "") + '" href="' + n.href + '"' + (n.key === pageKey ? ' aria-current="page"' : "") + ">" + icon(n.icon) + n.label + (n.key === "social" ? socialBadge : "") + "</a>").join("");
+      side.innerHTML = navItems().map((n) => '<a class="nav-item' + (n.key === pageKey ? " active" : "") + '" href="' + n.href + '"' + (n.key === pageKey ? ' aria-current="page"' : "") + ">" + icon(n.icon) + n.label + (n.key === "social" ? socialBadge : "") + "</a>").join("");
     }
     const tabs = document.getElementById("app-tabbar");
     if (tabs) {
-      tabs.innerHTML = NAV.map((n) => '<a href="' + n.href + '"' + (n.key === pageKey ? ' class="active" aria-current="page"' : "") + ">" + icon(n.icon) + n.label + (n.key === "social" ? socialBadge : "") + "</a>").join("");
+      tabs.innerHTML = navItems().map((n) => '<a href="' + n.href + '"' + (n.key === pageKey ? ' class="active" aria-current="page"' : "") + ">" + icon(n.icon) + n.label + (n.key === "social" ? socialBadge : "") + "</a>").join("");
     }
   }
   function renderHeader() {

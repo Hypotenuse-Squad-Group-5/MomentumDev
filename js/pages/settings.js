@@ -16,12 +16,19 @@ UI.mount("settings", function render() {
   const themes = window.Theme ? Theme.ids : ["default"];
   const currentTheme = window.Theme ? Theme.current() : "default";
   if (tab === "general" && window.Theme) Theme.loadAllFonts();
+  if (!Store.adminChecked()) Store.checkAdmin().then((yes) => { if (yes) render(); }); // admins get the Admin section
   document.getElementById("main").innerHTML = `
   <div style="max-width:720px">
     <h1>Settings</h1>
     <nav class="subnav" aria-label="Settings sections"><a href="#general"${tab === "general" ? ' class="active"' : ""}>General</a><a href="#profile"${tab === "profile" ? ' class="active"' : ""}>Profile</a></nav>
     ${tab === "general" ? `
-    <section class="panel" id="appearance">
+    ${Store.isAdmin() ? `
+    <section class="panel" id="admin-section">
+      <h2>Admin</h2>
+      <label class="setting-row"><span class="grow">Admin mode<br><span class="small muted">Adds the Admin page to the menu. Turns off when you close this tab.</span></span><input type="checkbox" class="switch" id="admin-mode"${Store.adminMode() ? " checked" : ""}></label>
+    </section>
+    <section class="panel mt" id="appearance">` : `
+    <section class="panel" id="appearance">`}
       <h2>Appearance</h2>
       <p class="small muted mb0">Pick a look. It changes colors, corners and fonts, and follows your account to every device.</p>
       <div class="theme-picker" role="radiogroup" aria-label="Theme">
@@ -104,6 +111,13 @@ UI.mount("settings", function render() {
   </div>`;
 
   // Settings save to Supabase (user_settings) as soon as they change
+  // Admin mode: only drawn for admins (the database decides who's an admin, migration 032)
+  const adminSwitch = document.getElementById("admin-mode");
+  if (adminSwitch) adminSwitch.onchange = () => {
+    Store.setAdminMode(adminSwitch.checked);
+    UI.renderHeader(); // redraw the menu with or without Admin
+    UI.toast(adminSwitch.checked ? "Admin mode on. Admin is in the menu." : "Admin mode off");
+  };
   document.querySelectorAll("[data-k]").forEach((el) => (el.onchange = async () => {
     const r = await Store.setSetting(el.dataset.k, el.type === "checkbox" ? el.checked : el.value);
     if (r.ok) UI.toast(r.localOnly ? "Saved on this device" : "Saved"); else { UI.toast("Couldn't save: " + r.message); render(); }

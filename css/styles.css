@@ -218,7 +218,7 @@ svg.i.lg { width: 28px; height: 28px; }
 .tabbar {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
   height: var(--tabbar-h);
-  display: grid; grid-template-columns: repeat(5, 1fr);
+  display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); /* 5 tabs, or 6 with Admin */
   padding-bottom: env(safe-area-inset-bottom);
   background: var(--header);
   border-top: var(--line);
@@ -1128,3 +1128,19 @@ html[data-theme="trailhead"] { font-size: 17px; }
 .ts-dot { width: 12px; height: 12px; flex-shrink: 0; border: 2px solid var(--check-line); border-radius: var(--r-dot); }
 .ts-line { flex: 1; height: 5px; border-radius: var(--r-pill); background: var(--muted); }
 .ts-btn { height: 16px; border-radius: var(--r-md); background: var(--primary); }
+
+/* ---------- Admin page (admin.html; shared by every admin tab) ---------- */
+.admin-tabs { flex-wrap: wrap; }                 /* 5 tabs: wrap to two lines on a phone */
+.admin-tabs a { flex: 1 1 auto; white-space: nowrap; }
+.admin-state { text-align: center; padding: 28px 18px; }
+.admin-table-wrap { overflow-x: auto; margin-top: 12px; border: 1px solid var(--border); border-radius: var(--r-sm); }
+.admin-table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+.admin-table th { text-align: left; font-size: .75rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted-fg); background: var(--muted); }
+.admin-table th, .admin-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.admin-table tbody tr:last-child td { border-bottom: 0; }
+.admin-table tbody tr:hover { background: var(--primary-soft); }
+.admin-table .actions { text-align: right; white-space: nowrap; }
+.admin-plan { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 10px; }
+.admin-plan li { display: grid; grid-template-columns: 70px 1fr; gap: 10px; align-items: baseline; }
+.admin-plan b { color: var(--primary); }
+.tabbar a { min-width: 0; white-space: nowrap; } /* 6 tabs in admin mode: keep labels on one line */
