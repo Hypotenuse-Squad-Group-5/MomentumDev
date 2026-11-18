@@ -31,8 +31,15 @@ function app(db, opts={}) {
     calls++; await Promise.resolve();
     if(opts.failRPC) return {data:null,error:{message:'Save rejected'}};
     const lesson=db.lessons.find(l=>l.number===args.p_number&&l.curriculum_version===2);
-    const h={id:'habit-'+uid+'-'+lesson.id,profile_id:uid,title:args.p_habit_title,goal_text:args.p_goal,source_lesson_id:lesson.id,is_active:true,sort_order:1,created_at:new Date().toISOString()};
-    db.habits.push(h);db.lesson_completions.push({profile_id:uid,lesson_id:lesson.id,habit_id:h.id,user_goal_response:args.p_goal,completed_at:h.created_at});
+    const completed=db.lesson_completions.find(c=>c.profile_id===uid&&c.lesson_id===lesson.id);
+    const redo=name==='redo_momentum_lesson';
+    if(redo && (!completed || (completed.redo_count ?? 0)!==args.p_redo_count)) {
+      return {data:null,error:{message:'Your lesson has changed. Reload to see the latest attempt.'}};
+    }
+    const h={id:webcrypto.randomUUID(),profile_id:uid,title:args.p_habit_title,goal_text:args.p_goal,source_lesson_id:redo?null:lesson.id,is_active:true,sort_order:1,created_at:new Date().toISOString()};
+    db.habits.push(h);
+    if(redo) Object.assign(completed,{habit_id:h.id,user_goal_response:args.p_goal,redo_count:args.p_redo_count+1});
+    else db.lesson_completions.push({profile_id:uid,lesson_id:lesson.id,habit_id:h.id,user_goal_response:args.p_goal,completed_at:h.created_at});
     return {data:{ok:true,habitId:h.id},error:null};
   }})};
   vm.runInContext(fs.readFileSync('js/store.js','utf8'),ctx);
@@ -48,6 +55,28 @@ test('live completion uses database IDs, restores in a fresh browser and shares 
  const fresh=app(db);assert.equal(await fresh.Store.init(),true);assert.equal(fresh.Store.isLessonDone(1),true);assert.equal(fresh.Store.lessonGoal(1),goal.trim());assert.equal(fresh.Store.lessonHabit(1).title,'Renamed on Home');assert.equal(fresh.Store.lessonHabit(1).active,false);assert.equal(fresh.Store.stats().lessonPercent,17);
  const other=app(db,{user:'user-b'});await other.Store.init();assert.equal(other.Store.isLessonDone(1),false);assert.equal(other.Store.habits().length,0);
 });
+test('redo keeps the old Home habit and completion date, and links the new habit',async()=>{
+ const db=data(),a=app(db);await a.Store.init();
+ assert.equal((await a.Store.completeLesson(1,goal,'Walk',{redo:true})).ok,false);
+ await a.Store.completeLesson(1,goal,'Walk');
+ const original={...db.habits[0]};
+ const completionDate=db.lesson_completions[0].completed_at;
+ const stale=app(db);await stale.Store.init();
+ const pending=a.Store.completeLesson(1,'A new reflection.','Read',{redo:true});
+ assert.equal(a.Store.completeLesson(1,'A new reflection.','Read',{redo:true}),pending);
+ assert.equal((await pending).ok,true);
+ assert.equal((await stale.Store.completeLesson(1,'A stale reflection.','Stretch',{redo:true})).ok,false);
+ assert.deepEqual(db.habits[0],original);
+ assert.equal(a.Store.habits().length,2);
+ assert.equal(db.lesson_completions.length,1);
+ assert.equal(db.lesson_completions[0].completed_at,completionDate);
+ const fresh=app(db);await fresh.Store.init();
+ assert.equal(fresh.Store.lessonGoal(1),'A new reflection.');
+ assert.equal(fresh.Store.lessonHabit(1).title,'Read');
+ assert.equal(fresh.Store.isLessonUnlocked(2),true);
+ assert.equal(fresh.Store.stats().lessonPercent,17);
+});
+
 test('failed completion and Home habit writes do not claim success or mutate state',async()=>{
  const db=data(),a=app(db,{failRPC:true,failInsert:true});await a.Store.init();
  const result=await a.Store.completeLesson(1,goal,'Walk');assert.equal(result.ok,false);assert.equal(a.Store.isLessonDone(1),false);assert.equal(a.Store.habits().length,0);
