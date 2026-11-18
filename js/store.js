@@ -990,23 +990,29 @@
   // Finishing a lesson adds its habit, so a NEW lesson needs a free habit slot. Reviewing a finished one is always fine.
   const LESSON_BLOCKED_MSG = "You won't be able to do this lesson until you have 1 open habit slot.";
   const canStartLesson = (n) => isLessonDone(n) || canAddHabit();
-  function completeLesson(n, goalText, habitTitle) {
+  function completeLesson(n, goalText, habitTitle, { redo = false } = {}) {
     if (pendingLessons.has(n)) return pendingLessons.get(n);
-    const pending = saveLesson(n, goalText, habitTitle).finally(() => pendingLessons.delete(n));
+    const pending = saveLesson(n, goalText, habitTitle, redo).finally(() => pendingLessons.delete(n));
     pendingLessons.set(n, pending);
     return pending;
   }
-  async function saveLesson(n, goalText, habitTitle) {
+  async function saveLesson(n, goalText, habitTitle, redo) {
     if (!Number.isInteger(n) || n < 1 || n > LESSON_COUNT) return { ok: false, message: "Lesson not found." };
     if (!isLessonUnlocked(n)) return { ok: false, message: "Finish the previous lesson first." };
-    if (isLessonDone(n)) return { ok: false, message: "You've already finished this lesson." };
-    if (!canStartLesson(n)) return { ok: false, code: "max_active", message: LESSON_BLOCKED_MSG };
+    const completed = state.lessonsDone.find((l) => l.n === n);
+    if (redo && !completed) return { ok: false, message: "Finish this lesson before redoing it." };
+    if (!redo && completed) return { ok: false, message: "You've already finished this lesson." };
+    if (!canAddHabit()) return { ok: false, code: "max_active", message: LESSON_BLOCKED_MSG };
     const gainedBefore = momentum().gainedToday;
     const goal = goalText.trim(), title = habitTitle.trim();
     if (!goal || goal.length > 1000) return { ok: false, message: "Add a brief reflection of up to 1,000 characters." };
     if (!title || title.length > 80) return { ok: false, message: "Give your daily habit a name of 1 to 80 characters." };
     try {
-      const { data, error } = await sb.rpc("complete_momentum_lesson", { p_number: n, p_goal: goal, p_habit_title: title });
+      const args = { p_number: n, p_goal: goal, p_habit_title: title };
+      if (redo) args.p_redo_count = completed.redoCount;
+      const { data, error } = await sb.rpc(redo ? "redo_momentum_lesson" : "complete_momentum_lesson", args);
+      if (redo && error?.code === "PGRST202") return { ok: false, message: "Redo is not available on this deployment yet." };
+      if (error?.hint === "max_active") return { ok: false, code: "max_active", message: LESSON_BLOCKED_MSG };
       if (error) return { ok: false, message: error.message };
       if (!data || !data.ok) return { ok: false, message: "The lesson could not be saved. Please try again." };
       const refreshed = await Promise.all([loadLessonData(), loadHabitData()]);
@@ -1019,20 +1025,28 @@
   function lessonHabit(n) {
     const completed = state.lessonsDone.find(l => l.n === n);
     const lesson = lessonCatalog.find(l => l.number === n);
-    return state.habits.find(h => (completed && completed.habitId === h.id) || (lesson && h.lessonId === lesson.id)) || null;
+    if (completed?.habitId || completed?.redoCount) {
+      return state.habits.find(h => h.id === completed.habitId) || null;
+    }
+    return state.habits.find(h => lesson && h.lessonId === lesson.id) || null;
   }
   async function loadLessonData() {
     try {
-      const [lessons, completed] = await Promise.all([
+      const completionFields = "lesson_id,completed_at,user_goal_response,habit_id";
+      const [lessons, progress] = await Promise.all([
         sb.from("lessons").select("id,number").eq("curriculum_version", CURRICULUM_VERSION).order("number"),
-        sb.from("lesson_completions").select("lesson_id,completed_at,user_goal_response,habit_id").eq("profile_id", ME)
+        sb.from("lesson_completions").select(completionFields + ",redo_count").eq("profile_id", ME)
       ]);
+      // Older deployments can still load progress while the redo migration is pending.
+      const completed = progress.error?.code === "42703"
+        ? await sb.from("lesson_completions").select(completionFields).eq("profile_id", ME)
+        : progress;
       if (lessons.error || completed.error || lessons.data?.length !== LESSON_COUNT || !completed.data) return false;
       lessonCatalog = lessons.data;
       if (!state.lessonSyncVersion) state.legacyLessonProgress = state.lessonsDone || [];
       state.lessonSyncVersion = CURRICULUM_VERSION;
       const numbers = new Map(lessonCatalog.map(l => [l.id, l.number]));
-      state.lessonsDone = completed.data.filter(c => numbers.has(c.lesson_id)).map(c => ({ n: numbers.get(c.lesson_id), at: c.completed_at, goal: c.user_goal_response, habitId: c.habit_id }));
+      state.lessonsDone = completed.data.filter(c => numbers.has(c.lesson_id)).map(c => ({ n: numbers.get(c.lesson_id), at: c.completed_at, goal: c.user_goal_response, habitId: c.habit_id, redoCount: c.redo_count ?? 0 }));
       return true;
     } catch (_) { return false; }
   }
