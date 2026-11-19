@@ -8,6 +8,8 @@ alter table public.activities
   add column if not exists official boolean not null default false;
 
 -- READ: admins can see every activity, regardless of normal visibility rules.
+-- A SECURITY DEFINER implementation checks require_admin() and reads the related
+-- profile, category, address, and attendee-count data in one result set.
 create or replace function momentum_private.admin_list_activities()
 returns table (
   id uuid, host_id uuid, host_name text, type_id smallint, type_name text,
@@ -54,6 +56,9 @@ revoke all on function public.admin_list_activities() from public, anon;
 grant execute on function public.admin_list_activities() to authenticated;
 
 -- CREATE / UPDATE: p_data contains the editable activity fields and exact address.
+-- The public function below is a narrow RPC wrapper; the private function owns validation
+-- and writes. Keeping the permission check in the database protects the operation even
+-- if someone bypasses the admin page and calls Supabase directly.
 -- Admin-created activities are hosted by the signed-in admin but branded as Momentum.
 create or replace function momentum_private.admin_save_activity(p_id uuid, p_data jsonb)
 returns uuid
@@ -159,6 +164,7 @@ end $$;
 revoke all on function momentum_private.notify_activity_changed() from public, anon, authenticated;
 
 -- CANCEL: keeps the activity in history and notifies all committed people/+1s.
+-- The advisory lock serializes simultaneous cancellation attempts for the same activity.
 -- Admin cancellations do not consume the host's personal monthly cancellation allowance.
 create or replace function momentum_private.admin_cancel_activity(p_activity uuid)
 returns jsonb language plpgsql security definer set search_path = '' as $$
@@ -195,6 +201,7 @@ revoke all on function public.admin_cancel_activity(uuid) from public, anon;
 grant execute on function public.admin_cancel_activity(uuid) to authenticated;
 
 -- DELETE: explicit confirmation is handled in the admin interface.
+-- Deletion is permanent; use cancellation when the event should remain in attendee history.
 create or replace function momentum_private.admin_delete_activity(p_activity uuid)
 returns void language plpgsql security definer set search_path = '' as $$
 begin
