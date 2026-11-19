@@ -120,7 +120,7 @@
       cancelledAt: row.cancelled_at || null, // set when the host cancelled it with people going (migration 025)
       editedAt: row.edited_at || null,       // the host edited it ("Edited" label, migration 030)
       changedAt: row.changed_at || null,     // the host changed the date, time or place with people going (030)
-      visibility: row.visibility, createdAt: row.created_at, source: "supabase",
+      visibility: row.visibility, official: row.official === true, createdAt: row.created_at, source: "supabase",
     };
   }
 
