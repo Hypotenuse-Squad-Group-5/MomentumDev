@@ -6,7 +6,7 @@ Each of us builds one tab of the Admin page, with full CRUD (Create, Read, Updat
 
 | Teammate | Tab | Your files | Your migration |
 |---|---|---|---|
-| Teammate 1 | **Lessons** | `js/pages/admin-lessons.js` | `supabase/migrations/20261119014500_admin_lessons.sql` |
+| Teammate 1 | **Lessons** | `js/pages/admin-lessons.js` | `supabase/migrations/20261119020050_admin_lessons.sql` |
 | Teammate 2 | **Accounts** | `js/pages/admin-accounts.js` (+ an Edge Function if you do Create) | `database/034_admin_accounts.sql` |
 | Teammate 3 | **Posts & announcements** | `js/pages/admin-posts.js` | `database/035_admin_posts.sql` |
 | Teammate 4 | **Activities & official events** | `js/pages/admin-activities.js` | `database/036_admin_activities.sql` |
