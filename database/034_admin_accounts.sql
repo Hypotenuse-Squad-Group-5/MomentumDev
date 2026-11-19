@@ -6,7 +6,10 @@
 --   UPDATE  admin_update_account(profile, first, last, bio, remove_photo)
 --           admin_set_suspended(profile, true/false)      uses Supabase's own login ban (auth.users.banned_until):
 --                                                         a suspended person can't sign in, and their sessions are
---                                                         ended so they're signed out within the hour
+--                                                         ended so they're signed out within the hour.
+--                                                         Banned until now + 100 years, like Supabase's Ban button.
+--                                                         NOT 'infinity': Supabase's login server can't read it and
+--                                                         sign-in fails with "Database error querying schema".
 --   DELETE  admin_delete_account(profile)                 same approach as delete_my_account (025)
 --   CREATE  is not here: making a login needs the service key, so it lives in the Edge Function
 --           supabase/functions/admin-create-user (see docs/admin-guide.md).
@@ -114,7 +117,7 @@ begin
   perform momentum_private.require_admin();
   v_login := momentum_private.admin_target_login(p_profile, case when p_suspended then 'suspend' else 'unsuspend' end);
   if v_login is null then raise exception 'That account has no login to suspend.' using errcode = '22023'; end if;
-  update auth.users set banned_until = case when p_suspended then 'infinity'::timestamptz else null end where id = v_login;
+  update auth.users set banned_until = case when p_suspended then now() + interval '100 years' else null end where id = v_login;
   if p_suspended then
     delete from auth.sessions where user_id = v_login; -- ends their sessions: signed out at the next token refresh
   end if;
@@ -161,6 +164,9 @@ create or replace function public.admin_delete_account(p_profile uuid)
 returns jsonb language sql security invoker set search_path = '' as $$ select momentum_private.admin_delete_account(p_profile); $$;
 revoke all on function public.admin_delete_account(uuid) from public, anon;
 grant execute on function public.admin_delete_account(uuid) to authenticated;
+
+-- Repair: accounts suspended by the first version of this file ('infinity') get the 100-year date instead
+update auth.users set banned_until = now() + interval '100 years' where banned_until = 'infinity';
 
 -- PREVIEW: the new functions, and how many accounts there are
 select
