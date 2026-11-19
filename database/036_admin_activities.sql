@@ -142,7 +142,7 @@ grant execute on function public.admin_save_activity(uuid, jsonb) to authenticat
 
 -- Official events use Momentum as the sender when an admin changes the plan.
 create or replace function momentum_private.notify_activity_changed() returns trigger
-language plpgsql security definer set search_path = '' as $
+language plpgsql security definer set search_path = '' as $$
 declare v_host text;
 begin
   if new.changed_at is not distinct from old.changed_at or new.cancelled_at is not null then return null; end if;
@@ -156,7 +156,7 @@ begin
            || '. You can cancel for free.', 'activity.html?id=' || new.id
     from momentum_private.people_on(new.id) pid;
   return null;
-end $;
+end $$;
 revoke all on function momentum_private.notify_activity_changed() from public, anon, authenticated;
 
 -- CANCEL: keeps the activity in history and notifies all committed people/+1s.
