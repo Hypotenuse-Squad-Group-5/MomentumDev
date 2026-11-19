@@ -243,7 +243,7 @@ function editHabitModal(id) {
   UI.modal(`<h2>Edit habit</h2>
     <form id="edit-habit" novalidate>
       <div class="field"><label for="edit-title">Habit</label><input id="edit-title" type="text" maxlength="80" value="${UI.esc(h.title)}"><div class="err" hidden></div></div>
-      ${h.goalText ? `<div class="goal-box small"><b>Lesson ${h.lessonNumber} goal</b><br>${UI.esc(h.goalText)}</div><p class="hint">The lesson goal itself can't be edited here.</p>` : ""}
+      ${h.goalText ? `<div class="goal-box small"><b>Lesson goal</b><br>${UI.esc(h.goalText)}</div><p class="hint">The lesson goal itself can't be edited here.</p>` : ""}
       <p class="hint">Renaming keeps this habit's history.</p>
       <div class="modal-actions"><button type="button" class="btn" data-close>Cancel</button><button class="btn btn-primary">Save</button></div>
     </form>`, {

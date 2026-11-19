@@ -3,7 +3,7 @@ let redoingLesson = false;
 UI.mount("lessons", function render() {
   const { icon, esc } = UI;
   const main = document.getElementById("main");
-  const n = Number(UI.qs("n")) || 1;
+  const n = Number(UI.qs("n")) || window.LESSONS[0]?.n;
   const l = window.LESSONS.find((x) => x.n === n);
   if (!l) { main.innerHTML = `<a class="small" href="lessons.html">‹ All lessons</a><div class="panel mt"><h2>Lesson not found</h2></div>`; return; }
   const index = window.LESSONS.indexOf(l);

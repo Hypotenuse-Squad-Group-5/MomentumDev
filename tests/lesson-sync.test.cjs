@@ -10,7 +10,7 @@ function app(db, opts={}) {
   ctx.window=ctx;ctx.addEventListener=()=>{};ctx.MOMENTUM_CONFIG={SUPABASE_URL:'test',SUPABASE_ANON_KEY:'test'};
   const uid=opts.user||'user-a'; let calls=0;
   const builder=table=>{
-    const filters=[]; let inserted, deleting=false, single=false, selection="";
+    const filters=[]; let inserted, deleting=false, single=false, selection="", order="";
     const result=()=>{
       if ((table==='profiles' && /(^|,)(city|state)(,|$)/.test(selection)) || (table==='profile_private' && /phone|home_address|zip_code|birthdate/.test(selection))) return {data:null,error:{message:'Column does not exist in current schema'}};
       if(opts.legacyCatalog && table==='lessons' && selection.includes('published_content')) {
@@ -25,10 +25,11 @@ function app(db, opts={}) {
       }
       if(deleting) { db[table]=(db[table]||[]).filter(row=>!filters.every(([k,v])=>row[k]===v));return {data:[],error:null}; }
       let data=(db[table]||[]).filter(row=>filters.every(([k,v])=>row[k]===v));
+      if (table === 'lessons' && order) data.sort((a,b) => (a[order] ?? a.number) - (b[order] ?? b.number));
       if(['habits','lesson_completions'].includes(table)) data=data.filter(r=>r.profile_id===uid);
       return {data,error:null};
     };
-    const b={select:columns=>{selection=columns;return b;},eq:(k,v)=>{filters.push([k,v]);return b;},order:()=>b,in:()=>b,limit:()=>b,insert:r=>{inserted=r;return b;},delete:()=>{deleting=true;return b;},single:async()=>{single=true;return result();},maybeSingle:async()=>result().error ? result() : ({data:table==='profiles'?{id:uid,auth_user_id:uid,first_name:uid,username:uid,created_at:new Date().toISOString()}:null,error:null}),then:(resolve,reject)=>Promise.resolve(result()).then(resolve,reject)};return b;
+    const b={select:columns=>{selection=columns;return b;},eq:(k,v)=>{filters.push([k,v]);return b;},order:k=>{order=k;return b;},in:()=>b,limit:()=>b,insert:r=>{inserted=r;return b;},delete:()=>{deleting=true;return b;},single:async()=>{single=true;return result();},maybeSingle:async()=>result().error ? result() : ({data:table==='profiles'?{id:uid,auth_user_id:uid,first_name:uid,username:uid,created_at:new Date().toISOString()}:null,error:null}),then:(resolve,reject)=>Promise.resolve(result()).then(resolve,reject)};return b;
   };
   ctx.supabase={createClient:()=>({auth:{getSession:async()=>({data:{session:{user:{id:uid}}}})},from:builder,rpc:async(name,args)=>{
     calls++; await Promise.resolve();
@@ -237,4 +238,32 @@ test('lesson pages replace the bundled curriculum with published content and sup
  assert.equal(empty.Store.stats().lessonPercent, 0);
  db.lessons = data().lessons;
  assert.equal((await load({ legacyCatalog: true })).lessons.length, 6);
+});
+
+
+test('moving a lesson changes the lock order and finishing it creates the same linked Home habit', async () => {
+ const db = data();
+ db.lessons.forEach(row => { row.sequence_position = row.number; });
+ [db.lessons[0].sequence_position, db.lessons[1].sequence_position] = [2, 1];
+ const { Store, calls } = app(db);
+ assert.equal(await Store.init(), true);
+ assert.equal(Store.currentLesson(), 2);
+ assert.equal(Store.isLessonUnlocked(1), false);
+ assert.equal((await Store.completeLesson(1, goal, 'Too soon')).ok, false);
+ assert.equal(calls(), 0);
+ assert.equal((await Store.completeLesson(2, goal, 'Walk after lunch')).ok, true);
+ assert.equal(Store.currentLesson(), 1);
+ assert.equal(Store.isLessonUnlocked(1), true);
+ const home = app(db);
+ assert.equal(await home.Store.init(), true);
+ const habit = home.Store.habits().find(h => h.title === 'Walk after lunch');
+ assert.equal(habit.lessonId, 102);
+ assert.equal(habit.id, home.Store.lessonHabit(2).id);
+ assert.equal(habit.goalText, goal.trim());
+ db.lessons[0].sequence_position = 1;
+ db.lessons[1].sequence_position = 2;
+ const restored = app(db);
+ assert.equal(await restored.Store.init(), true);
+ assert.equal(restored.Store.isLessonUnlocked(2), true);
+ assert.equal(restored.Store.lessonHabit(2).id, habit.id);
 });

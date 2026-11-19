@@ -115,11 +115,44 @@
         ${LessonInteractions.content(lesson.html)}
         <div data-practice></div>
       </article>
-      <section class="panel mt"><h3>Final reflection</h3><p>${esc(lesson.prompt)}</p>
-        <div class="field"><label for="preview-reflection">Reflection</label><textarea id="preview-reflection" readonly placeholder="${esc(lesson.placeholder)}"></textarea></div>
-        <div class="field"><label for="preview-habit">Daily habit</label><input id="preview-habit" readonly placeholder="${esc(lesson.habitPlaceholder)}"></div>
-      </section>`;
+      <form class="panel mt" id="goal-form">
+        <h3>Set your goal</h3>
+        <p class="small muted">Try the full lesson here. Preview answers and habits aren’t saved.</p>
+        <div class="field"><label for="goal">${esc(lesson.prompt)}</label>
+          <textarea id="goal" maxlength="1000" required placeholder="${esc(lesson.placeholder)}"></textarea>
+          <p class="hint"><span data-count>0</span> / 1,000 characters</p>
+        </div>
+        <div class="field"><label for="habit">Your daily habit</label>
+          <input id="habit" maxlength="80" required placeholder="${esc(lesson.habitPlaceholder)}">
+        </div>
+        <p role="alert" data-preview-error></p>
+        <button class="btn btn-primary" type="submit">Finish preview</button>
+      </form>`;
     el.querySelector("[data-back]").onclick = back;
+    const form = el.querySelector("#goal-form");
+    const goal = form.querySelector("#goal");
+    const habit = form.querySelector("#habit");
+    goal.oninput = () => { form.querySelector("[data-count]").textContent = goal.value.length; };
+    form.onsubmit = event => {
+      event.preventDefault();
+      const reflection = goal.value.trim();
+      const title = habit.value.trim();
+      if (!reflection || !title || goal.value.length > 1000 || habit.value.length > 80) {
+        form.querySelector("[data-preview-error]").textContent = "Enter a reflection of up to 1,000 characters and a habit of up to 80 characters.";
+        (!reflection || goal.value.length > 1000 ? goal : habit).focus();
+        return;
+      }
+      const completion = document.createElement("section");
+      completion.className = "panel mt";
+      completion.innerHTML = `<h3 tabindex="-1">Preview complete</h3>
+        <h4>Your goal</h4><div class="goal-box">${esc(reflection)}</div>
+        <h4 class="mt">Your daily habit</h4><div class="goal-box">${esc(title)}</div>
+        <p class="small muted mt">Finishing a published lesson adds this habit to Home.</p>
+        <button class="btn" type="button" data-restart>Restart preview</button>`;
+      form.replaceWith(completion);
+      completion.querySelector("[data-restart]").onclick = () => preview(el, lesson, back);
+      completion.querySelector("h3").focus();
+    };
     LessonInteractions.mount(lesson, el.querySelector("[data-practice]"));
     for (const link of el.querySelectorAll('a[href="#lesson-sources"]')) {
       link.onclick = event => {
@@ -220,15 +253,37 @@
         <div class="row-between"><h2 class="mb0">Published lessons</h2>
           <button type="button" class="btn btn-primary" data-new>Add lesson</button></div>
         ${result.data.length ? AdminUI.table([
+          { label: "Order", cell: ({ n, index, previous, next, title }) => `
+            <span>${index + 1}</span>
+            <button type="button" class="btn btn-sm" data-move="${n}" data-step="-1" data-neighbor="${previous ?? ""}" aria-label="${esc("Move " + title + " up")}" ${previous == null ? "disabled" : ""}>↑</button>
+            <button type="button" class="btn btn-sm" data-move="${n}" data-step="1" data-neighbor="${next ?? ""}" aria-label="${esc("Move " + title + " down")}" ${next == null ? "disabled" : ""}>↓</button>` },
           { label: "Lesson", cell: l => esc(l.title) },
           { label: "Minutes", cell: l => esc(l.minutes) },
           { label: "Actions", cell: l => `
             <button type="button" class="btn btn-sm" data-view="${l.n}">Preview</button>
             <button type="button" class="btn btn-sm" data-edit="${l.n}">Edit</button>
             <button type="button" class="btn btn-danger btn-sm" data-delete="${l.n}">Delete</button>` },
-        ], result.data) : "<p>No lessons are published yet.</p>"}
+        ], result.data.map((lesson, index, lessons) => ({
+          ...lesson, index, previous: lessons[index - 1]?.n, next: lessons[index + 1]?.n,
+        }))) : "<p>No lessons are published yet.</p>"}
       </section>`;
       el.querySelector("[data-new]").onclick = () => editor(el, null, ctx);
+      for (const button of el.querySelectorAll("[data-neighbor]:not(:disabled)")) {
+        button.onclick = async () => {
+          for (const control of el.querySelectorAll("button")) control.disabled = true;
+          try {
+            const res = await Store.admin.call("admin_move_lesson", {
+              p_number: Number(button.dataset.move), p_neighbor: Number(button.dataset.neighbor),
+              p_step: Number(button.dataset.step),
+            });
+            UI.toast(res.ok ? "Lesson order updated." : res.message);
+          } catch (error) {
+            UI.toast(error.message || "Could not update the lesson order.");
+          } finally {
+            if (ctx.isCurrent()) ctx.refresh();
+          }
+        };
+      }
       for (const lesson of result.data) {
         el.querySelector(`[data-view="${lesson.n}"]`).onclick = () => preview(el, lesson, ctx.refresh);
         el.querySelector(`[data-edit="${lesson.n}"]`).onclick = () => editor(el, lesson, ctx);

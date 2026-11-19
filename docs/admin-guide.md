@@ -160,10 +160,11 @@ Shared helpers in `js/pages/admin.js`:
 
 ### Lessons (teammate 1)
 
-- The tab lists the published curriculum. **Preview** shows what learners see and lets admins try the practice exercises.
+- The tab lists the published curriculum. **Preview** shows what learners see and lets admins try the practice exercises, write a reflection, and finish a practice run. Preview progress and habits are temporary.
+- Use the up and down arrows to change the learner sequence. Existing completions and habits keep their lesson links.
 - **Add lesson** appends a lesson to the path. **Edit** opens the same form with the published content. The form includes the lesson body, knowledge-check questions and correct answers, practice planner fields, sources, and reflection prompts.
 - **Publish lesson** makes changes visible to learners. **Delete** removes the lesson from the path and keeps existing completions and habits. Learners skip deleted lessons.
-- For rollout, apply the Supabase migration, deploy the updated site and `suggest-habits` function, then begin publishing or deleting lessons. The previous site expects exactly six lessons.
+- For rollout, apply the Supabase migrations (admin lessons, then lesson sequence), deploy the updated site and `suggest-habits` function, then begin publishing or deleting lessons. The previous site expects exactly six lessons.
 
 ### Accounts (teammate 2)
 - **Read:** search profiles by name or username (`public.profiles`: first_name, username, bio, photo…). Email lives in `auth.users`; only show it inside an admin function.

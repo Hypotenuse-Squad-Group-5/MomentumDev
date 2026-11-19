@@ -1022,7 +1022,7 @@
   const pendingLessons = new Map();
   const isLessonDone = (n) => state.lessonsDone.some((l) => l.n === n);
   const isLessonUnlocked = (n) => publishedNumbers.includes(n)
-    && (isLessonDone(n) || publishedNumbers.every(previous => previous >= n || isLessonDone(previous)));
+    && (isLessonDone(n) || publishedNumbers.slice(0, publishedNumbers.indexOf(n)).every(isLessonDone));
   const currentLesson = () => publishedNumbers.find(n => !isLessonDone(n)) ?? null;
   const lessonPercent = () => publishedNumbers.length
     ? Math.round(publishedNumbers.filter(isLessonDone).length / publishedNumbers.length * 100) : 0;
@@ -1070,15 +1070,16 @@
     return state.habits.find(h => lesson && h.lessonId === lesson.id) || null;
   }
   const lessonColumns = "id,number,title,duration_minutes,goal_prompt,published_content,retired_at";
-  const queryLessons = columns => sb.from("lessons").select(columns)
-    .eq("curriculum_version", CURRICULUM_VERSION).order("number");
+  const orderedLessonColumns = lessonColumns + ",sequence_position";
+  const queryLessons = (columns, order = "number") => sb.from("lessons").select(columns)
+    .eq("curriculum_version", CURRICULUM_VERSION).order(order);
   const lessonFromRow = row => ({
     ...row.published_content, n: row.number, title: row.title,
     minutes: row.duration_minutes, prompt: row.goal_prompt,
   });
   async function listPublishedLessons() {
     if (!admin) return { ok: false, message: "Admins only." };
-    const { data, error } = await queryLessons(lessonColumns).is("retired_at", null);
+    const { data, error } = await queryLessons(orderedLessonColumns, "sequence_position").is("retired_at", null);
     return error ? { ok: false, message: error.message }
       : { ok: true, data: data.filter(row => row.published_content).map(lessonFromRow) };
   }
@@ -1086,19 +1087,21 @@
     try {
       const completionFields = "lesson_id,completed_at,user_goal_response,habit_id";
       const [lessons, progress] = await Promise.all([
-        queryLessons(lessonColumns),
+        queryLessons(orderedLessonColumns, "sequence_position"),
         sb.from("lesson_completions").select(completionFields + ",redo_count").eq("profile_id", ME)
       ]);
       // Older deployments can still load progress while the redo migration is pending.
       const completed = progress.error?.code === "42703"
         ? await sb.from("lesson_completions").select(completionFields).eq("profile_id", ME)
         : progress;
-      const catalog = lessons.error?.code === "42703" ? await queryLessons("id,number") : lessons;
+      let catalog = lessons;
+      if (catalog.error?.code === "42703") catalog = await queryLessons(lessonColumns);
+      if (catalog.error?.code === "42703") catalog = await queryLessons("id,number");
       if (catalog.error || completed.error || !catalog.data || !completed.data) return false;
       lessonCatalog = catalog.data;
       const active = lessonCatalog.filter(row => !row.retired_at);
       publishedNumbers = active.map(row => row.number);
-      if (window.LESSONS && catalog === lessons && active.every(row => row.published_content)) {
+      if (window.LESSONS && active.every(row => row.published_content)) {
         window.LESSONS = active.map(lessonFromRow);
       }
       if (!state.lessonSyncVersion) state.legacyLessonProgress = state.lessonsDone || [];

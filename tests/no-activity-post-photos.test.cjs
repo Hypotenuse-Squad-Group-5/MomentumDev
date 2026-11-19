@@ -704,7 +704,7 @@ test('HTML pages cache-bust all modified JS scripts', () => {
   for (const htmlFile of htmlFiles) {
     const html = fs.readFileSync(htmlFile, 'utf8');
     for (const script of editedScripts) {
-      const version = {"js/ui.js": "admin-1", "js/store.js": "admin-lessons-1", "js/pages/profile.js": "merge-1", "js/pages/home.js": "habits-1", "js/pages/social.js": "themes-1", "js/pages/activity-new.js": "themes-1", "js/pages/activity.js": "edit-1"}[script] || "settings-1";
+      const version = {"js/ui.js": "admin-1", "js/store.js": "lesson-sequence-1", "js/pages/profile.js": "merge-1", "js/pages/home.js": "lesson-sequence-1", "js/pages/social.js": "themes-1", "js/pages/activity-new.js": "themes-1", "js/pages/activity.js": "edit-1"}[script] || "settings-1";
       if (html.includes(`src="${script}`)) {
         assert.equal(
           html.includes(`src="${script}?v=${version}"`),
