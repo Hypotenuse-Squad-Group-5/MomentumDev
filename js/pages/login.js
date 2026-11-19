@@ -110,6 +110,7 @@
   function friendly(error) {
     const m = (error && error.message) || "";
     if (/invalid login credentials/i.test(m)) return "Email or password is incorrect.";
+    if (/banned/i.test(m)) return "This account is suspended. If you think that's a mistake, contact the Momentum team.";
     if (/email not confirmed/i.test(m)) return "Confirm your email first. Check your inbox for the link.";
     if (/database error saving new user/i.test(m)) return "Some details didn't pass our checks. Double-check every field and try again.";
     if (/rate limit|too many/i.test(m)) return "Too many attempts. Wait a few minutes and try again.";

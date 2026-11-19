@@ -1144,3 +1144,9 @@ html[data-theme="trailhead"] { font-size: 17px; }
 .admin-plan li { display: grid; grid-template-columns: 70px 1fr; gap: 10px; align-items: baseline; }
 .admin-plan b { color: var(--primary); }
 .tabbar a { min-width: 0; white-space: nowrap; } /* 6 tabs in admin mode: keep labels on one line */
+
+/* ---------- Admin › Accounts ---------- */
+.admin-table td .tag { margin-left: 6px; vertical-align: middle; }
+.acc-login { display: grid; gap: 10px; margin: 10px 0; }
+.acc-pw { font-family: ui-monospace, Menlo, Consolas, monospace; letter-spacing: .03em; user-select: all; }
+.admin-table .acc-date { white-space: nowrap; }

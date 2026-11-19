@@ -822,6 +822,26 @@
     if (error) return { ok: false, message: error.message };
     return { ok: true, data };
   }
+  // Call an admin Edge Function (things the database can't do alone, like creating a login):
+  // Store.admin.invoke("admin-create-user", { ...body }) -> { ok: true, data } or { ok: false, message, fields? }
+  async function adminInvoke(name, body = {}) {
+    if (!admin) return { ok: false, message: "Admins only." };
+    const cfg = window.MOMENTUM_CONFIG || {};
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) return { ok: false, message: "Sign in again." };
+    try {
+      const res = await fetch(`${cfg.SUPABASE_URL}/functions/v1/${name}`, {
+        method: "POST", signal: AbortSignal.timeout(20000),
+        headers: { "Content-Type": "application/json", apikey: cfg.SUPABASE_ANON_KEY, Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) return { ok: false, message: data.message || (res.status === 404 ? "This feature isn't deployed yet." : "Something went wrong. Try again."), fields: data.fields };
+      return { ok: true, data };
+    } catch (e) {
+      return { ok: false, message: "Couldn't reach Supabase. Check your connection and try again." };
+    }
+  }
 
   function optional(load) { return Promise.resolve().then(load).catch((e) => { console.warn(load.name + " failed:", e && e.message); return false; }); }
   async function loadSettings() {
@@ -1882,7 +1902,7 @@
   window.Store = {
     get ME() { return ME; }, get LESSON_COUNT() { return publishedNumbers.length; }, CANCELS_PER_MONTH, auth, init, savedLogin,
     // admin (migration 032)
-    isAdmin: () => admin === true, adminChecked: () => admin !== null, checkAdmin, adminMode, setAdminMode, admin: { call: adminCall, listPublishedLessons },
+    isAdmin: () => admin === true, adminChecked: () => admin !== null, checkAdmin, adminMode, setAdminMode, admin: { call: adminCall, invoke: adminInvoke, listPublishedLessons },
     get state() { return state; }, get loadError() { return loadError; },
     subscribe: (fn) => { listeners.add(fn); return () => listeners.delete(fn); },
     today, dayKey, addDays,
