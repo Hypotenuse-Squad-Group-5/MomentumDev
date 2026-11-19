@@ -1,4 +1,7 @@
-/* Admin › Activities & official Momentum events. */
+/* Admin › Activities & official Momentum events.
+ * This tab is the admin-facing CRUD interface. Database functions enforce the
+ * real permissions and business rules; this file collects input and displays results.
+ */
 (() => {
   const { esc, when, table, confirm: askConfirm, error } = AdminUI;
   const localInput = (value) => {
@@ -13,6 +16,8 @@
   const area = (name, label, v = "", required = false) =>
     '<div class="field"><label for="activity-' + name + '">' + esc(label) + '</label><textarea id="activity-' + name + '" name="' + name + '" rows="3" ' + (required ? "required" : "") + '>' + esc(v ?? "") + '</textarea></div>';
 
+  // Reuse one form for both creating an official event and editing an existing activity.
+  // The activity argument determines whether the form is in create or edit mode.
   function editor(el, ctx, activity, types) {
     const a = activity || {};
     const typeOptions = types.map(t => '<option value="' + esc(t.id) + '"' + (String(t.id) === String(a.type_id || "") ? " selected" : "") + '>' + esc(t.name) + '</option>').join("");
@@ -44,6 +49,8 @@
     </section>`;
     el.querySelectorAll("[data-back]").forEach(b => b.onclick = ctx.refresh);
     const form = el.querySelector("[data-activity-form]");
+    // Validate the fields that benefit from immediate feedback, then send the complete
+    // activity payload to the protected admin_save_activity Supabase function.
     form.onsubmit = async event => {
       event.preventDefault();
       const submit = form.querySelector('[type="submit"]');
@@ -75,6 +82,8 @@
     };
   }
 
+  // Register this page as the Activities tab in the shared admin dashboard.
+  // The list RPC intentionally returns all records, including private and cancelled ones.
   AdminTabs.register({
     key: "activities", label: "Activities", order: 3,
     async render(el, ctx) {
@@ -103,6 +112,7 @@
       for (const a of rows) {
         const edit = el.querySelector('[data-edit="' + a.id + '"]');
         if (edit) edit.onclick = () => editor(el, ctx, a, Store.types());
+        // Cancellation preserves the activity in history and lets the database notify attendees.
         const cancel = el.querySelector('[data-cancel="' + a.id + '"]');
         if (cancel) cancel.onclick = async () => {
           if (!await askConfirm({ title: 'Cancel "' + a.title + '"?', body: "The activity will remain in history. Everyone committed to it will be notified.", confirmLabel: "Cancel activity" }) || !ctx.isCurrent()) return;
@@ -112,6 +122,7 @@
           UI.toast("Activity cancelled. Attendees were notified.");
           if (ctx.isCurrent()) ctx.refresh();
         };
+        // Permanent deletion is separate from cancellation and always requires confirmation.
         const del = el.querySelector('[data-delete="' + a.id + '"]');
         del.onclick = async () => {
           if (!await askConfirm({ title: 'Permanently delete "' + a.title + '"?', body: "This cannot be undone. Use Cancel instead if you want to preserve the event in everyone's history.", confirmLabel: "Delete activity" }) || !ctx.isCurrent()) return;
