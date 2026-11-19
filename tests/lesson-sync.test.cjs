@@ -13,6 +13,9 @@ function app(db, opts={}) {
     const filters=[]; let inserted, deleting=false, single=false, selection="";
     const result=()=>{
       if ((table==='profiles' && /(^|,)(city|state)(,|$)/.test(selection)) || (table==='profile_private' && /phone|home_address|zip_code|birthdate/.test(selection))) return {data:null,error:{message:'Column does not exist in current schema'}};
+      if(opts.legacyCatalog && table==='lessons' && selection.includes('published_content')) {
+        return { data:null, error:{code:'42703'} };
+      }
       if(opts.failLoad===table) return {data:null,error:{message:'Offline'}};
       if(inserted) {
         if(opts.failInsert) return {error:{message:'Save rejected'}};
@@ -43,7 +46,7 @@ function app(db, opts={}) {
     return {data:{ok:true,habitId:h.id},error:null};
   }})};
   vm.runInContext(fs.readFileSync('js/store.js','utf8'),ctx);
-  return {Store:ctx.Store,calls:()=>calls,memory};
+  return {Store:ctx.Store,calls:()=>calls,memory,context:ctx};
 }
 function data(){return {lessons:Array.from({length:6},(_,i)=>({id:101+i,number:i+1,curriculum_version:2})),habits:[],lesson_completions:[],habit_checkins:[],posts:[],activities:[]};}
 test('live completion uses database IDs, restores in a fresh browser and shares Home edits',async()=>{
@@ -206,4 +209,32 @@ test('published lessons skip deleted numbers while preserving historical progres
  }
  assert.equal(Store.currentLesson(), null);
  assert.equal(Store.stats().lessonPercent, 100);
+});
+
+test('lesson pages replace the bundled curriculum with published content and support an empty path', async () => {
+ const db = data();
+ db.lessons.forEach(row => { row.retired_at = '2026-11-19T00:00:00Z'; });
+ const added = {
+   id: 107, number: 7, curriculum_version: 2, title: 'New lesson', duration_minutes: 12,
+   goal_prompt: 'Reflect', published_content: { summary: 'Published summary', html: '<p>Published body</p>' },
+ };
+ db.lessons.push(added);
+ const load = async (options) => {
+   const { Store, context } = app(db, options);
+   vm.runInContext(fs.readFileSync('js/lessons-content.js', 'utf8'), context);
+   assert.equal(await Store.init(), true);
+   return { Store, lessons: context.LESSONS };
+ };
+ const published = await load();
+ assert.equal(published.lessons.length, 1);
+ assert.equal(published.lessons[0].n, 7);
+ assert.equal(published.lessons[0].title, 'New lesson');
+ assert.equal(published.lessons[0].html, '<p>Published body</p>');
+ added.retired_at = '2026-11-19T00:00:00Z';
+ const empty = await load();
+ assert.equal(empty.lessons.length, 0);
+ assert.equal(empty.Store.currentLesson(), null);
+ assert.equal(empty.Store.stats().lessonPercent, 0);
+ db.lessons = data().lessons;
+ assert.equal((await load({ legacyCatalog: true })).lessons.length, 6);
 });

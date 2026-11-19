@@ -17,6 +17,12 @@ async function setup(options = {}) {
   const handler = createHandler({ env: key => vars[key], lessons, fetcher: async (url, init) => {
     calls.push({ url, init });
     if (url.includes('/auth/')) return json(options.user || { id: 'user-a' }, options.authStatus || 200);
+    if (url.includes('/rest/v1/lessons?')) {
+      if (options.catalogError) return json({ code: options.catalogError }, 400);
+      const number = Number(new URL(url).searchParams.get('number').slice(3));
+      const lesson = (options.catalog ?? lessons).find(l => l.n === number);
+      return json(lesson ? [{ title: lesson.title, summary: lesson.summary }] : []);
+    }
     if (url.includes('/rpc/')) return json(options.quota || { ok: true }, options.quotaStatus || 200);
     if (options.timeout) throw new DOMException('timeout', 'TimeoutError');
     return json(options.result || { candidates: [{ finishReason: 'STOP', content: { parts: [{ text: JSON.stringify({ suggestions: options.habits || habits }) }] } }] }, options.providerStatus || 200);
@@ -32,10 +38,10 @@ test('authenticated request reserves quota and returns three habits without send
   const response = await request();
   assert.equal(response.status, 200);
   assert.deepEqual((await response.json()).suggestions, habits);
-  assert.equal(calls.length, 3);
-  assert.equal(calls[2].init.headers['x-goog-api-key'], 'private-key');
-  assert.ok(!calls[2].init.body.includes('user-a'));
-  assert.equal(JSON.parse(calls[1].init.body).p_user, 'user-a');
+  assert.equal(calls.length, 4);
+  assert.equal(calls[3].init.headers['x-goog-api-key'], 'private-key');
+  assert.ok(!calls[3].init.body.includes('user-a'));
+  assert.equal(JSON.parse(calls[2].init.body).p_user, 'user-a');
   assert.equal(response.headers.get('Cache-Control'), 'no-store');
 });
 test('rejects missing/invalid auth, anonymous users, bad origin, and unsupported methods before Gemini', async () => {
@@ -50,13 +56,13 @@ test('rejects missing/invalid auth, anonymous users, bad origin, and unsupported
   assert.equal(calls.length, 0);
 });
 test('invalid input and missing consent never consume quota or call Gemini', async () => {
-  for (const body of [{ reflection: '' }, { reflection: 'x'.repeat(1001) }, { consent: false }, { lessonNumber: 7 }, { lessonNumber: '1' }]) {
+  for (const body of [{ reflection: '' }, { reflection: 'x'.repeat(1001) }, { consent: false }, { lessonNumber: 0 }, { lessonNumber: '1' }]) {
     const { request, calls } = await setup(); assert.equal((await request(body)).status, 400); assert.equal(calls.length, 1);
   }
   const { request, calls } = await setup(); assert.equal((await request({ reflection: 'x'.repeat(9000) })).status, 413); assert.equal(calls.length, 1);
 });
 test('missing key and quota errors fail closed without a provider call', async () => {
-  for (const [options, expected, count] of [[{ env: { GEMINI_API_KEY: '' } }, 503, 1], [{ quota: { ok: false, message: 'Daily limit' } }, 429, 2], [{ quotaStatus: 500 }, 503, 2]]) {
+  for (const [options, expected, count] of [[{ env: { GEMINI_API_KEY: '' } }, 503, 2], [{ quota: { ok: false, message: 'Daily limit' } }, 429, 3], [{ quotaStatus: 500 }, 503, 3]]) {
     const { request, calls } = await setup(options); assert.equal((await request()).status, expected); assert.equal(calls.length, count);
   }
 });
@@ -64,6 +70,38 @@ test('handles provider throttling, blocked output, malformed habits, and timeout
   for (const [options, expected] of [[{ providerStatus: 429 }, 429], [{ providerStatus: 403 }, 503], [{ result: { promptFeedback: { blockReason: 'SAFETY' } } }, 502], [{ habits: ['<script>', 'Walk', 'Read'] }, 502], [{ habits: ['Walk', 'Walk', 'Read'] }, 502], [{ habits: ['x'.repeat(81), 'Walk', 'Read'] }, 502], [{ timeout: true }, 503]]) {
     const { request } = await setup(options); const response = await request(); assert.equal(response.status, expected); assert.ok(!(await response.text()).includes('private-key'));
   }
+});
+
+test('new and edited published lessons supply current context and use their stable quota number', async () => {
+  for (const n of [2, 7]) {
+    const current = { n, title: 'Updated lesson', summary: 'Current published summary' };
+    const { request, calls } = await setup({ catalog: [current] });
+    assert.equal((await request({ lessonNumber: n })).status, 200);
+    const query = new URL(calls[1].url).searchParams;
+    assert.equal(query.get('number'), `eq.${n}`);
+    assert.equal(query.get('retired_at'), 'is.null');
+    assert.equal(calls[1].init.headers.Authorization, 'Bearer user-token');
+    assert.equal(JSON.parse(calls[2].init.body).p_lesson, n);
+    const prompt = JSON.parse(calls[3].init.body).contents[0].parts[0].text;
+    assert.equal(JSON.parse(prompt).lesson, current.title);
+    assert.equal(JSON.parse(prompt).summary, current.summary);
+  }
+});
+
+test('deleted lessons and catalog failures stop before quota or Gemini', async () => {
+  for (const [options, status] of [[{ catalog: [] }, 400], [{ catalogError: 'XX000' }, 503]]) {
+    const { request, calls } = await setup(options);
+    assert.equal((await request()).status, status);
+    assert.equal(calls.length, 2);
+  }
+});
+
+test('the old schema can still suggest habits for the bundled curriculum during rollout', async () => {
+  const { request, calls } = await setup({ catalogError: '42703' });
+  assert.equal((await request()).status, 200);
+  assert.equal(calls.length, 4);
+  assert.equal((await request({ lessonNumber: 7 })).status, 400);
+  assert.equal(calls.length, 6);
 });
 
 // Minimal DOM harness exercises async races and actual click behavior, without dependencies.
