@@ -151,10 +151,9 @@ begin
   delete from public.notifications
    where kind = 'activity_changed' and read_at is null and link = 'activity.html?id=' || new.id;
   insert into public.notifications (profile_id, kind, title, body, link)
-  select pid, coalesce(v_host, 'The host') || ' changed ' || new.title,
+  select pid, 'activity_changed', coalesce(v_host, 'The host') || ' changed ' || new.title,
          'Now ' || to_char(new.starts_at at time zone 'America/Denver', 'Dy, Mon FMDD · FMHH12:MI AM') || ' · ' || new.general_location
-           || '. You can cancel for free.',
-         'activity_changed', 'activity.html?id=' || new.id
+           || '. You can cancel for free.', 'activity.html?id=' || new.id
     from momentum_private.people_on(new.id) pid;
   return null;
 end $;
