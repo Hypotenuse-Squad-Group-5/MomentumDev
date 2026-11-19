@@ -6,7 +6,7 @@ Each of us builds one tab of the Admin page, with full CRUD (Create, Read, Updat
 
 | Teammate | Tab | Your files | Your migration |
 |---|---|---|---|
-| Teammate 1 | **App lists (Instead of Lessons)** (categories, interests, activity ideas) | `js/pages/admin-lists.js` | `database/033_admin_lists.sql` |
+| Teammate 1 | **Lessons** | `js/pages/admin-lessons.js` | `supabase/migrations/20261119014500_admin_lessons.sql` |
 | Teammate 2 | **Accounts** | `js/pages/admin-accounts.js` (+ an Edge Function if you do Create) | `database/034_admin_accounts.sql` |
 | Teammate 3 | **Posts & announcements** | `js/pages/admin-posts.js` | `database/035_admin_posts.sql` |
 | Teammate 4 | **Activities & official events** | `js/pages/admin-activities.js` | `database/036_admin_activities.sql` |
@@ -17,7 +17,7 @@ The migration numbers are reserved so nobody collides. If you need a second one,
 
 - **Who's an admin** lives in `momentum_private.admins` (migration `032_admin.sql`). The website can't read or write that table, so nobody can make themselves an admin from the app. Only someone signed in to the Supabase project can.
 - **Admin mode** is a switch in **Settings › Admin**. Only admins see it. It's off by default and lasts only for that browser tab. Turning it on adds **Admin** as a 6th item in the menu.
-- **The Admin page** (`admin.html`) shares the app's header, menu, styles and themes. It has 5 tabs: Accounts, Posts, Activities, App lists, and Admins (the worked example).
+- **The Admin page** (`admin.html`) shares the app's header, menu, styles and themes. It has 5 tabs: Accounts, Posts, Activities, Lessons, and Admins (the worked example).
 - **Security lives in the database, not the page.** Every admin action is a database function that starts with `perform momentum_private.require_admin();`. Hiding a button is never the protection.
 
 ## Get set up (once (already done))
@@ -158,10 +158,12 @@ Shared helpers in `js/pages/admin.js`:
 
 ## Notes for each area
 
-### App lists (teammate 1)
-- Tables: `activity_types` (id, name, emoji, sort_order), `interests` (id, name, sort_order, **is_active**), `activity_suggestions` (id, name, sort_order).
-- **Delete = retire** for categories and interests. `activities.type_id` points at `activity_types`, so deleting a category in use fails. `interests` already has `is_active`; `activity_types` needs one added in your migration, and the hosting page should only offer active categories. Activity ideas can be truly deleted.
-- Reorder: up/down buttons that swap `sort_order` are enough.
+### Lessons (teammate 1)
+
+- The tab lists the published curriculum. **Preview** shows what learners see and lets admins try the practice exercises.
+- **Add lesson** appends a lesson to the path. **Edit** opens the same form with the published content. The form includes the lesson body, knowledge-check questions and correct answers, practice planner fields, sources, and reflection prompts.
+- **Publish lesson** makes changes visible to learners. **Delete** removes the lesson from the path and keeps existing completions and habits. Learners skip deleted lessons.
+- For rollout, apply the Supabase migration, deploy the updated site and `suggest-habits` function, then begin publishing or deleting lessons. The previous site expects exactly six lessons.
 
 ### Accounts (teammate 2)
 - **Read:** search profiles by name or username (`public.profiles`: first_name, username, bio, photo…). Email lives in `auth.users`; only show it inside an admin function.

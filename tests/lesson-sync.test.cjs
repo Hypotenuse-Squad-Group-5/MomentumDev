@@ -186,3 +186,24 @@ test('lesson and streak pages render percent complete without reward displays', 
    }
  }
 });
+
+test('published lessons skip deleted numbers while preserving historical progress', async () => {
+ const db = data();
+ db.lessons[0].retired_at = '2026-11-19T00:00:00Z';
+ db.lessons[2].retired_at = '2026-11-19T00:00:00Z';
+ db.lessons.push({ id: 107, number: 7, curriculum_version: 2 });
+ db.lesson_completions.push({ profile_id: 'user-a', lesson_id: 101, user_goal_response: 'Past reflection' });
+ const { Store } = app(db);
+ assert.equal(await Store.init(), true);
+ assert.equal(Store.LESSON_COUNT, 5);
+ assert.equal(Store.currentLesson(), 2);
+ assert.equal(Store.isLessonUnlocked(1), false);
+ assert.equal(Store.lessonGoal(1), 'Past reflection');
+ assert.equal(Store.stats().lessonPercent, 0);
+ for (const number of [2, 4, 5, 6, 7]) {
+   assert.equal(Store.currentLesson(), number);
+   assert.equal((await Store.completeLesson(number, goal, 'Practice')).ok, true);
+ }
+ assert.equal(Store.currentLesson(), null);
+ assert.equal(Store.stats().lessonPercent, 100);
+});

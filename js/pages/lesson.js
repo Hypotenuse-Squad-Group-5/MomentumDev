@@ -6,10 +6,14 @@ UI.mount("lessons", function render() {
   const n = Number(UI.qs("n")) || 1;
   const l = window.LESSONS.find((x) => x.n === n);
   if (!l) { main.innerHTML = `<a class="small" href="lessons.html">‹ All lessons</a><div class="panel mt"><h2>Lesson not found</h2></div>`; return; }
+  const index = window.LESSONS.indexOf(l);
   if (!Store.isLessonUnlocked(n)) {
-    main.innerHTML = `<a class="small" href="lessons.html">‹ All lessons</a><div class="panel mt center">${icon("lock", "lg")}<h2 class="mt">Lesson ${n} is locked</h2><p class="muted">Finish Lesson ${Store.currentLesson()} first. Lessons unlock in order.</p><a class="btn btn-primary" href="lesson.html?n=${Store.currentLesson()}">Go to Lesson ${Store.currentLesson()}</a></div>`;
+    const current = Store.currentLesson();
+    const currentPosition = window.LESSONS.findIndex(lesson => lesson.n === current) + 1;
+    main.innerHTML = `<a class="small" href="lessons.html">‹ All lessons</a><div class="panel mt center">${icon("lock", "lg")}<h2 class="mt">Lesson ${index + 1} is locked</h2><p class="muted">Finish Lesson ${currentPosition} first. Lessons unlock in order.</p><a class="btn btn-primary" href="lesson.html?n=${current}">Go to Lesson ${currentPosition}</a></div>`;
     return;
   }
+  const next = window.LESSONS[index + 1];
   const done = Store.isLessonDone(n);
   const habit = Store.lessonHabit(n);
 
@@ -17,19 +21,19 @@ UI.mount("lessons", function render() {
   <div style="max-width:720px">
     <a class="small" href="lessons.html">‹ All lessons</a>
     <article class="lesson-body">
-      <p class="label mt">Lesson ${n} of ${window.LESSONS.length} · ${l.minutes} min</p>
+      <p class="label mt">Lesson ${index + 1} of ${window.LESSONS.length} · ${l.minutes} min</p>
       <h1>${esc(l.title)}</h1>
       <p class="lesson-intro muted">${esc(l.summary)}</p>
       <p class="small"><a href="#practice-title">Jump to practice</a> · <a href="#lesson-sources">Research & sources</a></p>
       ${l.stats.length ? `<div class="stat-cards">${l.stats.map(([v, c]) => `<div class="stat-card"><b>${esc(v)}</b><span>${esc(c)}</span></div>`).join("")}</div>` : ""}
-      ${l.html}
+      ${LessonInteractions.content(l.html)}
       <div id="lesson-interactions"></div>
     </article>
 
     ${done && !redoingLesson ? `<section class="panel mt-lg"><p class="label">Lesson complete</p><h2>Your goal</h2><div class="goal-box">${esc(Store.lessonGoal(n))}</div>
         ${habit ? `<h3 class="mt">Your daily habit</h3><div class="goal-box">${esc(habit.title)}</div><p class="small muted mt mb0">${habit.active ? "This is the same habit shown on Home." : "This habit is archived. You can restore it on Home."} <a href="home.html">Manage habit</a></p>` : `<p class="small muted mt mb0">Your linked habit is unavailable. Check your habits on <a href="home.html">Home</a>.</p>`}
         <button type="button" class="btn mt" id="redo-lesson">Redo lesson</button>
-        ${n < window.LESSONS.length ? `<a class="btn btn-primary mt" href="lesson.html?n=${n + 1}">Next lesson</a>` : ""}</section>`
+        ${next ? `<a class="btn btn-primary mt" href="lesson.html?n=${next.n}">Next lesson</a>` : ""}</section>`
     : `<form autocomplete="off" class="panel mt-lg" id="goal-form" novalidate>
         <p class="label">${redoingLesson ? "Redo lesson" : "Set your goal"}</p>
         ${redoingLesson ? '<p class="small muted">Your existing habit stays on Home. Finishing again adds a new habit.</p>' : ""}
@@ -97,7 +101,7 @@ UI.mount("lessons", function render() {
     }
     if (!r.ok && r.code === "max_active") { UI.toast(r.message); UI.attention(UI.HOME_TABS); return; }
     if (!r.ok) return UI.alertModal("Couldn't finish", esc(r.message), { error: true });
-    UI.flash(r.gainedNow ? "You gained Momentum!" : "Lesson " + n + " complete. New habit added to My habits.");
+    UI.flash(r.gainedNow ? "You gained Momentum!" : "Lesson " + (index + 1) + " complete. New habit added to My habits.");
     location.href = "lessons.html";
   };
 }, { live: false });

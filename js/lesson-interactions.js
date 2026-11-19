@@ -1,5 +1,41 @@
 /* Page-only practice. Persistence stays behind Store.completeLesson(n, goal, habit). */
 (function () {
+  const bodyTags = new Set(["p", "h2", "h3", "b", "strong", "em", "i", "div", "ul", "ol", "li", "a", "br", "blockquote"]);
+  function safeLink(value) {
+    if (value === "#lesson-sources") return value;
+    try {
+      const url = new URL(value);
+      return url.protocol === "https:" ? url.href : "";
+    } catch (_) { return ""; }
+  }
+
+  // Rebuild a small set of formatting elements. Admin-authored HTML is stored data.
+  function content(html) {
+    const template = document.createElement("template");
+    template.innerHTML = html;
+    const output = document.createElement("div");
+    function copy(nodes, parent) {
+      for (const node of nodes) {
+        if (node.nodeType === 3) {
+          parent.append(document.createTextNode(node.textContent));
+        } else if (node.namespaceURI === "http://www.w3.org/1999/xhtml" && bodyTags.has(node.localName)) {
+          const element = document.createElement(node.localName);
+          if (node.localName === "a") {
+            const url = safeLink(node.getAttribute("href"));
+            if (url) element.setAttribute("href", url);
+          }
+          for (const name of ["callout", "mb0"]) {
+            if (node.classList.contains(name)) element.classList.add(name);
+          }
+          copy(node.childNodes, element);
+          parent.append(element);
+        }
+      }
+    }
+    copy(template.content.childNodes, output);
+    return output.innerHTML;
+  }
+
   function mount(lesson, container) {
     if (!container) return;
     const { esc } = UI;
@@ -10,7 +46,7 @@
     </section>
     <details class="lesson-sources" id="lesson-sources"><summary>Research & sources</summary>
       <p class="small muted">Research informs the reading. The practice activities are learning tools, not diagnostic tests or guarantees of a health outcome.</p>
-      <ul>${lesson.sources.map(s => `<li><a href="${esc(s.url)}" target="_blank" rel="noopener noreferrer">${esc(s.label)}</a><p class="small muted">${esc(s.note)}</p></li>`).join("")}</ul>
+      <ul>${lesson.sources.map(s => `<li><a href="${esc(safeLink(s.url) || "#lesson-sources")}" target="_blank" rel="noopener noreferrer">${esc(s.label)}</a><p class="small muted">${esc(s.note)}</p></li>`).join("")}</ul>
     </details>`;
 
     function quiz(a, i) {
@@ -20,7 +56,7 @@
     }
     function planner(a, i) {
       return `<form autocomplete="off" class="panel lesson-exercise" data-exercise="${i}" data-kind="planner"><h3>${esc(a.title)}</h3><p class="muted small">${esc(a.intro)}</p>
-        <div class="lesson-fields">${a.fields.map(f => `<div class="field"><label for="practice-${i}-${f.id}">${esc(f.label)}</label>${f.options ? `<select id="practice-${i}-${f.id}" name="${f.id}" required><option value="">Choose an option</option>${f.options.map(o => `<option>${esc(o)}</option>`).join("")}</select>` : `<input autocomplete="off" id="practice-${i}-${f.id}" name="${f.id}" type="${f.type}" maxlength="240" placeholder="${esc(f.placeholder)}" required>`}</div>`).join("")}</div>
+        <div class="lesson-fields">${a.fields.map(f => `<div class="field"><label for="practice-${i}-${esc(f.id)}">${esc(f.label)}</label>${f.options ? `<select id="practice-${i}-${esc(f.id)}" name="field-${esc(f.id)}" required><option value="">Choose an option</option>${f.options.map(o => `<option>${esc(o)}</option>`).join("")}</select>` : `<input autocomplete="off" id="practice-${i}-${esc(f.id)}" name="field-${esc(f.id)}" type="${f.type === "time" ? "time" : "text"}" maxlength="240" placeholder="${esc(f.placeholder)}" required>`}</div>`).join("")}</div>
         ${a.kind === "needs" ? '<p class="lesson-suggestion callout small" aria-live="polite">Choose a need to explore possible alternatives.</p>' : ""}
         <button class="btn btn-primary btn-sm" type="submit">${a.kind === "hangout" ? "Build my invitation" : "Build my plan"}</button>
         <div class="lesson-plan" hidden><p class="label">Your draft</p><p class="lesson-plan-text" tabindex="-1"></p><p class="lesson-plan-note small"></p>
@@ -47,7 +83,8 @@
       const output = form.querySelector(".lesson-plan");
       const status = form.querySelector("[data-plan-status]");
       let plan = "", invitation = "";
-      if (a.kind === "needs") {
+      const field = id => form.elements.namedItem("field-" + id);
+      if (a.kind === "needs" && field("need")) {
         const ideas = {
           Connection: "Try a short conversation, a walk with someone, or asking a classmate a question.",
           Rest: "Try sitting somewhere quiet, gentle stretching, or a pause without another task.",
@@ -55,16 +92,16 @@
           Curiosity: "Try a page of a book, a small sketch, or noticing something new outside.",
           "A sense of progress": "Try a two-minute task: clear one surface or prepare one thing for tomorrow."
         };
-        form.elements.need.addEventListener("change", () => { form.querySelector(".lesson-suggestion").textContent = ideas[form.elements.need.value] || "Choose a need to explore possible alternatives."; });
+        field("need").addEventListener("change", () => { form.querySelector(".lesson-suggestion").textContent = ideas[field("need").value] || "Choose a need to explore possible alternatives."; });
       }
       form.addEventListener("input", () => { output.hidden = true; });
       form.addEventListener("change", () => { output.hidden = true; });
       form.addEventListener("submit", e => {
         e.preventDefault();
-        const values = Object.fromEntries(a.fields.map(f => [f.id, form.elements[f.id].value.trim()]));
+        const values = Object.fromEntries(a.fields.map(f => [f.id, field(f.id).value.trim()]));
         // Native required validation accepts whitespace; the plan should not.
         for (const f of a.fields) {
-          const input = form.elements[f.id];
+          const input = field(f.id);
           input.setCustomValidity(values[f.id] ? "" : "Please add a specific detail.");
           input.addEventListener("input", () => input.setCustomValidity(""), { once: true });
           if (!input.reportValidity()) return;
@@ -109,5 +146,5 @@
       });
     });
   }
-  window.LessonInteractions = { mount };
+  window.LessonInteractions = { mount, content, safeLink };
 })();

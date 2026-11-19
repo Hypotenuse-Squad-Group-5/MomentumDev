@@ -1,5 +1,5 @@
 // Dependency-free so the request boundary can also be tested with Node.
-export function createHandler({ env, lessons, fetcher = fetch }) {
+export function createHandler({ env, lessons, fetcher = fetch, findLesson = n => lessons.find(l => l.n === n) }) {
   const allowed = (env('ALLOWED_ORIGINS') || 'https://hypotenuse-squad-group-5.github.io,http://localhost:8765,http://127.0.0.1:8765').split(',').map(s => s.trim());
   return async function handle(req) {
     const origin = req.headers.get('origin');
@@ -35,9 +35,10 @@ export function createHandler({ env, lessons, fetcher = fetch }) {
       for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; }
       let body;
       try { body = JSON.parse(new TextDecoder().decode(bytes)); } catch { return reply(400, 'Invalid request.'); }
-      const lesson = lessons.find(l => l.n === body?.lessonNumber);
       const reflection = typeof body?.reflection === 'string' ? body.reflection.trim() : '';
-      if (!lesson || !reflection || body.reflection.length > 1000 || body.consent !== true) return reply(400, 'Add a reflection and confirm it contains no personal or sensitive information.');
+      if (!Number.isInteger(body?.lessonNumber) || !reflection || body.reflection.length > 1000 || body.consent !== true) return reply(400, 'Add a reflection and confirm it contains no personal or sensitive information.');
+      const lesson = await findLesson(body.lessonNumber, url, anon, authorization);
+      if (!lesson) return reply(400, 'This lesson is unavailable.');
       const key = env('GEMINI_API_KEY');
       if (!key) return reply(503, 'AI suggestions are not connected yet. You can still write your own habit.');
       const model = env('GEMINI_MODEL') || 'gemini-3.5-flash-lite';

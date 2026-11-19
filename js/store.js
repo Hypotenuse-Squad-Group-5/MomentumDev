@@ -1015,13 +1015,17 @@
       .then((results) => { const bad = results.find((r) => r.error); if (bad) loadHabitData().then(() => syncFailed("Couldn't save the new order: " + bad.error.message)); });
   }
 
-  const LESSON_COUNT = 6;
+  const DEFAULT_LESSON_COUNT = 6;
   const CURRICULUM_VERSION = 2;
   let lessonCatalog = [];
+  let publishedNumbers = Array.from({ length: DEFAULT_LESSON_COUNT }, (_, i) => i + 1);
   const pendingLessons = new Map();
   const isLessonDone = (n) => state.lessonsDone.some((l) => l.n === n);
-  const isLessonUnlocked = (n) => n === 1 || isLessonDone(n - 1);
-  function currentLesson() { for (let n = 1; n <= LESSON_COUNT; n++) if (!isLessonDone(n)) return n; return null; }
+  const isLessonUnlocked = (n) => publishedNumbers.includes(n)
+    && (isLessonDone(n) || publishedNumbers.every(previous => previous >= n || isLessonDone(previous)));
+  const currentLesson = () => publishedNumbers.find(n => !isLessonDone(n)) ?? null;
+  const lessonPercent = () => publishedNumbers.length
+    ? Math.round(publishedNumbers.filter(isLessonDone).length / publishedNumbers.length * 100) : 0;
   // Finishing a lesson adds its habit, so a NEW lesson needs a free habit slot. Reviewing a finished one is always fine.
   const LESSON_BLOCKED_MSG = "You won't be able to do this lesson until you have 1 open habit slot.";
   const canStartLesson = (n) => isLessonDone(n) || canAddHabit();
@@ -1032,7 +1036,7 @@
     return pending;
   }
   async function saveLesson(n, goalText, habitTitle, redo) {
-    if (!Number.isInteger(n) || n < 1 || n > LESSON_COUNT) return { ok: false, message: "Lesson not found." };
+    if (!publishedNumbers.includes(n)) return { ok: false, message: "Lesson not found." };
     if (!isLessonUnlocked(n)) return { ok: false, message: "Finish the previous lesson first." };
     const completed = state.lessonsDone.find((l) => l.n === n);
     if (redo && !completed) return { ok: false, message: "Finish this lesson before redoing it." };
@@ -1065,19 +1069,38 @@
     }
     return state.habits.find(h => lesson && h.lessonId === lesson.id) || null;
   }
+  const lessonColumns = "id,number,title,duration_minutes,goal_prompt,published_content,retired_at";
+  const queryLessons = columns => sb.from("lessons").select(columns)
+    .eq("curriculum_version", CURRICULUM_VERSION).order("number");
+  const lessonFromRow = row => ({
+    ...row.published_content, n: row.number, title: row.title,
+    minutes: row.duration_minutes, prompt: row.goal_prompt,
+  });
+  async function listPublishedLessons() {
+    if (!admin) return { ok: false, message: "Admins only." };
+    const { data, error } = await queryLessons(lessonColumns).is("retired_at", null);
+    return error ? { ok: false, message: error.message }
+      : { ok: true, data: data.filter(row => row.published_content).map(lessonFromRow) };
+  }
   async function loadLessonData() {
     try {
       const completionFields = "lesson_id,completed_at,user_goal_response,habit_id";
       const [lessons, progress] = await Promise.all([
-        sb.from("lessons").select("id,number").eq("curriculum_version", CURRICULUM_VERSION).order("number"),
+        queryLessons(lessonColumns),
         sb.from("lesson_completions").select(completionFields + ",redo_count").eq("profile_id", ME)
       ]);
       // Older deployments can still load progress while the redo migration is pending.
       const completed = progress.error?.code === "42703"
         ? await sb.from("lesson_completions").select(completionFields).eq("profile_id", ME)
         : progress;
-      if (lessons.error || completed.error || lessons.data?.length !== LESSON_COUNT || !completed.data) return false;
-      lessonCatalog = lessons.data;
+      const catalog = lessons.error?.code === "42703" ? await queryLessons("id,number") : lessons;
+      if (catalog.error || completed.error || !catalog.data || !completed.data) return false;
+      lessonCatalog = catalog.data;
+      const active = lessonCatalog.filter(row => !row.retired_at);
+      publishedNumbers = active.map(row => row.number);
+      if (window.LESSONS && catalog === lessons && active.every(row => row.published_content)) {
+        window.LESSONS = active.map(lessonFromRow);
+      }
       if (!state.lessonSyncVersion) state.legacyLessonProgress = state.lessonsDone || [];
       state.lessonSyncVersion = CURRICULUM_VERSION;
       const numbers = new Map(lessonCatalog.map(l => [l.id, l.number]));
@@ -1131,7 +1154,7 @@
       // "streak", "longest" and "doneToday" keep their old names for older pages and tests:
       // they now mean the Momentum number, top speed, and "gained Momentum today".
       streak: m.value, longest: m.top, doneToday: m.gainedToday, momentum: m.value, top: m.top, trend: m.trend,
-      habitsNeeded: m.needed, habitsDone: m.doneToday, activeHabits: m.active, gainedDays: momentumDays().size, lessonPercent: Math.round(state.lessonsDone.length / LESSON_COUNT * 100),
+      habitsNeeded: m.needed, habitsDone: m.doneToday, activeHabits: m.active, gainedDays: momentumDays().size, lessonPercent: lessonPercent(),
       habitsChecked: state.checkins.length, goalsMetDays, lessonsDone: state.lessonsDone.length,
       attended: state.rsvps.filter((r) => r.profileId === ME && r.attended === true).length,
       upcoming: myCommitments().filter((a) => !isPast(a)).length,
@@ -1850,9 +1873,9 @@
   }
 
   window.Store = {
-    get ME() { return ME; }, LESSON_COUNT, CANCELS_PER_MONTH, auth, init, savedLogin,
+    get ME() { return ME; }, get LESSON_COUNT() { return publishedNumbers.length; }, CANCELS_PER_MONTH, auth, init, savedLogin,
     // admin (migration 032)
-    isAdmin: () => admin === true, adminChecked: () => admin !== null, checkAdmin, adminMode, setAdminMode, admin: { call: adminCall },
+    isAdmin: () => admin === true, adminChecked: () => admin !== null, checkAdmin, adminMode, setAdminMode, admin: { call: adminCall, listPublishedLessons },
     get state() { return state; }, get loadError() { return loadError; },
     subscribe: (fn) => { listeners.add(fn); return () => listeners.delete(fn); },
     today, dayKey, addDays,
