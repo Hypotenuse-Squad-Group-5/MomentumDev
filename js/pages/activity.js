@@ -40,7 +40,7 @@ UI.mount("activities", function render() {
   main.innerHTML = `
     <div class="narrow" style="max-width:720px">
     <a class="small" href="activities.html">‹ Back to activities</a>
-    ${cancelled ? `<div class="alert cancelled-banner mt">${icon("alert", "sm")}<span><b>Cancelled.</b> ${mine ? "You" : esc(UI.displayName(a.hostId))} cancelled this activity on ${esc(new Date(a.cancelledAt).toLocaleDateString(undefined, { month: "short", day: "numeric" }))}. ${mine ? "Everyone going was notified." : "It's not happening. It stays on your calendar so you know what changed."}</span></div>` : ""}
+    ${cancelled ? `<div class="alert cancelled-banner mt">${icon("alert", "sm")}<span><b>Cancelled.</b> ${a.official ? "Momentum" : mine ? "You" : esc(UI.displayName(a.hostId))} cancelled this activity on ${esc(new Date(a.cancelledAt).toLocaleDateString(undefined, { month: "short", day: "numeric" }))}. ${mine ? "Everyone going was notified." : "It's not happening. It stays on your calendar so you know what changed."}</span></div>` : ""}
     <article class="stack mt${cancelled ? " is-cancelled" : ""}">
       <div>
         <div class="row"><span class="tag">${esc(a.type)}</span>${a.visibility === "friends" ? '<span class="tag grey">Friends Only</span>' : ""}
