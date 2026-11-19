@@ -121,7 +121,8 @@
                 ${Store.isGoing(a.id) ? `<span class="tag ok">${icon("check", "sm")}Going</span>` : a.hostId === Store.ME ? '<span class="tag flame">Hosting</span>' : need ? `<span class="tag warn">Needs ${need} more</span>` : taken >= a.max ? '<span class="tag grey">Full</span>' : ""}</div>
               <h3 style="margin-top:6px">${esc(a.title)}</h3>
               <div class="meta"><span>${icon("clock", "sm")}${esc(UI.fmtRange(a))}</span><span>${icon("activity", "sm")}${esc(a.city)}</span></div>
-              <div class="row-between small"><span>${taken} of ${a.max} going</span><span class="muted">Host: ${esc(UI.displayName(a.hostId))}</span></div>
+              <!-- Official activities display the organization as host; ordinary activities show the member host. -->
+              <div class="row-between small"><span>${taken} of ${a.max} going</span><span class="muted">${a.official ? "Hosted by Momentum" : "Host: " + esc(UI.displayName(a.hostId))}</span></div>
               <div class="capacity"><i style="width:${Math.min(100, (taken / a.max) * 100)}%"></i></div>
             </div></a>`;
         }).join("") || `<div class="panel center"><p><b>Nothing matches those filters.</b></p><p class="muted small">Try adjusting your filters, or host your own.</p><a class="btn btn-primary" href="activity-new.html">${icon("plus", "sm")}Host an activity</a></div>`}
