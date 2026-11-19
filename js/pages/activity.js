@@ -49,7 +49,7 @@ UI.mount("activities", function render() {
         <h1 class="mt">${esc(a.title)}</h1>
         <div class="row-between">
           <div class="person">${a.official ? '<span class="avatar"><img src="img/logo.svg" alt="Momentum"></span><div><b>Momentum</b><div class="small muted">Hosted by Momentum</div></div>' : `${UI.avatar(a.hostId, "", Store.isFriend(a.hostId) || mine)}<div><b>${UI.nameLink(a.hostId)}</b><div class="small muted">Host</div></div>`}</div>
-          ${mine ? (!started && !cancelled ? '<a class="btn btn-sm" href="activity-new.html?edit=' + a.id + '">' + icon("edit", "sm") + 'Edit event</a>' : "") : `<button class="btn btn-sm" id="msg-host">${icon("message", "sm")}Message host</button>`}
+          ${a.official ? "" : mine ? (!started && !cancelled ? '<a class="btn btn-sm" href="activity-new.html?edit=' + a.id + '">' + icon("edit", "sm") + 'Edit event</a>' : "") : `<button class="btn btn-sm" id="msg-host">${icon("message", "sm")}Message host</button>`}
         </div>
       </div>
 
