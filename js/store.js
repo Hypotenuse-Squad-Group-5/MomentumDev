@@ -120,6 +120,8 @@
       cancelledAt: row.cancelled_at || null, // set when the host cancelled it with people going (migration 025)
       editedAt: row.edited_at || null,       // the host edited it ("Edited" label, migration 030)
       changedAt: row.changed_at || null,     // the host changed the date, time or place with people going (030)
+      // Keep the official flag in the client model so activity cards and details can show Momentum branding.
+      // This flag is separate from visibility; the database RLS policy controls who can read the activity.
       visibility: row.visibility, official: row.official === true, createdAt: row.created_at, source: "supabase",
     };
   }
@@ -810,8 +812,10 @@
   }
   // Before the check finishes, trust this tab's switch (only an admin could have turned it on); after, require admin
   const adminMode = () => adminModeFlag() && admin !== false;
-  // Call an admin database function: Store.admin.call("admin_list_admins", { ...args })
-  // -> { ok: true, data } or { ok: false, message }
+  // Shared gateway for admin-only Supabase RPCs (including activity list/save/cancel/delete).
+  // The browser-side check improves the user experience; require_admin() inside the database
+  // functions is the security boundary and prevents non-admin users from running these operations.
+  // Returns a consistent { ok, data/message } result for admin page components.
   async function adminCall(fn, args = {}) {
     if (!admin) return { ok: false, message: "Admins only." };
     const { data, error } = await sb.rpc(fn, args);
