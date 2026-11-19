@@ -140,6 +140,26 @@ $$;
 revoke all on function public.admin_save_activity(uuid, jsonb) from public, anon;
 grant execute on function public.admin_save_activity(uuid, jsonb) to authenticated;
 
+-- Official events use Momentum as the sender when an admin changes the plan.
+create or replace function momentum_private.notify_activity_changed() returns trigger
+language plpgsql security definer set search_path = '' as $
+declare v_host text;
+begin
+  if new.changed_at is not distinct from old.changed_at or new.cancelled_at is not null then return null; end if;
+  select case when new.official then 'Momentum' else first_name end into v_host
+    from public.profiles where id = new.host_id;
+  delete from public.notifications
+   where kind = 'activity_changed' and read_at is null and link = 'activity.html?id=' || new.id;
+  insert into public.notifications (profile_id, kind, title, body, link)
+  select pid, coalesce(v_host, 'The host') || ' changed ' || new.title,
+         'Now ' || to_char(new.starts_at at time zone 'America/Denver', 'Dy, Mon FMDD · FMHH12:MI AM') || ' · ' || new.general_location
+           || '. You can cancel for free.',
+         'activity_changed', 'activity.html?id=' || new.id
+    from momentum_private.people_on(new.id) pid;
+  return null;
+end $;
+revoke all on function momentum_private.notify_activity_changed() from public, anon, authenticated;
+
 -- CANCEL: keeps the activity in history and notifies all committed people/+1s.
 -- Admin cancellations do not consume the host's personal monthly cancellation allowance.
 create or replace function momentum_private.admin_cancel_activity(p_activity uuid)
@@ -158,7 +178,7 @@ begin
     raise exception 'People are going and this activity starts within 3 hours. Message them instead.' using errcode = '22023';
   end if;
   update public.activities set cancelled_at = now() where id = p_activity;
-  select first_name into v_host from public.profiles where id = a.host_id;
+  select case when a.official then 'Momentum' else first_name end into v_host from public.profiles where id = a.host_id;
   insert into public.notifications (profile_id, kind, title, body, link)
   select pid, 'activity_cancelled', coalesce(v_host, 'The host') || ' cancelled ' || a.title,
     to_char(a.starts_at at time zone 'America/Denver', 'Dy, Mon FMDD · FMHH12:MI AM'),
