@@ -14,8 +14,8 @@ returns table (
   id uuid, host_id uuid, host_name text, type_id smallint, type_name text,
   title text, activity_name text, description text, what_to_bring text,
   starts_at timestamptz, ends_at timestamptz, general_location text, city text,
-  latitude double precision, longitude double precision, exact_address text,
-  min_participants integer, max_participants integer, visibility text,
+  latitude numeric, longitude numeric, exact_address text,
+  min_participants smallint, max_participants smallint, visibility text,
   cancelled_at timestamptz, edited_at timestamptz, changed_at timestamptz,
   official boolean, going_count integer
 )
