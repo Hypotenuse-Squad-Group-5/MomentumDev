@@ -11,15 +11,24 @@ window.Social = {
     const { icon, esc } = UI;
     const a = p.activityId ? Store.activity(p.activityId) : null;
     const isOwner = own || p.authorId === Store.ME;
+    const isAnnouncement = p.isAnnouncement === true;
+    const authorHead = isAnnouncement
+      ? `<span class="avatar brand-mark" style="display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:50%;overflow:hidden;background:var(--surface);">${UI.LOGO}</span><div class="who"><span class="name"><b>Momentum</b></span><div class="tiny muted">${UI.fmtAgo(p.createdAt)} · Announcement</div></div>`
+      : `${UI.avatar(p.authorId, "", true)}<div class="who"><a class="name" href="profile.html?id=${p.authorId}">${esc(p.authorId === Store.ME ? Store.fullName(Store.ME) : UI.displayName(p.authorId))}</a><div class="tiny muted">${UI.fmtAgo(p.createdAt)} · Post</div></div>`;
+    const tags = isAnnouncement
+      ? '<span class="tag">Announcement</span>'
+      : `<span class="tag grey">Friends Only</span>${p.editedByAdmin ? ' <span class="tag grey">Edited by admin</span>' : ""}${p.isHidden ? ' <span class="tag danger">Hidden by moderator</span>' : ""}`;
     return `<article class="panel">
-      <div class="post-head">${UI.avatar(p.authorId, "", true)}<div class="who"><a class="name" href="profile.html?id=${p.authorId}">${esc(p.authorId === Store.ME ? Store.fullName(Store.ME) : UI.displayName(p.authorId))}</a><div class="tiny muted">${UI.fmtAgo(p.createdAt)} · Post</div></div>
-        <span class="tag grey">Friends Only</span></div>
+      <div class="post-head">${authorHead}
+        <div class="row" style="gap:4px;flex-wrap:wrap;justify-content:flex-end;">${tags}</div></div>
       <p class="mb0" style="white-space:pre-wrap">${esc(p.caption)}</p>
       ${a ? `<a class="linked-activity" href="activity.html?id=${a.id}">${icon("activity")}<span class="grow"><span class="tiny muted">Activity</span><br><b>${esc(a.title)}</b> · <span class="small">${esc(UI.fmtDay(a.startsAt))}</span></span>${icon("right", "sm")}</a>` : ""}
       <div class="post-actions">
-        ${isOwner
-          ? `<button class="btn btn-sm btn-ghost" data-del="${p.id}" style="color:var(--danger)">${icon("trash", "sm")}Delete</button>`
-          : `<button class="btn btn-sm btn-ghost" data-msg="${p.authorId}">${icon("message", "sm")}Message ${esc(Store.profile(p.authorId).first)}</button>`}
+        ${isAnnouncement
+          ? ""
+          : isOwner
+            ? `<button class="btn btn-sm btn-ghost" data-del="${p.id}" style="color:var(--danger)">${icon("trash", "sm")}Delete</button>`
+            : `<button class="btn btn-sm btn-ghost" data-msg="${p.authorId}">${icon("message", "sm")}Message ${esc(Store.profile(p.authorId).first)}</button>`}
       </div>
     </article>`;
   },

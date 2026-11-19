@@ -155,6 +155,10 @@
       caption: row.caption,
       activityId: row.activity_id || null,
       visibility: row.visibility || "friends",
+      isAnnouncement: row.is_announcement === true,
+      isHidden: row.is_hidden === true,
+      editedByAdmin: row.edited_by_admin === true,
+      adminEditedAt: row.admin_edited_at || null,
       createdAt: row.created_at,
       source: "supabase",
     };
@@ -163,22 +167,30 @@
   async function loadPosts(force) {
     if (postCache && !force) return postCache;
     let { data, error } = await sb.from("posts")
-      .select("id, author_id, caption, activity_id, visibility, created_at, author:profiles!posts_author_id_fkey(first_name,avatar_url,created_at)")
+      .select("id, author_id, caption, activity_id, visibility, is_announcement, is_hidden, edited_by_admin, admin_edited_at, created_at, author:profiles!posts_author_id_fkey(first_name,avatar_url,created_at)")
       .order("created_at", { ascending: false });
     if (error) {
       const alt = await sb.from("posts")
-        .select("id, author_id, caption, activity_id, visibility, created_at, author:profiles(first_name,created_at)")
+        .select("id, author_id, caption, activity_id, visibility, is_announcement, is_hidden, edited_by_admin, admin_edited_at, created_at, author:profiles(first_name,created_at)")
         .order("created_at", { ascending: false });
       if (!alt.error) {
         data = alt.data;
         error = null;
       } else {
-        const bare = await sb.from("posts")
-          .select("id, author_id, caption, activity_id, visibility, created_at")
+        const leg = await sb.from("posts")
+          .select("id, author_id, caption, activity_id, visibility, created_at, author:profiles!posts_author_id_fkey(first_name,avatar_url,created_at)")
           .order("created_at", { ascending: false });
-        if (!bare.error) {
-          data = bare.data;
+        if (!leg.error) {
+          data = leg.data;
           error = null;
+        } else {
+          const bare = await sb.from("posts")
+            .select("id, author_id, caption, activity_id, visibility, created_at")
+            .order("created_at", { ascending: false });
+          if (!bare.error) {
+            data = bare.data;
+            error = null;
+          }
         }
       }
     }
@@ -767,6 +779,10 @@
       if (n.kind === "activity_changed" && a && (a.cancelledAt || hasStarted(a) || !isGoing(a.id))) return; // old news
       if (until > now) out.push({ kind: n.kind === "activity_cancelled" ? "cancelled" : "changed", rank: 3, note: n, activity: a });
     });
+    // Post removed by moderator (always shown until dismissed)
+    (state.notifications || []).filter((n) => n.kind === "post_deleted").forEach((n) => {
+      out.push({ kind: "post_deleted", rank: 3, note: n });
+    });
     // +1 invites and friend requests
     if (set.notifyFriends) {
       plusOneInvites().forEach((x) => out.push({ kind: "plusone", rank: 4, ...x }));
@@ -1244,14 +1260,20 @@
     const fr = new Set(friends().map((f) => f.id));
     const items = [];
     const pList = postCache !== null ? postCache : (state.posts || []);
-    pList.filter((p) => fr.has(p.authorId)).forEach((p) => items.push({ kind: "post", at: p.createdAt, post: p }));
+    pList.filter((p) => fr.has(p.authorId)).forEach((p) => {
+      if (!p.isHidden && !p.isAnnouncement) items.push({ kind: "post", at: p.createdAt, post: p });
+    });
     (actCache || []).filter((a) => fr.has(a.hostId) && !isPast(a) && !a.cancelledAt).forEach((a) => items.push({ kind: "activity", at: a.createdAt, activity: a }));
-    return items.sort((a, b) => new Date(b.at) - new Date(a.at)).slice(0, 10);
+    const sorted = items.sort((a, b) => new Date(b.at) - new Date(a.at));
+    const pinned = pList.filter((p) => p.isAnnouncement && !p.isHidden)
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+      .map((p) => ({ kind: "post", at: p.createdAt, post: p, pinned: true }));
+    return [...pinned, ...sorted].slice(0, 10);
   }
 
   function historyFor(profileId) {
     const pList = postCache !== null ? postCache : (state.posts || []);
-    const items = pList.filter((p) => p.authorId === profileId).map((p) => ({ kind: "post", at: p.createdAt, post: p }));
+    const items = pList.filter((p) => p.authorId === profileId && (!p.isHidden || profileId === ME)).map((p) => ({ kind: "post", at: p.createdAt, post: p }));
     const going = profileId === ME ? new Set(myCommitmentIds()) : new Set(state.rsvps.filter((r) => r.profileId === profileId && r.status === "committed").map((r) => r.activityId));
     (actCache || []).filter((a) => !a.cancelledAt && (a.hostId === profileId || going.has(a.id))).forEach((a) => items.push({ kind: "activity", at: a.startsAt, activity: a, hosting: a.hostId === profileId }));
     return items.sort((a, b) => new Date(b.at) - new Date(a.at));

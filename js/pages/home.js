@@ -55,6 +55,8 @@ UI.mount("home", function render() {
       case "cancelled":
         return `<div class="note danger">${icon("alert", "sm")}<span class="grow"><b>${esc(n.note.title)}</b><br><span class="small">${esc(n.note.body)}</span>
           ${a ? `<br><a class="small" href="activity.html?id=${a.id}">View activity</a>` : ""}</span><button class="icon-btn sm" data-dismiss="${n.note.id}" aria-label="Dismiss" title="Dismiss">${icon("x", "sm")}</button></div>`;
+      case "post_deleted":
+        return `<div class="note danger">${icon("alert", "sm")}<span class="grow"><b>${esc(n.note.title)}</b><br><span class="small">${esc(n.note.body)}</span></span><button class="icon-btn sm" data-dismiss="${n.note.id}" aria-label="Dismiss" title="Dismiss">${icon("x", "sm")}</button></div>`;
       case "plusone":
         return `<div class="note">${UI.avatar(n.rsvp.profileId, "sm")}<span class="grow"><b>${esc(UI.displayName(n.rsvp.profileId))}</b> invited you as their +1 to <a href="activity.html?id=${a.id}"><b>${esc(a.title)}</b></a><br><span class="small muted">${esc(UI.fmtRange(a))}</span>
           <span class="row mt-sm"><button class="btn btn-sm btn-primary" data-invite="${n.guest.id}" data-yes>Accept</button><button class="btn btn-sm" data-invite="${n.guest.id}">Decline</button></span></span></div>`;
