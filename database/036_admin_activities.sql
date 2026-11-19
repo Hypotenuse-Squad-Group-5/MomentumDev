@@ -1,9 +1,8 @@
 -- =====================================================================
 -- Migration 036: admin activity management and official Momentum events
--- Run as-is to preview. If the preview is correct, uncomment COMMIT and run again.
+-- Applied to the Momentum Supabase project as migration admin_activities.
 -- =====================================================================
 
-begin;
 
 alter table public.activities
   add column if not exists official boolean not null default false;
@@ -213,10 +212,5 @@ $$;
 revoke all on function public.admin_delete_activity(uuid) from public, anon;
 grant execute on function public.admin_delete_activity(uuid) to authenticated;
 
--- PREVIEW
-select
-  (select count(*) from information_schema.columns where table_schema = 'public' and table_name = 'activities' and column_name = 'official') as official_column,
-  (select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-    where n.nspname = 'public' and p.proname in ('admin_list_activities','admin_save_activity','admin_cancel_activity','admin_delete_activity')) as public_admin_functions;
-
--- commit;
+-- Refresh PostgREST so the new RPC endpoints are immediately discoverable.
+notify pgrst, 'reload schema';
