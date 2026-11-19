@@ -6,6 +6,10 @@
 -- to all signed-in members.
 -- =====================================================================
 
+-- Row Level Security is evaluated when regular signed-in members query activities.
+-- Add the official-event exception without removing the existing public, host, RSVP,
+-- invited +1, or accepted-friend access rules below. Official branding is therefore
+-- discoverable to all signed-in members even when the original event was friends-only.
 alter policy "signed-in users read activities" on public.activities
 using (
   official is true
