@@ -40,6 +40,7 @@ UI.mount("activities", function render() {
   main.innerHTML = `
     <div class="narrow" style="max-width:720px">
     <a class="small" href="activities.html">‹ Back to activities</a>
+    <!-- For official events, cancellation notices identify Momentum rather than the admin account. -->
     ${cancelled ? `<div class="alert cancelled-banner mt">${icon("alert", "sm")}<span><b>Cancelled.</b> ${a.official ? "Momentum" : mine ? "You" : esc(UI.displayName(a.hostId))} cancelled this activity on ${esc(new Date(a.cancelledAt).toLocaleDateString(undefined, { month: "short", day: "numeric" }))}. ${mine ? "Everyone going was notified." : "It's not happening. It stays on your calendar so you know what changed."}</span></div>` : ""}
     <article class="stack mt${cancelled ? " is-cancelled" : ""}">
       <div>
@@ -48,6 +49,7 @@ UI.mount("activities", function render() {
           ${cancelled ? '<span class="tag danger">Cancelled</span>' : past ? '<span class="tag grey">Ended</span>' : going ? `<span class="tag ok">${icon("check", "sm")}You're going</span>` : mine ? '<span class="tag flame">You\'re hosting</span>' : need ? `<span class="tag warn">Needs ${need} more to happen</span>` : full ? '<span class="tag grey">Full</span>' : ""}</div>
         <h1 class="mt">${esc(a.title)}</h1>
         <div class="row-between">
+          <!-- Official events use Momentum branding and do not expose personal host actions. -->
           <div class="person">${a.official ? '<span class="avatar"><img src="img/logo.svg" alt="Momentum"></span><div><b>Momentum</b><div class="small muted">Hosted by Momentum</div></div>' : `${UI.avatar(a.hostId, "", Store.isFriend(a.hostId) || mine)}<div><b>${UI.nameLink(a.hostId)}</b><div class="small muted">Host</div></div>`}</div>
           ${a.official ? "" : mine ? (!started && !cancelled ? '<a class="btn btn-sm" href="activity-new.html?edit=' + a.id + '">' + icon("edit", "sm") + 'Edit event</a>' : "") : `<button class="btn btn-sm" id="msg-host">${icon("message", "sm")}Message host</button>`}
         </div>
