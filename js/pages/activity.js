@@ -48,7 +48,7 @@ UI.mount("activities", function render() {
           ${cancelled ? '<span class="tag danger">Cancelled</span>' : past ? '<span class="tag grey">Ended</span>' : going ? `<span class="tag ok">${icon("check", "sm")}You're going</span>` : mine ? '<span class="tag flame">You\'re hosting</span>' : need ? `<span class="tag warn">Needs ${need} more to happen</span>` : full ? '<span class="tag grey">Full</span>' : ""}</div>
         <h1 class="mt">${esc(a.title)}</h1>
         <div class="row-between">
-          <div class="person">${UI.avatar(a.hostId, "", Store.isFriend(a.hostId) || mine)}<div><b>${UI.nameLink(a.hostId)}</b><div class="small muted">Host</div></div></div>
+          <div class="person">${a.official ? '<span class="avatar"><span aria-hidden="true">✦</span></span><div><b>Momentum</b><div class="small muted">Hosted by Momentum</div></div>' : `${UI.avatar(a.hostId, "", Store.isFriend(a.hostId) || mine)}<div><b>${UI.nameLink(a.hostId)}</b><div class="small muted">Host</div></div>`}</div>
           ${mine ? (!started && !cancelled ? '<a class="btn btn-sm" href="activity-new.html?edit=' + a.id + '">' + icon("edit", "sm") + 'Edit event</a>' : "") : `<button class="btn btn-sm" id="msg-host">${icon("message", "sm")}Message host</button>`}
         </div>
       </div>
